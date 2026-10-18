@@ -23,7 +23,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sgdc3/cwlib-ts.git"
+    "url": "git+https://github.com/LBPTracker/cwlib-ts.git"
   },
   "engines": {
     "node": ">=24"

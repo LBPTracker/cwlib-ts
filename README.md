@@ -49,7 +49,7 @@ rows.
 
 ## Building, testing, depending on it
 
-This was `packages/cwlib-ts` in [lbptracker](https://github.com/sgdc3/lbptracker) until 0.2.48, and
+This was `packages/cwlib-ts` in [lbptracker](https://github.com/LBPTracker/lbptracker) until 0.2.48, and
 the `steering/` its comments point at is that repository's.
 
 - `npm run check` — typecheck, then `node --test` on the `.ts` sources directly.
