@@ -19,13 +19,14 @@ console.log(level.things.length, musicSequencers(level).length);
 | `resource.ts` | the `LVLb` / `PLNb` container: revision, branch, the zlib chunk table |
 | `stream.ts` | the big-endian reader, and `Revision` with the version and branch gates |
 | `thing.ts`, `parts.ts` | the Thing graph and its part readers — `partReaders().size` is the number (50 as of 2026-09-06) |
-| `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands |
+| `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
 | `project.ts`, `notes.ts` | the music sequencer as data — note records, chaining, automation |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
 | `mod.ts` | Craftworld Toolkit `.mod` packages, read and written |
+| `filedb.ts`, `farc.ts` | the game's FileDB (GUID → path, SHA-1) and its FARC archives (SHA-1 → bytes, read lazily) |
 | `psf.ts`, `zip.ts` | `PARAM.SFO`, and a stored/deflated ZIP reader and writer |
 | `backup.ts` | the pile: a folder, a zip of one, or a save, in and resources out |
-| `platform/` | the inflate adapters, Node and browser |
+| `platform/` | the inflate adapters and the FARC's file access, Node and browser |
 
 ## Two things to know before using it
 

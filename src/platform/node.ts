@@ -4,8 +4,9 @@
  */
 
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
-import { readFile } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 
+import type { RandomAccess } from '../farc.ts';
 import type { Inflate, Resource } from '../resource.ts';
 import { loadResource } from '../resource.ts';
 import type { Deflate } from '../writer.ts';
@@ -32,4 +33,27 @@ export const nodeDeflate: Deflate = (raw) =>
 export async function loadResourceFile(path: string): Promise<Resource> {
   const bytes = new Uint8Array(await readFile(path));
   return loadResource(bytes, nodeInflate);
+}
+
+/**
+ * A file on disk as `RandomAccess`, for `openFarc`. The handle stays open
+ * until `close` -- a FARC is read from for as long as anything resolves into it.
+ */
+export async function openFileAccess(path: string): Promise<RandomAccess & { close(): Promise<void> }> {
+  const handle = await open(path, 'r');
+  const { size } = await handle.stat();
+  return {
+    size,
+    async read(offset, length) {
+      const out = new Uint8Array(length);
+      let done = 0;
+      while (done < length) {
+        const { bytesRead } = await handle.read(out, done, length - done, offset + done);
+        if (bytesRead === 0) throw new Error(`${path} ended at ${offset + done} of ${offset + length}`);
+        done += bytesRead;
+      }
+      return out;
+    },
+    close: () => handle.close(),
+  };
 }

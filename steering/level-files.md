@@ -234,8 +234,8 @@ plaintext and *builds* the save on the way out. The encryption is something a do
 
 - ❗ `PARAM.SFO` is not encrypted either: `src/psf.ts` reads `SUB_TITLE`, which is
   how the pages title a drop "FJ's Music Hub by Festerd_Jester" rather than `32406766.zip`.
-- ❗ **`FAR4` is not `FARC`.** The game's own `base_001.farc` is a different archive family; see
-  [lbptracker's game-assets.md](../../lbptracker/steering/game-assets.md).
+- ❗ **`FAR4` is not `FARC`.** The game's own `base_001.farc` is a different archive family, with
+  no save key and no hashinate: *The game's archives* below.
 - ⚠️ A uid is unique inside a level and **not** across a backup: a folder of forty routinely holds
   two sequencers numbered 7, so anything keyed on a sequencer must key on `file#uid`.
 - ⚠️ This project told its users for two days that a PS3 save "cannot be read", with the recipe
@@ -269,7 +269,81 @@ mod `Mod.save` wrote around a gallery plan opens here as its 116-chip sequencer.
 by that magic and XXTEA-decrypts it, so a mod read as a pile fails every SHA-1 — except that a
 one-plan farc *begins* with `PLNb` and opens by luck, with a save error beside it.
 `readBackupZip` asks `looksLikeMod` before anything else; `readFar` in `savearchive.ts` is the
-archive without the cipher.
+archive without the cipher. `data.map` is read by `readFileDB`, the game's own FileDB reader.
+
+## The game's archives — the FileDB and the FARCs
+
+A GUID dependency is a game asset, and two files turn it into bytes: the **FileDB** maps the GUID
+to a path and a SHA-1, and a **FARC** holds the bytes under that SHA-1. Where an install keeps them
+is in [lbptracker's game-assets.md](../../lbptracker/steering/game-assets.md); the layouts are
+here. Both were cwlib's reading first (`types/databases/FileDB.java` and
+`types/archives/FileArchive.java`, toolkit checkout at `fee22399`) and are measured on LBP3 PS4
+1.28's own `output/orbisguids.map` and its four FARCs, 2026-10-19.
+
+### The FileDB — `readFileDB` in `src/filedb.ts`
+
+```
+u32  revision           (revision >> 16) >= 0x148 picks the LBP3 row
+u32  count
+per row         LBP3     LBP2 (cwlib only)
+  path length   u16      u32
+  path          utf-8, no NUL
+  date          u32      s64       seconds
+  size          u32
+  sha1          20 bytes
+  guid          u32
+```
+
+✔ `orbisguids.map`, revision `0x01480100` — the revision the toolkit's `.mod` stamps too: 107,673
+rows whose walk ends on byte 11,088,903 of 11,088,903, no GUID twice. ⚠️ **No LBP2 FileDB was on
+this disk**; the LBP2 row is cwlib's and pinned only by a synthetic test.
+
+- ⚠️ **A row does not promise bytes.** 1,480 rows carry an all-zero SHA-1, and 32,819 rows (the
+  zeros among them) name a SHA-1 that none of the four FARCs holds — content the install does not
+  ship. A resolver must expect a miss.
+- ⚠️ **A SHA-1 can sit in two FARCs**: the 74,854 rows that resolve find 75,128 entries. Any
+  archive that has it will do; the bytes are the hash.
+- cwlib rewrites a path starting with `.` (some Vita databases store only the extension) to a
+  hash-named one. Not ported: no such database was on this disk.
+
+### FARC — `openFarc` in `src/farc.ts`
+
+```
+0              byte[]   the resources, back to back from offset 0
+len-8-n*0x1c   Fat[n]   sha1[20], u32 offset, u32 size        big-endian
+len-8          u32      n
+len-4          char[4]  "FARC"
+```
+
+✔ All four archives, **74,169 entries, every one read and hashed: 74,169 SHA-1s match**, every
+entry's size equals its FileDB row's, and every entry has a FileDB row. In each archive the entries
+tile `[0, fatOffset)` exactly — no gap, no overlap, no padding — and the table is sorted by SHA-1.
+
+| archive | bytes | entries |
+|---|---|---|
+| `base_001.farc` | 1,759,365,872 | 19,545 |
+| `chunk1_001.farc` | 3,344,395,907 | 50,159 |
+| `craftworld_001.farc` | 138,755,737 | 1,770 |
+| `intro_001.farc` | 90,232,029 | 2,695 |
+
+- ❗ **The offset is unsigned, and it matters.** `chunk1_001.farc` puts 18,251 entries past 2^31;
+  cwlib reads it with `u32()`, and an `i32` would put them before the file. The format's own limit
+  is therefore 4 GiB an archive.
+- ❗ **Nothing is read but the table until an entry is asked for.** The file comes in as a
+  `RandomAccess` — `openFileAccess(path)` in `platform/node.ts`, `blobAccess(file)` in
+  `platform/web.ts` — injected like the inflater. A row that runs into the table is refused at
+  open, so a misread table fails loudly rather than handing out the wrong bytes.
+- The entries are **not all resources**: the magics include `RIFF` (the sequencer's samples),
+  PNG, JPEG, `GTF ` textures, and several hundred headerless blobs. 51 `INSb` instruments sit in
+  `base_001.farc` alone.
+
+### What of the game's own Things opens
+
+Every `PLNb` and `LVLb` in the four archives through `readThings` (2026-10-19): **10,368 of 17,624
+plans and 147 of 522 levels parse.** 6,501 plans and 146 levels are refused by the version bound
+— most at `0x397`, the LBP2-era assets LBP3 still ships — and **755 plans and 229 levels fail on
+something else**. That makes the game's own archives the largest corpus this reader has met, and
+the first with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
 
 ## The corpora
 
@@ -284,6 +358,7 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 | six PS3 saves | the two in the checkout, plus downloaded backups | 663 resources, 224 plans, 172 + 19 sequencers |
 | the archive sample | `fixtures/archive/` | 103 root levels spread over LBP1, LBP2 and LBP3 slots |
 | the archived chunks | fetched through the dependency walk | 32 `CHKb`, 5,832 Things — the only `cf0` corpus |
+| the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans and 522 levels. Sony's, read in place, never copied |
 
 `test/resource.test.ts` and its siblings read `LBP_LEVELS` and **skip** when it is
 absent, so the suite passes on a machine without the game.

@@ -24,7 +24,7 @@
 
 import { loadResource, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from './serializer.ts';
-import type { GroupPart, InstrumentPart, Microchip, SequencerPart } from './parts.ts';
+import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
 
 /** Thrown once `PWorld.things` is in hand, to stop reading the rest. */
@@ -408,6 +408,33 @@ export async function readLevel(
     throw error;
   }
   throw new SerializerError('the world Thing carried no WORLD part');
+}
+
+/** What `readThings` found the file to be. */
+export type ThingsKind = 'level' | 'plan' | 'chunk';
+
+const KIND_BY_MAGIC: Readonly<Record<string, ThingsKind>> = { LVLb: 'level', PLNb: 'plan', CHKb: 'chunk' };
+
+/**
+ * Read the Things out of a level, a plan or a streaming chunk, told apart by
+ * the resource magic -- the first four bytes, which need nothing inflated.
+ *
+ * ❗ **A fresh `partReaders()` per call, on purpose.** `readLevel` installs
+ * `WORLD` on the very map it is given (see there), and that reader closes over
+ * one parse's state; a table shared across calls would carry one level's world
+ * reader into the next file.
+ *
+ * Any other magic throws: an `ADCb`, a texture or a mesh holds no Thing array.
+ */
+export async function readThings(
+  bytes: Uint8Array,
+  inflate: Inflate,
+): Promise<LevelParse & { readonly kind: ThingsKind }> {
+  const magic = String.fromCharCode(...bytes.subarray(0, 4));
+  const kind = KIND_BY_MAGIC[magic];
+  if (!kind) throw new SerializerError(`not a level, plan or chunk: the magic is ${JSON.stringify(magic)}`);
+  const read = kind === 'plan' ? readPlan : kind === 'chunk' ? readChunk : readLevel;
+  return { ...(await read(bytes, inflate, partReaders())), kind };
 }
 
 /**

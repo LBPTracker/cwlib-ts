@@ -60,5 +60,6 @@ files.
 | `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts` | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
 | `LBP_LEVELS` | `test/resource.test.ts`, `test/project.test.ts`, `test/plan.test.ts` | a directory of level resources; default the toolkit checkout's `sequencerdump` data. The corpus tests **skip** without it |
 | `LBP_PLANS` | `test/write.test.ts` | the gallery plans, overriding `$LBP_FIXTURES/plans` |
+| `LBP_GAME` | `test/archive.test.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`; default `D:\PS4Games\CUSA00063`. The FileDB and FARC tests **skip** without it |
 | `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, and the interpreter that queries it — no Node this repository targets ships SQLite |
 | `DRY_DB` | `dev/dry-search.ts` | the same index |

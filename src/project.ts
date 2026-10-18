@@ -26,8 +26,7 @@
  * files.
  */
 
-import { musicSequencers, readChunk, readLevel, readPlan, type Placement } from './level.ts';
-import { partReaders } from './parts.ts';
+import { musicSequencers, readThings, type Placement } from './level.ts';
 import type { Inflate } from './resource.ts';
 import type { Thing } from './thing.ts';
 import { groupNotes, decodeRecords, type Note } from './notes.ts';
@@ -273,13 +272,9 @@ export async function readLevelProject(
   bytes: Uint8Array,
   inflate: Inflate,
 ): Promise<LevelProject> {
-  // ❗ A plan is not a level: it is a saved Thing, and its Things live inside a
-  // nested blob. It is told apart by the resource magic, which is the first four
-  // bytes of the file and needs nothing inflated to read.
-  const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-  const kind = magic === 'PLNb' ? 'plan' : magic === 'CHKb' ? 'chunk' : 'level';
-  const read = kind === 'plan' ? readPlan : kind === 'chunk' ? readChunk : readLevel;
-  const { things, problems } = await read(bytes, inflate, partReaders());
+  // ❗ A plan is not a level and a chunk is a pile of plans; `readThings` tells
+  // the three apart by the resource magic.
+  const { things, problems, kind } = await readThings(bytes, inflate);
   return importLevel(file, things, kind, problems);
 }
 

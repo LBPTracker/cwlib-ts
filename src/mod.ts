@@ -9,7 +9,7 @@
  * | entry | what |
  * |---|---|
  * | `config.json` | `ModInfo`: ID, type, title, version, author, description |
- * | `data.map` | a FileDB (`types/databases/FileDB.java`): path, date, size, SHA-1, GUID per row |
+ * | `data.map` | a FileDB, read by `readFileDB` in `filedb.ts`: path, date, size, SHA-1, GUID per row |
  * | `data.farc` | a `FAR4` save archive **in the clear**, the rows' bytes by SHA-1 |
  * | `icon.png`, `patches.json` | optional; neither is read or written here |
  *
@@ -22,6 +22,7 @@
  * `Mod.fromLegacyMod` still opens is not.
  */
 
+import { readFileDB } from './filedb.ts';
 import { readFar, writeFar } from './savearchive.ts';
 import { writeZip, type ZipFile } from './zip.ts';
 
@@ -60,9 +61,6 @@ export const MIN_SAFE_GUID = 0x00180000;
 /** `Branch.MIZUKI` -- the toolkit's own branch, which `Mod()` stamps on its archive. */
 const MIZUKI = { head: 0x021803f9, branchId: 0x4d5a, branchRevision: 0xc } as const;
 
-const hex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-
 const leaf = (files: readonly ZipFile[], name: string): ZipFile | undefined =>
   files.find((f) => f.name === name);
 
@@ -94,24 +92,8 @@ export async function readMod(
   const bySha1 = new Map<string, Uint8Array>();
   if (farc) for (const r of await readFar(farc.bytes)) bySha1.set(r.sha1, r.bytes);
 
-  const b = map.bytes;
-  const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  const lbp3 = (view.getUint32(0, false) >>> 16) >= 0x148;
-  const count = view.getUint32(4, false);
   const entries: ModEntry[] = [];
-  const seen = new Set<number>();
-  let at = 8;
-  for (let i = 0; i < count; i += 1) {
-    const length = lbp3 ? view.getUint16(at, false) : view.getUint32(at, false);
-    at += lbp3 ? 2 : 4;
-    if (at + length + (lbp3 ? 4 : 8) + 28 > b.length) throw new Error('data.map runs past its end');
-    const path = new TextDecoder().decode(b.subarray(at, at + length));
-    at += length + (lbp3 ? 4 : 8) + 4; // the date, the size
-    const sha1 = hex(b.subarray(at, at + 20));
-    const guid = view.getUint32(at + 20, false);
-    at += 24;
-    if (seen.has(guid)) continue;
-    seen.add(guid);
+  for (const { path, guid, sha1 } of readFileDB(map.bytes).values()) {
     const bytes = bySha1.get(sha1) ?? leaf(files, path)?.bytes;
     if (bytes) entries.push({ path, guid, bytes });
   }

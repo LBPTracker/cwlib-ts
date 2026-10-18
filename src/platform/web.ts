@@ -6,6 +6,7 @@
  * everything here works on a File the user picked, with no network.
  */
 
+import type { RandomAccess } from '../farc.ts';
 import type { Inflate, Resource } from '../resource.ts';
 import { loadResource } from '../resource.ts';
 
@@ -92,4 +93,15 @@ export const webDeflate = async (raw: Uint8Array): Promise<Uint8Array> => {
 export async function loadResourceFile(file: File): Promise<Resource> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   return loadResource(bytes, webInflate);
+}
+
+/**
+ * A `File` or `Blob` as `RandomAccess`, for `openFarc`. `slice` reads only the
+ * range asked for, so a 3 GB archive the user picked is never held whole.
+ */
+export function blobAccess(blob: Blob): RandomAccess {
+  return {
+    size: blob.size,
+    read: async (offset, length) => new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer()),
+  };
 }
