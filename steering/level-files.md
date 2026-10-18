@@ -96,6 +96,7 @@ path's extension and folder, not a reading of the resource:
 | 1 | `GTF ` | ⚠️ a **game** texture is `GTF `, not the `TEX ` a user texture is (35 of 35 that resolved) |
 | 2 | `MSHb` | `….mol`: a mesh — *The game's meshes* below |
 | 5 | `ANMb` | `….anim` |
+| 7 | `GMTb` | `gamedata_orbis/gmat/….gmat`: a render material — *The game's materials* below (3 of 3, all through the remap) |
 | 11 | `FSHb` | `gamedata/scripts/….ff`: a compiled script |
 | 13 | none: plain text, starting `#` | `gamedata/audio/sound_objects/….txt` |
 | 16 | `MATb` | `….mat`: a physics material, `base_wood.mat`, `dark_matter.mat` |
@@ -103,9 +104,10 @@ path's extension and folder, not a reading of the resource:
 | 38 | `PLNb` | `….plan`: the same type a user plan has |
 | 48 | `INSb` | `….rinst`: an instrument |
 
-⚠️ **A GUID that does not resolve is missing from the FileDB, not from the FARCs**: all 12 on that
-level (7 of type 1, 2 of 2, 3 of 7) have no row at all, so they name content this install does not
-list — DLC is the likely reason, and unmeasured. Type 7 never resolved, so its magic is unknown.
+❗ **A GUID with no FileDB row has usually been renumbered, not left out**: the 12 on that level
+with no row (7 of type 1, 2 of 2, 3 of 7) are all old GUIDs in `orbisguids.remap`, and all 12 land
+on a row and on bytes through it — *The GUID remap* below. The game's own meshes and materials
+name their materials and textures the same way.
 
 The `R*` resource-type ids themselves come from the eboot's ordered name list (`RTexture` = 1,
 `RInstrument` = 48, `RSample` = 49) — [sequencer-data-model.md](sequencer-data-model.md).
@@ -374,6 +376,33 @@ tile `[0, fatOffset)` exactly — no gap, no overlap, no padding — and the tab
   PNG, JPEG, `GTF ` textures, and several hundred headerless blobs. 51 `INSb` instruments sit in
   `base_001.farc` alone.
 
+### The GUID remap — `readGuidRemap` in `src/filedb.ts`
+
+`output/orbisguids.remap` sits beside the FileDB, and a resolver that skips it loses most of the
+game's materials and textures: **the PS4 build re-exported its render assets under new GUIDs, and
+the meshes and materials still name the old ones.** Of the 12,346 material GUIDs on the game's
+mesh primitives, **679 have a FileDB row and 11,667 resolve only through the remap**; of the
+29,915 texture slots in the game's materials, 4,936 and 24,968 (`dev/material-census.ts`,
+2026-10-19).
+
+```
+u32  0x00ea03e7         not understood
+u32  n                  56,271
+n x  u32 old, u32 new
+u32  n again
+n x  u32 length, path, u32 new        the old path: gamedata/gmat/… where the row says gamedata_orbis/gmat/…
+```
+
+✔ On LBP3 PS4 1.28's own file: the walk ends on byte 4,330,948 of 4,330,948; **row i's GUID is
+pair i's new GUID on 56,271 of 56,271**; no old GUID is a FileDB row (0 of 56,271) and 36,326 new
+ones are; no GUID appears twice on either side. Behind it: `.tex` 37,517, `.gmat` 18,087, `.mol`
+446, and a few shader programs, movies and lists. Resolve a GUID through the FileDB first and
+through the remap when that misses.
+
+⚠️ cwlib has it as `types/databases/RemapDB.java` and names the pair `(to, from)`, the direction
+its toolkit uses it in — rewriting a PS4 FileDB back to the old GUIDs. Its comment that the path
+row's GUID is "the same as row.to" is wrong: it is the pair's second word.
+
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings` (2026-10-19): **10,368 of 17,624
@@ -456,6 +485,137 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
   is not. `test/mesh.test.ts` pins `ascetic.lvl`'s 104.
 - `visibilityFlags`: 3 on 11,937, 2 on 1,073, 0 on 23 — cwlib's bit 0 play mode, bit 1 edit mode.
 
+## The game's textures — `GTF ` and `TEX `
+
+`readTexture` in `src/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is
+`TEX `, and so are 2,944 of the game's own (UI icons, stickers from LBP2's levels). Neither is a
+resource: no revision, no header flags, no dependency table — the magic, then for `GTF ` a 24-byte
+big-endian `CellGcmTexture`, then the same chunk table a resource has. The layouts were cwlib's
+(`resources/RTexture.java`, `structs/texture/CellGcmTexture.java`, `types/SerializedResource.java`,
+toolkit `fee22399`) and are measured on **every texture in LBP3 PS4 1.28's four FARCs: 32,914 of
+32,914 read**, each one's levels accounting for its payload to the byte (`dev/texture-census.ts`,
+2026-10-19).
+
+```
+GTF                                          TEX
+0x00 "GTF "                                  0x00 "TEX "
+0x04 u8  format   0x81 B8, 0x85 A8R8G8B8,    0x04 chunk table -> a DDS file, little-endian as
+                  0x86 DXT1, 0x88 DXT5;           DDS is: the 128-byte header, the mips back
+                  | 0x20 LN: rows, not swizzled    to back, then (7 of 2,944) the bytes "BUMP"
+0x05 u8  mipmap
+0x06 u8  dimension  2, or 3 a volume
+0x07 u8  cubemap
+0x08 u32 remap      0xaae4 the identity
+0x0c u16 width, height, depth
+0x12 u8  location, flags
+0x14 u32 pitch      the row stride, LN only
+0x18 u32 offset     0
+0x1c chunk table -> the pixel data
+```
+
+| magic | format | textures |
+|---|---|---|
+| `GTF ` | `0x88` DXT5 | 18,966 |
+| `GTF ` | `0x86` DXT1 | 10,588, 6 of them cube maps |
+| `GTF ` | `0x85` A8R8G8B8 | 234, 6 of them volumes |
+| `GTF ` | `0x81` B8 | 178 |
+| `GTF ` | `0xa5` A8R8G8B8 with `LN` | 4 |
+| `TEX ` | DDS DXT5 / DXT1 / A8R8G8B8 (masks `ff0000 ff00 ff ff000000`) | 1,688 / 1,255 / 1 |
+
+48 more `.tex` paths hold a JPEG, not a texture resource. No `DXT3`, no `GTFs`/`GTFS` (cwlib's
+swizzled variants) and no DDS cube or volume is in the game: `readTexture` decodes BC2 by the book
+and refuses the others.
+
+| convention | measurement |
+|---|---|
+| ❗ **the PS4 data keeps the PS3's layouts**: BC blocks linear, row-major | decoded images look right; on the first level no larger than 256, texels are smoother read so than with the blocks in Morton order on 10,461 of 10,517 DXT1 and 18,220 of 18,384 DXT5 |
+| `B8` and `A8R8G8B8` without `LN` are **Morton-swizzled**: x in the lowest bit, one bit of each axis in turn, the longer axis's surplus on top | `dc_comics_promo_32bit` (512 x 256) comes out as the picture it is, which another order scrambles; smoother than read linearly on 312 of 319 |
+| `A8R8G8B8` bytes are A, R, G, B | the same picture's colours |
+| a volume is swizzled in three dimensions, x, y, z in turn | on the four 64 x 64 x 32 colour cubes x-y-z is the smoothest of the six orders and of a linear read (11.5 against 12.8–13.7, and 54.0); a cubic volume cannot tell its axes apart |
+| `LN`: rows `pitch` bytes apart, on every mip | `water_colours_32bit_linear` (16 x 1, five mips, pitch 64) is five 64-byte rows, padded |
+| mips back to back; the chain padded to 128 bytes, each face's on a cube map | every `GTF ` payload is exactly that long; the cube maps 6 of 6 only with the padding per face |
+| the mip offsets | the first level no wider than 64 against the next, box-filtered: under half the error of the same comparison rolled by half a width on **23,682 of 23,852** textures the roll changes (the rest are too uniform to tell) |
+| `TEX`: the DDS used up exactly; `DDSD_MIPMAPCOUNT`, or one level | 2,937 of 2,944; the other 7 end in `BUMP` |
+| `flags` bit 0: a normal map | set on 4,393, every one's path naming a normal or bump map; clear on 36 such paths. Bits 1 and 2 (`flags` 0 / 1 / 2 / 3 / 6 / 7 on 1,958 / 3,292 / 16,231 / 501 / 7,388 / 600) are not understood — *64* |
+| `remap`: `0xaae4` on all but 82 `B8`s | `0xa9ff` (79, the `_sdf` icons) reads B into R, G and B with alpha one, and the icons come out grey and opaque; `0x02ff` (3) reads it into alpha alone. A reading of the RSX's remap register that the images agree with, not a measurement of its bits |
+
+- The levels come ready for WebGPU: `bc1`/`bc2`/`bc3` are the raw blocks for
+  `texture-compression-bc`, `rgba8` is unswizzled and expanded through the remap. `decodeLevel` is
+  the pure-TypeScript decode to RGBA8 for a browser without the feature. Whether to sample as sRGB
+  is not in the file beyond `bump` — *64*.
+- ⚠️ **A texture's zlib streams are `78 da` as often as `68 de`**: the game wrote both windows,
+  and the platform inflaters take either (*47* in [answered-questions.md](answered-questions.md)).
+- ⚠️ **No user `TEX ` from a level is in any corpus here**: the levels in `fixtures/archive` name
+  hashed type-1 dependencies and none was fetched. The game's own 2,944 are the corpus, and that a
+  user's are the same is a hypothesis — *64*.
+- `out/textures/`, written by `node dev/texture-census.ts out/textures` and gitignored, holds
+  decoded samples: a BC1 diffuse map, a BC3 normal map, a cube map's faces, a volume's slices
+  stacked, a `B8` icon, three `TEX`, the A8R8G8B8 promo, and a small mip of each.
+
+## The game's materials — `RGfxMaterial`
+
+`readMaterial` in `src/material.ts`: magic `GMTb`, dependency type 7, FileDB paths
+`gamedata_orbis/gmat/….gmat`, named by 12,344 of the game's 12,403 mesh primitives — **by an old
+GUID, through the remap, on 11,667 of them**. The field list is cwlib's
+`resources/RGfxMaterial.java` and `structs/gmat/` (toolkit `fee22399`), measured on **every `GMTb`
+in the four FARCs: 11,011, revisions `0x3ef`–`0x3f9`, subVersions `0x177`–`0x1ab`, all 11,011 read
+to exactly the last byte of their payload** (`dev/material-census.ts`, 2026-10-19). `readMaterial`
+throws when one does not, and refuses the revisions, branches and subVersions below `0x16b` that
+cwlib lays out differently and the game does not ship.
+
+```
+i32 flags   f32 alphaTestLevel   u8 alphaLayer, alphaMode, shadowCastMode
+f32 bumpLevel, cosinePower, reflectionBlur, refractiveIndex
+f32 x 4     refractive fresnel                            subVersion >= 0x13a
+u8          fuzzLengthAndRefractiveFlag                   >= 0x16b
+u8 x 6      translucency, fuzz swirl x 2, fuzz lighting x 2, iridescence   >= 0x17c: absent on the three 0x177
+i32 x 10    each shader's end in the code blob            non-Vita, from 0x393
+bytearray   the code: ten PS4 shaders ("Shdr"), then 20 bytes (11,011 of 11,011)
+resource x 8   the texture slots                          by GUID, never by SHA-1
+u8[] wrapS, u8[] wrapT                                    8 each
+Box[]       i32 type, i32 8, u32 x 8 params, f32 x, y, w, h, i32 subType, ParamAnim x 2
+Wire[]      s32 boxFrom, s32 boxTo, u8 portFrom, u8 portTo, char[5] swizzle
+i32         soundEnum
+ParamAnim[] f32 x 4 base, f32[] values, i32 n + n chars of name, u8 componentsAnimated
+```
+
+- ⚠️ A box's parameters are 32-bit words — floats for most boxes, integers for a texture sample's
+  channel and slot — and varints under `COMPRESSED_INTEGERS`: read them as `u32` and reinterpret,
+  or a float loses its bits.
+- ⚠️ A parameter animation's name length is a plain `i32`, not the zigzagged `s32` of a string.
+- The swizzle is ASCII, NUL-padded: of 53,278 wires `""` on 52,834, `"a"` 404, `"r"` 20, `"b"` 11,
+  `"g"` 8, `"rgb"` 1.
+
+| over the 11,011 | count |
+|---|---|
+| output boxes (type 0) | exactly **one per material** |
+| box types | 1 texture sample 30,112 · 10 multiply 8,232 · 3 colour 8,166 · 12 mix 2,521 · 2 Thing colour 1,109 · 16 blend 201 · 4, 5, 7 constants 117 · 11 add 59 · 9, 13, 15, 17, 18, 19: 23 |
+| what feeds port 0 | a sample 6,317 · multiply 3,586 · colour 712 · blend 141 · mix 120 · Thing colour 90 · add 19 · constant 11 · nothing 15 |
+| texture slots | 29,915 named; 29,902 land on texture bytes (4,934 through the FileDB, 24,968 through the remap), 2 on a row with no bytes, 11 nowhere |
+
+**The ports, checked against what is wired to them** — cwlib's `BrdfPort` names measured rather
+than read: a sample wired straight into **port 3 (BUMP)** is a `GTF ` with `flags` bit 0 set on
+**6,577 of 6,649**, its path naming a normal or bump map on 6,578; one wired straight into **port
+0 (DIFFUSE)** has the bit clear on **6,306 of 6,310**, its path naming a normal map on 7. Into
+port 2 (SPECULAR) the bit is clear on 3,634 of 3,651.
+
+### `materialSummary` — which parts are measured and which are a reading
+
+`materialSummary(m)` follows ports 0, 1 and 3 upstream, depth-first with inputs in port order, and
+names the shape it finds:
+
+| field | status |
+|---|---|
+| `diffuse` is port 0, `bump` port 3 | ✔ measured: the textures wired to them, above |
+| `alphaClip` is port 1 | cwlib's name; a sample feeds it with swizzle `"a"` on 360 materials and none on 307. Not measured further |
+| `sample.uvChannel` = `params[4]` | ✔ measured: below the channel count of the mesh on **33,473 of 33,473** samples, over every mesh primitive naming the material |
+| `sample.slot` = `params[5]`, an index into `textures` | ✔ the slot is filled on 30,110 of 30,112 samples, and per port the textures are the right kind, above |
+| `sample.uvTransform`: scale `params[0,1]` and offset `[2,3]`, or with `subType` 1 a 2x3 matrix of params 0, 1, 2, 3, 6, 7 | ❗ **a reading**, cwlib's, and nothing here has rendered it. Identity on 8,526 diffuse samples, scale and offset on 1,574, rotated on 60. Which way V runs against a texture's first row is not measured either — *64* |
+| `shape`: `texture` 6,303 · `texture*colour` 352 · `colour` 712 · `thing` 548 · `graph` 3,081 · none 15 | a reading of the graph, counted. ⚠️ On a `graph` the sample is only the first found: `badge_zip_entrance_cloth` multiplies its base by slot 1 sampled at two scales |
+| `colour`: a colour box's params 0–3 as RGBA | a reading; within [0, 1] on 1,329 of 1,333 |
+| `twoSided` (flags `0x1`), `alphaClipEnabled` (`0x800`) with `alphaTestLevel` | cwlib's names, not measured |
+| `alphaMode`, `alphaLayer` | **raw, not understood.** Against the names: mode 2 layer 128 is `_alpha` on 342 of 343, mode 4 layer 128 `_glassy` on 132 of 132, mode 1 layer 192 `_refract` on 48 of 49; mode 0 layer 0 is 10,318 of the others. A correlation — *64* |
+
 ## The corpora
 
 Every corpus is somebody's own data and **none of it may be committed**; `.gitignore` covers
@@ -469,7 +629,7 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 | six PS3 saves | the two in the checkout, plus downloaded backups | 663 resources, 224 plans, 172 + 19 sequencers |
 | the archive sample | `fixtures/archive/` | 103 root levels spread over LBP1, LBP2 and LBP3 slots |
 | the archived chunks | fetched through the dependency walk | 32 `CHKb`, 5,832 Things — the only `cf0` corpus |
-| the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans, 522 levels and 5,941 meshes. Sony's, read in place, never copied |
+| the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans, 522 levels, 5,941 meshes, 32,914 textures and 11,011 materials; the FileDB and its GUID remap beside them. Sony's, read in place, never copied |
 
 `test/resource.test.ts` and its siblings read `LBP_LEVELS` and **skip** when it is
 absent, so the suite passes on a machine without the game.

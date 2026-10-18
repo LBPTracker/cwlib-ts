@@ -23,8 +23,10 @@ console.log(level.things.length, musicSequencers(level).length);
 | `project.ts`, `notes.ts` | the music sequencer as data — note records, chaining, automation |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
 | `mod.ts` | Craftworld Toolkit `.mod` packages, read and written |
-| `filedb.ts`, `farc.ts` | the game's FileDB (GUID → path, SHA-1) and its FARC archives (SHA-1 → bytes, read lazily) |
+| `filedb.ts`, `farc.ts` | the game's FileDB (GUID → path, SHA-1), its GUID remap (old GUID → new) and its FARC archives (SHA-1 → bytes, read lazily) |
 | `mesh.ts` | the game's `RMesh` (`MSHb`): positions, normals, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
+| `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
+| `material.ts` | the game's `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `psf.ts`, `zip.ts` | `PARAM.SFO`, and a stored/deflated ZIP reader and writer |
 | `backup.ts` | the pile: a folder, a zip of one, or a save, in and resources out |
 | `platform/` | the inflate adapters and the FARC's file access, Node and browser |

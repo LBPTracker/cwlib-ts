@@ -5,3 +5,6 @@ npm-debug.log*
 
 # other people's levels and the user's own game data -- never committed
 fixtures/
+
+# decoded samples from dev/texture-census.ts -- the game's textures, never committed
+out/

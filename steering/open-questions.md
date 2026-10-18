@@ -46,6 +46,28 @@ ones the corpus bounds and the writer does not — the board's `sizeX`/`sizeY` a
 a long song, against the largest board in `fixtures/plans` — and the way to find it is the
 bisection of *46*: swap spans of a plan the game wrote into ours until it places.
 
+## 64. Colouring a mesh — what the texture and the material do not say
+
+The readers are measured ([level-files.md](level-files.md), *The game's textures* and *The game's
+materials*); what a renderer still has to decide on its own:
+
+- **The UV transform.** `materialSummary`'s `uvTransform` is cwlib's reading of a sample box's
+  params — scale and offset, or a 2x3 matrix when `subType` is 1 — and **which way V runs against
+  a texture's first row** is unmeasured. lbprender drawing a textured mesh is the measurement: a
+  texture upside down or offset by the transform's amount says which.
+- **sRGB.** Nothing in a texture says how it is sampled except `GTF ` flags bit 0, which is on
+  normal maps (4,393 of 4,393). Bits 1 and 2 of the same byte (`flags` 2 on 16,231, 6 on 7,388) are
+  the candidates for "colour data"; untested.
+- **`alphaMode` and `alphaLayer`.** Raw values 0–5 and 0 / 1 / 128 / 192, which line up with names
+  (`_alpha`, `_glassy`, `_refract`) and with nothing measured. The eboot's material setup is where
+  the blend states live.
+- **A user `TEX ` from a level.** None is in a corpus here: `fixtures/archive`'s levels name
+  hashed type-1 dependencies and none was fetched. The game's own 2,944 `TEX ` read; that a user's
+  are the same DDS-in-a-chunk-table is the hypothesis a fetch would test.
+- **The other 3,081 diffuse graphs.** The summary names the first sample and colour it finds;
+  mix, blend and Thing-colour graphs need the boxes evaluated, and the box types 13–19 are cwlib's
+  partial list.
+
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's
 
 The reader is measured over 103 archive levels: no failure anywhere in the range it claims, and

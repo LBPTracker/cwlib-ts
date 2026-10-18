@@ -157,6 +157,8 @@ never silently follow the toolkit against our own measurement.
 | 9 | `RMesh` skinning stream, bytes 8 and 12 | a tangent and a smooth normal, unpacked like the normal | neither returned | the "tangent" is perpendicular to the normal on 2.4% of 4.9 M vertices, the "smooth normal" on its side on 48% ([level-files.md](level-files.md), *The game's meshes*) |
 | 10 | `RMesh` joints | `fixupSkinForExport` subtracts one | 0-based as stored | no joint at or past the bone count in 5,941 meshes, `bones − 1` reached on 3,471 |
 | 11 | `RMesh` index buffer, written | `numIndices` u16s | read as `numIndices + numEdgeIndices` | 5,941 of the game's meshes; their own reader never checks the length |
+| 12 | `RemapDB` path rows | the trailing GUID "same as row.to", the pair's first word | the pair's second word, the new GUID | 56,271 of 56,271 rows of `orbisguids.remap` ([level-files.md](level-files.md), *The GUID remap*) |
+| 13 | `B8` textures | expanded without the GCM remap | through it: `0xa9ff` grey and opaque, `0x02ff` alpha only | the 82 `B8`s with a remap not the identity; the images agree ([level-files.md](level-files.md), *The game's textures*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

@@ -215,6 +215,20 @@ in steering**, three days earlier, in the file the index says to read before wri
 any LBP archive. The measurement theatre was spent re-deriving — wrongly — something already
 written down.
 
+## A GUID with no FileDB row — renumbered, not missing
+
+**Answer**: the PS4 build re-exported its materials and textures under new GUIDs and kept the
+old ones in `output/orbisguids.remap`; the meshes and materials still name the old ones —
+*The GUID remap* in [level-files.md](level-files.md).
+
+⚠️ The trap: *"no FileDB row"* reads like *"content this install does not ship"*, and steering
+said so, with DLC as the likely reason, for the 12 GUIDs of `ascetic.lvl` that did not resolve.
+All 12 were in the remap. Measured on the game's own meshes the miss is not a corner: **11,667 of
+12,346** material references and 24,968 of 29,915 texture slots need it. Before calling a GUID
+missing, look it up in every table in `output/`, not only the `.map`.
+
+---
+
 ## The truncated file and the container nobody knew — a header with fewer fields
 
 **Answer**: below head `0x271` a resource has no branch pair and below `0x297` no compression

@@ -72,3 +72,65 @@ export function readFileDB(bytes: Uint8Array): Map<number, FileDBEntry> {
   }
   return rows;
 }
+
+/** One row of `orbisguids.remap`: where an old GUID went. */
+export interface GuidRemap {
+  /** The GUID the PS4 build gives the asset; a FileDB row for 36,326 of 56,271. */
+  readonly guid: number;
+  /** The asset's old path, `gamedata/gmat/….gmat` where its new row says `gamedata_orbis/…`. */
+  readonly path: string;
+}
+
+/**
+ * Read `output/orbisguids.remap`: the PS4 build's table from an asset's old
+ * GUID to the one it was re-exported under.
+ *
+ * ❗ **The game's meshes name their materials, and the materials their
+ * textures, by the old GUID**, which has no FileDB row: of the material GUIDs
+ * on the game's mesh primitives only 679 of 12,346 resolve without it. Resolve
+ * a GUID through the FileDB first, and through this when that misses.
+ *
+ * cwlib's `types/databases/RemapDB.java` reads the same layout and calls the
+ * pair `(to, from)`, the way its toolkit uses it -- to turn a PS4 FileDB back
+ * into the old GUIDs. ⚠️ Its comment that the path row's GUID is "the same as
+ * row.to" is wrong: it is the pair's second word, the new GUID. Measured on
+ * LBP3 PS4 1.28's own file (steering/level-files.md, *The GUID remap*):
+ *
+ * ```
+ * u32  0x00ea03e7          not understood; kept as `revision`
+ * u32  n
+ * n x  u32 old, u32 new
+ * u32  n again
+ * n x  u32 length, path (no NUL), u32 new   -- row i is pair i's new GUID, 56,271 of 56,271
+ * ```
+ *
+ * The walk ends on the file's last byte; no old GUID is a FileDB row (0 of
+ * 56,271), and no GUID appears twice on either side.
+ */
+export function readGuidRemap(bytes: Uint8Array): { revision: number; remap: Map<number, GuidRemap> } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.length < 8) throw new Error('GUID remap is shorter than its header');
+  const revision = view.getUint32(0, false);
+  const count = view.getUint32(4, false);
+  let at = 8 + count * 8;
+  if (at + 4 > bytes.length || view.getUint32(at, false) !== count) {
+    throw new Error('GUID remap: the path table does not follow the pairs');
+  }
+  at += 4;
+  const decoder = new TextDecoder();
+  const remap = new Map<number, GuidRemap>();
+  for (let i = 0; i < count; i += 1) {
+    if (at + 4 > bytes.length) throw new Error('GUID remap runs past its end');
+    const length = view.getUint32(at, false);
+    if (at + 4 + length + 4 > bytes.length) throw new Error('GUID remap runs past its end');
+    const path = decoder.decode(bytes.subarray(at + 4, at + 4 + length));
+    at += 4 + length;
+    const guid = view.getUint32(at, false);
+    at += 4;
+    const old = view.getUint32(8 + i * 8, false);
+    if (view.getUint32(12 + i * 8, false) !== guid) throw new Error(`GUID remap row ${i} names ${guid}, its pair another`);
+    if (!remap.has(old)) remap.set(old, { guid, path });
+  }
+  if (at !== bytes.length) throw new Error(`GUID remap ends at ${at} of ${bytes.length}`);
+  return { revision, remap };
+}
