@@ -59,21 +59,18 @@ branch, into one that stands between a reader and a song. What is left:
   plausible-nonsense failure the bound exists to prevent. The right change, if one is wanted, is an
   **allowed set** — `0x272` plus `0x3b7..0x3ff`, refusing the untested span between — and it is a
   design decision to take on purpose.
-- **`0x26e`** — one level whose chunk table is not where this reader looks; a container question.
 - **Branch `0x4431`** — LBP Vita: one level in the saves, `f331efa7`, version `0x3e2`, and nothing
   in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
   Music Sequencer, so this one is in the way of music.
-- **One truncated file** — the archive itself stores `0-aaaffe` short. Nothing to fix.
 - **The game's own archives** — *What of the game's own Things opens* in
-  [level-files.md](level-files.md). Not refused by the bound and still failing: **755 plans and
-  229 levels**. Levels: 25 "the world Thing carried no WORLD part", parts with no reader
-  (`POPPET_POWERUP` on 14, `TAG_SYNCHRONIZER` on 9), and chunk tables that run past the file or will
-  not inflate (some at `0x26e` and `0x22a`, the container question above). Plans: mostly a two-byte
-  over-read at the end of `thingData`, a leftover tail, or a missed test marker — the shape of one
-  part reader taking the wrong count. Below the bound, 6,501 plans and 146 levels from `0x272` to
-  `0x3b6` are the coverage the allowed-set decision lacked. None of this is in the way of music;
+  [level-files.md](level-files.md). Not refused by the bound and still failing: **188 plans and
+  113 levels**, since the container's header gates moved 567 plans and 116 levels to the bound.
+  Levels: 25 "the world Thing carried no WORLD part", parts with no reader (`POPPET_POWERUP` on 14,
+  `TAG_SYNCHRONIZER` on 9), and missed test markers. Plans: missed test markers and leftover
+  tails — the shape of one part reader taking the wrong count. Below the bound, 7,068 plans and
+  262 levels are the coverage the allowed-set decision lacked. None of this is in the way of music;
   it is in the way of lbprender, which draws the game's own furniture. The full tally of 2026-10-19
   is in the side-session notes, not here; `test/archive.test.ts` opens the files.
 

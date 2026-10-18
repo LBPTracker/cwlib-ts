@@ -154,6 +154,9 @@ never silently follow the toolkit against our own measurement.
 | 6 | open-board cell | child's inverse rotation | the delta in the board's basis | *16*: 78.93% of open placements on a cell with the bare delta, 100.00% in the board's basis |
 | 7 | `Key`, `Scale` | not applied | `key mod 12` transposition after a table quantiser | `v0x160806`, PRX `0x240` (*18*) |
 | 8 | `PQuest` types 1–4 | throws *"Unsupported quest type"* before the per-type block it already has | reads that block, which matches the game's | the loader `v0xdc0290` and its jump table at `v0xdc087c` (*54*); no file has carried one yet |
+| 9 | `RMesh` skinning stream, bytes 8 and 12 | a tangent and a smooth normal, unpacked like the normal | neither returned | the "tangent" is perpendicular to the normal on 2.4% of 4.9 M vertices, the "smooth normal" on its side on 48% ([level-files.md](level-files.md), *The game's meshes*) |
+| 10 | `RMesh` joints | `fixupSkinForExport` subtracts one | 0-based as stored | no joint at or past the bone count in 5,941 meshes, `bones − 1` reached on 3,471 |
+| 11 | `RMesh` index buffer, written | `numIndices` u16s | read as `numIndices + numEdgeIndices` | 5,941 of the game's meshes; their own reader never checks the length |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

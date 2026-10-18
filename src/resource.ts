@@ -78,10 +78,26 @@ export async function loadResource(
   // optional detail: with its COMPRESSED_INTEGERS bit set, every 32- and 64-bit
   // integer in the payload is a LEB128 varint instead of four bytes, so a
   // deserialiser that does not know it reads the whole stream wrong.
-  const branchId = reader.u16();
-  const branchRevision = reader.u16();
-  const compressionFlags = reader.u8();
+  //
+  // ❗ **Both are younger than the container.** The branch pair arrived at head
+  // `0x271` and the flags at `0x297` (LEERDAMMER `0x272` has them from its own
+  // revision 2): before that the compressed bool follows the dependency offset
+  // directly. The game's own LBP1-era meshes are `0x239`, and a reader that
+  // always read the pair took the chunk table from five bytes too far on, which
+  // "fails to inflate". cwlib's `SerializedResource`, measured on the meshes in
+  // LBP3 PS4's FARCs -- steering/level-files.md.
+  const head = revision.raw;
+  if (head < 0x189) {
+    throw new ResourceFormatError(
+      `revision 0x${head.toString(16)} is older than the header layout this reader implements (0x189)`,
+    );
+  }
+  const branchId = head >= 0x271 ? reader.u16() : 0;
+  const branchRevision = head >= 0x271 ? reader.u16() : 0;
+  const hasFlags = head >= 0x297 || (head === 0x272 && branchId === 0x4c44 && branchRevision >= 2);
+  const compressionFlags = hasFlags ? reader.u8() : 0;
   const isCompressed = reader.u8() !== 0;
+  const tableAt = reader.position;
 
   // ⚠️ **`isCompressed` is a real branch and was ignored here for months.** An
   // uncompressed resource has no chunk table at all: the payload starts right
@@ -94,12 +110,12 @@ export async function loadResource(
     return {
       magic, revision, branchId, branchRevision, compressionFlags, isCompressed,
       dependencyTableOffset, chunks: [],
-      data: bytes.subarray(0x12, dependencyTableOffset),
+      data: bytes.subarray(tableAt, dependencyTableOffset),
     };
   }
 
-  // 0x12 is a flag that is always 0x0001; the chunk count follows it.
-  reader.position = 0x14;
+  // A flag that is always 0x0001; the chunk count follows it.
+  reader.position = tableAt + 2;
   const chunkCount = reader.u16();
 
   const chunks: ResourceChunk[] = [];
@@ -123,6 +139,15 @@ export async function loadResource(
         `chunk ${i}/${chunkCount} runs past the end of the file`,
         { cause },
       );
+    }
+    // ⚠️ **A chunk that would not shrink is stored as it is**, both sizes
+    // equal and no zlib header. cwlib's `Compressor.decompressData`; 8 chunks
+    // of the game's meshes are stored so, one of them the fourth of
+    // `spawn_point_start_chrome.mol`, which otherwise "fails to inflate".
+    if (compressedSize === rawSize) {
+      out.set(deflated, written);
+      written += rawSize;
+      continue;
     }
     let inflated: Uint8Array;
     try {

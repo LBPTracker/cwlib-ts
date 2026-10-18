@@ -215,6 +215,22 @@ in steering**, three days earlier, in the file the index says to read before wri
 any LBP archive. The measurement theatre was spent re-deriving — wrongly — something already
 written down.
 
+## The truncated file and the container nobody knew — a header with fewer fields
+
+**Answer**: below head `0x271` a resource has no branch pair and below `0x297` no compression
+flags, so their chunk table starts five bytes earlier than in every level the reader had seen —
+*The container* in [level-files.md](level-files.md), measured on the game's 5,941 meshes.
+
+⚠️ Two files of the archive sample failed in `loadResource` and were filed as two different
+things: `0x26e` as "the chunk table is not where this reader looks", an open container question,
+and `0-aaaffe` (`0x237`) as **a file the archive stores truncated — nothing to fix**. Both were the
+same missing gate. The trap is the second: *"chunk 0/N runs past the end of the file"* reads like a
+short file, and on an old revision it is a header field this reader assumed. The error has named
+the revision since *28* for exactly this reason; on a container failure, look up the header gates
+for that revision before blaming the file.
+
+---
+
 ## 28. The LBP1 readers — 19 of 19 identical to cwlib
 
 **Answer**: with `LBP3_MIN_VERSION` lowered by hand, all nineteen LBP1 files in the archive sample

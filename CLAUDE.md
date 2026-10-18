@@ -2,8 +2,8 @@
 
 A TypeScript reader and writer for LittleBigPlanet's serialised resources: the container, the Thing
 stream and its 50 part readers, plans, streaming chunks, `FAR4` saves, toolkit `.mod`s, the
-music sequencer as data, the game's FileDB and FARC archives, and the `.plan` writer. It exists for
-[lbptracker](https://github.com/LBPTracker/lbptracker), a faithful re-implementation of LBP3's
+music sequencer as data, the game's FileDB, FARC archives and meshes, and the `.plan` writer. It
+exists for [lbptracker](https://github.com/LBPTracker/lbptracker), a faithful re-implementation of LBP3's
 Music Sequencer, and was its `packages/cwlib-ts` until 2026-10-18. "Faithful" reaches down to
 here: a field read one byte off is a song played wrong.
 
@@ -34,8 +34,8 @@ in its `tools/`, and the corpora — other people's levels, never committed — 
 Steering files (read on demand, per the hints):
 - [steering/level-files.md](steering/level-files.md) — **read before writing a parser for any LBP
   resource, save or archive**: the container and its dependency table, the Thing stream, plans,
-  streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB and FARCs, the corpora, the version bound, and the
-  technique for finding a reader bug.
+  streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB and FARCs, its meshes (`RMesh`,
+  `PRenderMesh`), the corpora, the version bound, and the technique for finding a reader bug.
 - [steering/sequencer-data-model.md](steering/sequencer-data-model.md) — **read before touching
   `project.ts`, `notes.ts` or `chips.ts`**: the `PSequencer` and `PInstrument` schemas with field
   names and struct offsets, `Colour`, the stream conventions (endianness, stream order, varints,
@@ -64,7 +64,7 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 
 ## Working here
 
-- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 74
+- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 78
   tests on 2026-10-19, the corpus ones skipping when `fixtures/` is not beside them.
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package
   gets. ❗ **Consumers run `dist/*.js`, never `src/`**: Node 24 refuses to strip types under

@@ -25,12 +25,17 @@ parser never uses, so 18 hits on it is not a coincidence.
 0x04  u32      revision     0x3ee etc. A non-zero high half is a branch id:
                             0x021303f9 = branch 0x0213, revision 0x03f9 (LBP3)
 0x08  u32      depsOffset   start of the dependency table = end of the payload
-0x0c  u32      (zero in every file seen)
-0x10  u32      0x07010001 in every level seen — flags; bit 0 of the low byte is `isCompressed`
-0x14  u16      numChunks           ┐ only when compressed
+0x0c  u16 x 2  branchId, branchRevision        head >= 0x271
+0x10  u8       compressionFlags                head >= 0x297; LEERDAMMER 0x272 from its revision 2
+0x11  bool     isCompressed
+0x12  u16      0x0001              ┐ only when compressed
+0x14  u16      numChunks           │
 0x16           numChunks x (u16 compressedSize, u16 rawSize)
 ...            chunk payloads back to back, each a complete zlib stream
 ```
+
+The offsets are a header with every field, which every level and plan the reader takes has: the
+`0x07010001` at `0x10` in every level seen is flags 7, compressed, and the `0x0001`.
 
 - Chunks are `0x8000` bytes raw except the last, which is short. ⚠️ Both sizes in the table are
   `u16`, which is *why*: `0x10000` would not fit, and a chunk that deflates larger than `0xffff`
@@ -38,6 +43,18 @@ parser never uses, so 18 hits on it is not a coincidence.
 - ⚠️ **The zlib header is `0x68 0xNN`, not `0x78 0xNN`** — CINFO 6, a 16 KiB window. Grepping a
   resource for the familiar `78 9c` / `78 da` finds nothing and looks like proof the payload is not
   zlib. It is.
+- ❗ **The branch pair and the flags are younger than the container**, and a reader that always
+  reads them takes an older resource's chunk table from five bytes too far on: it "fails to
+  inflate" or "runs past the end". Below head `0x271` the compressed bool follows `depsOffset`
+  directly; below `0x297` there are no flags, so no `COMPRESSED_INTEGERS`. The gates are cwlib's
+  `SerializedResource.java`. ✔ Measured on the game's meshes, **1,409 of them below `0x271` and
+  1,745 below `0x297`**, every one of which now lands its chunk data on `depsOffset` — as do the
+  archive sample's `0x26e` level and `0-aaaffe` (`0x237`), once put down to a container nobody knew
+  and to a truncated file. Below `0x189` cwlib lays the header out differently again;
+  `loadResource` refuses those rather than guess.
+- ⚠️ **A chunk whose two sizes are equal is stored, not deflated**, with no zlib header at all —
+  cwlib's `Compressor.decompressData`. 8 chunks of the game's meshes are so, one of them the fourth
+  of `spawn_point_start_chrome.mol`, which otherwise failed to inflate.
 - ❗ **An uncompressed resource has no chunk table.** The payload starts straight after the flag
   and runs to `depsOffset`. `CHKb` chunks are stored that way, and a reader that ignored the flag
   took "96 chunks" out of the payload's own first bytes.
@@ -77,7 +94,7 @@ path's extension and folder, not a reading of the resource:
 | type | magic | FileDB path |
 |---|---|---|
 | 1 | `GTF ` | ⚠️ a **game** texture is `GTF `, not the `TEX ` a user texture is (35 of 35 that resolved) |
-| 2 | `MSHb` | `….mol`: a mesh |
+| 2 | `MSHb` | `….mol`: a mesh — *The game's meshes* below |
 | 5 | `ANMb` | `….anim` |
 | 11 | `FSHb` | `gamedata/scripts/….ff`: a compiled script |
 | 13 | none: plain text, starting `#` | `gamedata/audio/sound_objects/….txt` |
@@ -360,10 +377,84 @@ tile `[0, fatOffset)` exactly — no gap, no overlap, no padding — and the tab
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings` (2026-10-19): **10,368 of 17,624
-plans and 147 of 522 levels parse.** 6,501 plans and 146 levels are refused by the version bound
-— most at `0x397`, the LBP2-era assets LBP3 still ships — and **755 plans and 229 levels fail on
-something else**. That makes the game's own archives the largest corpus this reader has met, and
+plans and 147 of 522 levels parse.** 7,068 plans and 262 levels are refused by the version bound
+— most at `0x397`, the LBP2-era assets LBP3 still ships — and **188 plans and 113 levels fail on
+something else**. Before the container's header gates, 567 of those plans and 116 of those levels
+died in the container instead of at the bound, and the count was 755 and 229. That makes the game's own archives the largest corpus this reader has met, and
 the first with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
+
+## The game's meshes — `RMesh`
+
+`readMesh` in `src/mesh.ts`: magic `MSHb`, dependency type 2, FileDB paths ending `.mol`. The field
+list is cwlib's `resources/RMesh.java` and `structs/mesh/` (toolkit `fee22399`) and was a hypothesis
+until measured on **every `MSHb` in LBP3 PS4 1.28's four FARCs, 5,941 of them**, revisions `0x237`
+to `0x3f9` and subVersions up to `0x16b`, 4,896,968 vertices — `dev/mesh-census.ts`, 2026-10-19.
+✔ **5,941 of 5,941 read to exactly the last byte of their payload**; no revision fails. `readMesh`
+throws when one does not, as `readPlan` does.
+
+```
+i32 x 7           numVerts, numIndices, numEdgeIndices, numTris, streamCount, attributeCount, morphCount
+char[16] x 32     morph names, NUL-padded
+                  version >= 0x239: f32[] minUV, f32[] maxUV, f32 areaScaleFactor
+i32 x (streamCount + 2)   stream offsets: 0, each stream's end, the last end again (5,941 of 5,941)
+byte[numVerts * 16] x streamCount    0 positions, 1 skinning, 2.. one morph each
+bytearray         attributes: numVerts x attributeCount x (f32 u, f32 v), interleaved per vertex
+bytearray         indices: (numIndices + numEdgeIndices) x u16, the primitives' and then an edge list
+                  subVersion >= 0x16b: bytearray triangleAdjacencyInfos
+Primitive[]       resource gfxMaterial; (< 0x149 a second one); (>= 0x179) resource textureAlternatives;
+                  i32 minVert, maxVert, firstIndex, numIndices, region
+Bone[]            char[32] name, i32 flags, i32 animHash, s32 parent, firstChild, nextSibling,
+                  m44 skinPose, invSkinPose, v4 obbMin, obbMax, MeshShapeVertex[], MeshShapeInfo[],
+                  f32 shapeMinZ, shapeMaxZ, v4 boundBoxMin, boundBoxMax, boundSphere
+...               mirroring, u8 primitiveType, softbody, implicit shapes, cullBones, regionIDsToHide,
+                  hairMorphs (>= 0x141), ..., (subVersion >= 0xd6) u8 skeletonType — walked, not kept
+```
+
+What each convention rests on, every one a count over the same 5,941:
+
+| convention | measurement |
+|---|---|
+| the index buffer is `numIndices + numEdgeIndices` u16s | 5,941 of 5,941. ⚠️ Not `numIndices` alone, which is all cwlib's own constructor writes |
+| strip or list | `primitiveType` 6, a strip, on 5,802; 5, a list, on 139 |
+| strips restart on `0xffff`, the parity restarting with them | read so, **5,180,865 of 5,187,415 non-degenerate triangles (99.87%) wind counter-clockwise about their vertices' own normals** — the strip parity and the normal unpacking checked against each other |
+| degenerate triangles are stitching, dropped | `numTris` is the non-degenerate count on every mesh that draws no run twice |
+| ⚠️ a run can be drawn twice | 345 meshes, LBP2 costumes mostly, give two primitives the same `firstIndex` and `numIndices` under two materials. The distinct runs tile `[0, numIndices)` in all 5,941 |
+| position: stream 0, bytes 0–11, f32 | the winding above. Bytes 12–15, cwlib's softbody cluster and weight, are `0x000000ff` on 4,664,668 vertices |
+| normal: stream 1, bytes 4–6, cwlib's `unpackNormal24` | the winding above, and `x² + y² ≤ 1` on every vertex |
+| joints: stream 1, bytes 3, 7, 11, 15, **0-based** | never at or past the bone count, and `bones − 1` is reached on 3,471 meshes. ⚠️ cwlib's `fixupSkinForExport` subtracts one |
+| weights: bytes 2, 1, 0 and the remainder to 255, in that joint order | a slot with no weight points at joint 0 on 88% of such slots, against 6% with the bytes the other way round; the three never sum past 255; a single-bone vertex is `ff 00 00` |
+| bone matrices column-major, like `PPos` | 99.99% of weighted vertices taken to bone space by `invSkinPose` land in their bone's own box (3,015,586 of 3,015,903, bone 0 left out), against 10–18% read row-major, depending on how tight the box. `skinPose · invSkinPose = I` on all 114,635 bones; a parent is always below its child |
+| UV channels interleaved per vertex | 74–90% of triangle edges are shorter than 0.1 in each channel, against 14% read channel-major. 12 meshes have one channel, 2,852 two, 3,077 three. ⚠️ `minUV`/`maxUV` are **not** a channel's bounds: values below `minUV` are common |
+| materials | 12,344 of 12,403 primitives name an `RGfxMaterial` by GUID, none by SHA-1, 59 none |
+
+- ❗ **The packs at stream 1 bytes 8 and 12 are not what cwlib calls them.** Unpacked like the
+  normal, its "tangent" is perpendicular to the normal on 2.4% of vertices — on 78% of a 400-mesh
+  sample of `base_001.farc` the two have `|cos| > 0.9` — and its "smooth normal" falls on the
+  normal's side on 48%, which is chance. `readMesh` returns neither until something says what they
+  are.
+- ⚠️ `minVert`/`maxVert` are not a bound: six meshes carry nonsense there (`newton_low_poly.mol`,
+  `-2147412636..1480`) and 13,626 indices fall outside their primitive's range. The triangles never
+  need them.
+- Morphs (on 558 meshes, up to 29) are one 16-byte-a-vertex stream each, skipped by length; only
+  their names are returned.
+
+### `PRenderMesh` — what draws a Thing
+
+`readRenderMesh` in `src/parts.ts` returns `RenderMeshPart`: the mesh reference, the bone Things,
+the animation and where in it, `editorColor`, `castShadows`, `visibilityFlags`,
+`poppetRenderScale`. Over the 93 levels that open from lbptracker's `fixtures/levels`, the toolkit
+checkout and the archive sample — 13,033 render meshes, 2026-10-19:
+
+- **`boneThings[0]` is the Thing itself** whenever there are any (10,605; 2,428 have none), and a
+  bone Thing's own `POS` is the bone's world matrix.
+- ⚠️ **It is not one per bone.** Of the 9,101 whose mesh resolves in the PS4 install and that have
+  bone Things, the list is as long as the mesh's bones on 8,714; 384 carry three for a one-bone
+  mesh — the music sequencer's chassis `sequencer.mol` (127558), whose plan shape
+  [export-to-game.md](export-to-game.md) writes as `[self, null, null]`, and `note.mol` (96644) —
+  and 3 carry 43 for the 49-bone DC cape. **Nulls are common and only ever trail** (1,516 lists end
+  in them): a renderer takes `boneThings[joint]` when it is there and the Thing's own matrix when it
+  is not. `test/mesh.test.ts` pins `ascetic.lvl`'s 104.
+- `visibilityFlags`: 3 on 11,937, 2 on 1,073, 0 on 23 — cwlib's bit 0 play mode, bit 1 edit mode.
 
 ## The corpora
 
@@ -378,7 +469,7 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 | six PS3 saves | the two in the checkout, plus downloaded backups | 663 resources, 224 plans, 172 + 19 sequencers |
 | the archive sample | `fixtures/archive/` | 103 root levels spread over LBP1, LBP2 and LBP3 slots |
 | the archived chunks | fetched through the dependency walk | 32 `CHKb`, 5,832 Things — the only `cf0` corpus |
-| the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans and 522 levels. Sony's, read in place, never copied |
+| the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans, 522 levels and 5,941 meshes. Sony's, read in place, never copied |
 
 `test/resource.test.ts` and its siblings read `LBP_LEVELS` and **skip** when it is
 absent, so the suite passes on a machine without the game.
@@ -397,8 +488,8 @@ What the 103-level sweep finds (2026-09-05):
 | `0x3b7` | `0/0` | **4 of 4** |
 | `0x3b8`–`0x3f9` | `0/0` | **78 of 78** |
 | `0x272` | `4c44` (LEERDAMMER) | 0 of 19 at the bound; **19 of 19 identical to cwlib, Thing for Thing**, with it lowered by hand |
-| `0x26e` | — | 0 of 1: the chunk table is not where this reader looks |
-| — | — | 1 file the archive stores truncated (`0-aaaffe`, 4,327 bytes) |
+| `0x26e` | — | 0 of 1, refused by the bound; its container opens since the header gates (2026-10-19) |
+| `0x237` | — | 0 of 1, `0-aaaffe`, the same. It was put down to a truncated file; it was the header |
 
 **82 of 103, with no failure anywhere in the range the reader claims.** Below it, twelve part
 readers were wrong for LBP1 files and are fixed (`fillThing`, `readPos`, `Polygon`, `readShape`,
