@@ -70,6 +70,26 @@ read off an enum:
 | 61 | `CHKb` | **a streaming chunk** |
 | 62 | `ADSb` | an adventure's shared data, 35–270 bytes |
 
+The GUID side, measured 2026-10-19 on `ascetic.lvl`'s GUID dependencies resolved through LBP3 PS4
+1.28's `orbisguids.map` and FARCs (lbprender's `test/game.test.ts`); "what it is" is the FileDB
+path's extension and folder, not a reading of the resource:
+
+| type | magic | FileDB path |
+|---|---|---|
+| 1 | `GTF ` | ⚠️ a **game** texture is `GTF `, not the `TEX ` a user texture is (35 of 35 that resolved) |
+| 2 | `MSHb` | `….mol`: a mesh |
+| 5 | `ANMb` | `….anim` |
+| 11 | `FSHb` | `gamedata/scripts/….ff`: a compiled script |
+| 13 | none: plain text, starting `#` | `gamedata/audio/sound_objects/….txt` |
+| 16 | `MATb` | `….mat`: a physics material, `base_wood.mat`, `dark_matter.mat` |
+| 24 | `BEVb` | `gamedata/bevels/….bev` |
+| 38 | `PLNb` | `….plan`: the same type a user plan has |
+| 48 | `INSb` | `….rinst`: an instrument |
+
+⚠️ **A GUID that does not resolve is missing from the FileDB, not from the FARCs**: all 12 on that
+level (7 of type 1, 2 of 2, 3 of 7) have no row at all, so they name content this install does not
+list — DLC is the likely reason, and unmeasured. Type 7 never resolved, so its magic is unknown.
+
 The `R*` resource-type ids themselves come from the eboot's ordered name list (`RTexture` = 1,
 `RInstrument` = 48, `RSample` = 49) — [sequencer-data-model.md](sequencer-data-model.md).
 
