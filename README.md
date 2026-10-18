@@ -42,15 +42,16 @@ against a file the user picked. Follow that pattern for anything else platform-s
 much further down — all 19 LBP1 files in the archive sample parse Thing-for-Thing identically to
 cwlib with the bound lowered by hand — but the range between `0x272` and `0x3b7` has no test
 coverage at all, and the bound is what keeps "we do not support this" from becoming "we read it and
-produced something". See *28* in lbptracker's `steering/open-questions.md`.
+produced something". See *28* in [`steering/open-questions.md`](steering/open-questions.md).
 
 Verified against 22 real levels and, for the Thing walk, against a cwlib dump of 129,696 sequencer
 rows.
 
 ## Building, testing, depending on it
 
-This was `packages/cwlib-ts` in [lbptracker](https://github.com/LBPTracker/lbptracker) until 0.2.48, and
-the `steering/` its comments point at is that repository's.
+This was `packages/cwlib-ts` in [lbptracker](https://github.com/LBPTracker/lbptracker) until 0.2.48.
+What is known about the formats, and how each fact was measured, is in [`steering/`](steering/) —
+start with [`CLAUDE.md`](CLAUDE.md), which indexes it.
 
 - `npm run check` — typecheck, then `node --test` on the `.ts` sources directly.
 - `npm run build` — `tsc -p tsconfig.build.json` into `dist/`: `.js`, `.d.ts` and maps. `prepare`

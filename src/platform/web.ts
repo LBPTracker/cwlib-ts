@@ -2,7 +2,7 @@
  * Browser adapters.
  *
  * The user's own game files are read client-side and never uploaded -- see
- * steering/game-assets.md. That constraint is why this file exists at all:
+ * lbptracker's steering/game-assets.md. That constraint is why this file exists at all:
  * everything here works on a File the user picked, with no network.
  */
 

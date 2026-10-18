@@ -108,7 +108,7 @@ function readCollectableData(s: Serializer): void {
  * separate `RStreamingChunk` resource, so what this recovers is the level's
  * skeleton -- its bounds, checkpoints and quests -- and the music inside a chunk
  * is in a file this list only names. See question 26 in
- * `steering/open-questions.md` for what following the hash would take.
+ * `steering/answered-questions.md` for what following the hash would take.
  */
 function readChunkFile(s: Serializer): void {
   s.sha1(); // chunkHash, subVersion > 0x130

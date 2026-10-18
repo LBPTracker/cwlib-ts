@@ -14,7 +14,7 @@
  *
  * ⚠️ **Everything here works on bytes the caller already has.** The user's own
  * game files are read client-side and never uploaded -- see
- * `steering/game-assets.md` -- so this module fetches nothing and knows nothing
+ * lbptracker's `steering/game-assets.md` -- so this module fetches nothing and knows nothing
  * about `File`, directories or archives. The page hands it names and bytes.
  */
 

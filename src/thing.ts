@@ -7,7 +7,7 @@
  *
  * ## Why every part type has to be implemented, not just the interesting ones
  *
- * ⚠️ **`steering/tracker-architecture.md` said this walk needed eight part
+ * ⚠️ **lbptracker's `steering/tracker-architecture.md` said this walk needed eight part
  * readers. It needs all of them, and the difference is not a detail.** The
  * reasoning behind "eight" was that only nine part types ever share a Thing with
  * a `SEQUENCER` — which is true, and irrelevant. Parts carry no length, object

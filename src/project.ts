@@ -10,7 +10,7 @@
  * inline ids and parts follow each other with nothing to skip past, so reading a
  * `PSequencer` means being able to parse **every part that precedes it on the
  * same Thing**. That turned out to be 30 part readers rather than the eight this
- * file once predicted; see `steering/tracker-architecture.md` for why the
+ * file once predicted; see lbptracker's `steering/tracker-architecture.md` for why the
  * smaller number was answering a different question. The walk exists now and the
  * Java is gone.
  *

@@ -135,7 +135,7 @@ test('a quest reads what the game reads, at every gate', () => {
  * The two levels that found this, when they are on this machine.
  *
  * They are other people's levels and `fixtures/` is never committed, so this
- * skips without them; lbptracker's `steering/level-files.md` (*Bonsai*) says
+ * skips without them; lbptracker's `steering/level-sources.md` (*Bonsai*) says
  * how to fetch them again. `LBP_FIXTURES` points at that `fixtures/`; the
  * default is an lbptracker checkout next to this one.
  */
