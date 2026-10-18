@@ -135,10 +135,14 @@ test('a quest reads what the game reads, at every gate', () => {
  * The two levels that found this, when they are on this machine.
  *
  * They are other people's levels and `fixtures/` is never committed, so this
- * skips without them; `steering/level-files.md` (*Bonsai*) says how to fetch
- * them again.
+ * skips without them; lbptracker's `steering/level-files.md` (*Bonsai*) says
+ * how to fetch them again. `LBP_FIXTURES` points at that `fixtures/`; the
+ * default is an lbptracker checkout next to this one.
  */
-const BONSAI = path.resolve(import.meta.dirname, '../../../fixtures/bonsai');
+const BONSAI = path.join(
+  process.env.LBP_FIXTURES ?? path.resolve(import.meta.dirname, '../../lbptracker/fixtures'),
+  'bonsai',
+);
 const LEVELS: [string, number][] = [
   ['24-c8add2439485c2ba38cc61c4b87f47af61746e0d', 3],
   ['19883-377607875fc21ddda72c26e89953a260382a3d96', 4],

@@ -19,12 +19,12 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { factoryColour } from '@lbptracker/cwlib/chips.ts';
-import { readChunk, readLevel, readPlan } from '@lbptracker/cwlib/level.ts';
-import { partReaders } from '@lbptracker/cwlib/parts.ts';
-import { nodeInflate } from '@lbptracker/cwlib/platform/node.ts';
-import type { Thing } from '@lbptracker/cwlib/thing.ts';
-import type { InstrumentPart } from '@lbptracker/cwlib/parts.ts';
+import { factoryColour } from '../src/chips.ts';
+import { readChunk, readLevel, readPlan } from '../src/level.ts';
+import { partReaders } from '../src/parts.ts';
+import { nodeInflate } from '../src/platform/node.ts';
+import type { Thing } from '../src/thing.ts';
+import type { InstrumentPart } from '../src/parts.ts';
 
 const rows = new Map<number, Map<string, number>>();
 const tints = new Map<number, number>();

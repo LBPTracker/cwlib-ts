@@ -1,7 +1,7 @@
 /** Fetch a root level from the public archive and pull its PLAN dependencies. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-import { readDependencies } from '@lbptracker/cwlib/resource.ts';
+import { readDependencies } from '../src/resource.ts';
 
 function url(sha1: string): string {
   const h = sha1.toLowerCase();

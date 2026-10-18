@@ -2,16 +2,34 @@
   "name": "@lbptracker/cwlib",
   "version": "0.2.48",
   "type": "module",
-  "description": "A TypeScript reader for LittleBigPlanet's serialised resources: LVLb/PLNb containers, the Thing graph, its parts, and the saves they arrive in.",
+  "description": "A TypeScript reader and writer for LittleBigPlanet's serialised resources: LVLb/PLNb containers, the Thing graph, its parts, the saves they arrive in, and the .plan writer.",
   "license": "MIT",
   "exports": {
-    "./*": "./src/*"
+    "./*.ts": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
   },
   "files": [
+    "dist",
     "src"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "test": "node --test",
-    "typecheck": "node ../../node_modules/typescript/bin/tsc -p ."
+    "typecheck": "tsc -p .",
+    "check": "npm run typecheck && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sgdc3/cwlib-ts.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2"
   }
 }

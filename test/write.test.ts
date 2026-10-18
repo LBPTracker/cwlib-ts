@@ -27,13 +27,16 @@ import { Writer } from '../src/writer.ts';
  * The plans fetched by `dev/fetch-plan.ts`. Other people's levels are never
  * committed, so the corpus check skips without them.
  *
- * ⚠️ **Resolved from this file, not from the working directory.** `npm test`
- * runs from the repository root and `npm test -w @lbptracker/cwlib` runs from
- * the package, so a relative path silently skips the corpus in one of the two
- * -- which is the same as not having written the check.
+ * ⚠️ **Resolved from this file, not from the working directory**, so a test
+ * run from anywhere finds the corpus or none silently skips it. The fixtures
+ * live in lbptracker's `fixtures/`, which `LBP_FIXTURES` points at; the default
+ * is an lbptracker checkout next to this one.
  */
 const PLANS = process.env.LBP_PLANS
-  ?? fileURLToPath(new URL('../../../fixtures/plans', import.meta.url));
+  ?? path.join(
+    process.env.LBP_FIXTURES ?? fileURLToPath(new URL('../../lbptracker/fixtures', import.meta.url)),
+    'plans',
+  );
 
 /* ------------------------------------------------------------- fixtures */
 

@@ -1,7 +1,6 @@
 # `@lbptracker/cwlib`
 
-Reading LittleBigPlanet's serialised resources, in TypeScript, with no dependencies and no build
-step. Named after [ennuo's cwlib](https://github.com/ennuo/toolkit), which is the reference this was
+Reading LittleBigPlanet's serialised resources, in TypeScript, with no dependencies. Named after [ennuo's cwlib](https://github.com/ennuo/toolkit), which is the reference this was
 checked against rather than ported from.
 
 ```ts
@@ -43,7 +42,25 @@ against a file the user picked. Follow that pattern for anything else platform-s
 much further down — all 19 LBP1 files in the archive sample parse Thing-for-Thing identically to
 cwlib with the bound lowered by hand — but the range between `0x272` and `0x3b7` has no test
 coverage at all, and the bound is what keeps "we do not support this" from becoming "we read it and
-produced something". See *28* in `steering/open-questions.md`.
+produced something". See *28* in lbptracker's `steering/open-questions.md`.
 
 Verified against 22 real levels and, for the Thing walk, against a cwlib dump of 129,696 sequencer
-rows. `npm test` from the repository root runs it, or `npm test -w @lbptracker/cwlib` alone.
+rows.
+
+## Building, testing, depending on it
+
+This was `packages/cwlib-ts` in [lbptracker](https://github.com/sgdc3/lbptracker) until 0.2.48, and
+the `steering/` its comments point at is that repository's.
+
+- `npm run check` — typecheck, then `node --test` on the `.ts` sources directly.
+- `npm run build` — `tsc -p tsconfig.build.json` into `dist/`: `.js`, `.d.ts` and maps. `prepare`
+  runs it, so a git dependency builds itself on install.
+
+⚠️ **Consumers get `dist/`, not `src/`.** Node refuses to strip types from anything under
+`node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), and a git dependency is a real copy
+there, not a symlink. `exports` maps `@lbptracker/cwlib/<name>.ts` to `dist/<name>.js`, so the
+import specifiers are the same either way.
+
+The corpus tests read lbptracker's `fixtures/`: `LBP_FIXTURES` points at it, and the default is an
+lbptracker checkout next to this one. `LBP_LEVELS` and `LBP_PLANS` override single corpora. Without
+them those tests skip.

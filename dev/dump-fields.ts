@@ -8,11 +8,11 @@
  */
 import { readFile } from 'node:fs/promises';
 
-import { readPlan } from '@lbptracker/cwlib/level.ts';
-import { partReaders } from '@lbptracker/cwlib/parts.ts';
-import { nodeInflate } from '@lbptracker/cwlib/platform/node.ts';
-import { Serializer } from '@lbptracker/cwlib/serializer.ts';
-import { setTrace } from '@lbptracker/cwlib/thing.ts';
+import { readPlan } from '../src/level.ts';
+import { partReaders } from '../src/parts.ts';
+import { nodeInflate } from '../src/platform/node.ts';
+import { Serializer } from '../src/serializer.ts';
+import { setTrace } from '../src/thing.ts';
 
 const FILE = process.argv[2];
 const WANT = (process.argv[3] ?? '').split(',').filter(Boolean);
