@@ -183,6 +183,8 @@ export interface ShapePart {
   readonly color: number;
   readonly brightness: number;
   readonly bevelSize: number;
+  /** subVersion 0x149 on; 0 before. See steering/level-files.md, *Shapes*. */
+  readonly zBias: number;
 }
 
 /** `PGeneratedMesh`: how a shape is drawn. */
@@ -316,12 +318,12 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
   }
   if (subVersion >= 0x19a) s.bool(); // ethereal
   if (subVersion >= 0x120 && subVersion < 0x135) s.u8();
-  if (subVersion >= 0x149) s.u8(); // zBias
+  const zBias = subVersion >= 0x149 ? s.u8() : 0;
   if (subVersion >= 0x14c) {
     s.u8(); // fireDensity
     s.u8(); // fireLifetime
   }
-  return { ...polygon, material, thickness, color, brightness, bevelSize };
+  return { ...polygon, material, thickness, color, brightness, bevelSize, zBias };
 }
 
 /**

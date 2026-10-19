@@ -575,6 +575,11 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
 - ⚠️ **A shape's stored z is not where its face is**: on 10,960 shapes it is exactly minus the
   Thing's world z, which would put all of them at 0. What the game does with it is not known; a
   renderer that extrudes in the Thing's own z ignores it.
+- ❗ **Shapes are stacked on one layer**, and `zBias` is how some of them are ordered: on
+  Needlepoint Peaks 7,188 pairs of shapes overlap with their faces in one plane, and about half
+  differ in `zBias` (lbprender's `dev/coplanar.ts`). It is a byte read as signed: 0 on 1,476 of
+  2,074 shapes, 10 on 270, 246 (−10) on 247, the rest between. `ShapePart.zBias` keeps it as
+  stored; which sign is nearer is not measured.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement; `RBevel` is not read.
 
