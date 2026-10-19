@@ -385,19 +385,47 @@ export function readGroup(s: Serializer, readers: ReadonlyMap<string, PartReader
  * `LevelSettings`: one lighting preset. `PLevelSettings` is one of these
  * inline, followed by a list of the presets a level can cross-fade between.
  */
-function readLevelSettings(s: Serializer): void {
+/**
+ * One set of a level's lighting -- cwlib's `LevelSettings`, the superclass
+ * `PLevelSettings` serialises first and its presets repeat. Colours are four
+ * floats as stored; steering/level-files.md, *Level settings*, says what of
+ * them is measured.
+ */
+export interface LevelLighting {
+  readonly sunPosition: readonly [number, number, number];
+  readonly sunPositionScale: number;
+  readonly sunColor: readonly [number, number, number, number];
+  readonly ambientColor: readonly [number, number, number, number];
+  readonly sunMultiplier: number;
+  readonly exposure: number;
+  readonly fogColor: readonly [number, number, number, number];
+  readonly fogNear: number;
+  readonly fogFar: number;
+  readonly rimColor: readonly [number, number, number, number];
+  readonly rimColor2: readonly [number, number, number, number];
+}
+
+/** `PLevelSettings`: the lighting, its presets, and the backdrop. */
+export interface LevelSettingsPart extends LevelLighting {
+  readonly presets: LevelLighting[];
+  readonly backdropAmbience: string;
+  /** An `RStaticMesh`, version 0x2f3 on. */
+  readonly backdropMesh?: ResourceRef;
+}
+
+function readLevelSettings(s: Serializer): LevelLighting {
   const { version, subVersion } = s.revision;
-  s.vector3(); // sunPosition
-  s.f32(); // sunPositionScale
-  s.vector4(); // sunColor
-  s.vector4(); // ambientColor
-  s.f32(); // sunMultiplier
-  s.f32(); // exposure
-  s.vector4(); // fogColor
-  s.f32(); // fogNear
-  s.f32(); // fogFar
-  s.vector4(); // rimColor
-  s.vector4(); // rimColor2
+  const sunPosition = s.vector3();
+  const sunPositionScale = s.f32();
+  const sunColor = s.vector4();
+  const ambientColor = s.vector4();
+  const sunMultiplier = s.f32();
+  const exposure = s.f32();
+  const fogColor = s.vector4();
+  const fogNear = s.f32();
+  const fogFar = s.f32();
+  const rimColor = s.vector4();
+  const rimColor2 = s.vector4();
   if (version >= 0x325) {
     s.f32(); // bakedShadowAmount
     s.f32(); // bakedShadowBlur
@@ -417,22 +445,28 @@ function readLevelSettings(s: Serializer): void {
     s.f32(); // dofFar2
     if (subVersion >= 0xce) s.f32(); // dofFar3
   }
+  return {
+    sunPosition, sunPositionScale, sunColor, ambientColor, sunMultiplier, exposure,
+    fogColor, fogNear, fogFar, rimColor, rimColor2,
+  };
 }
 
 /** `PLevelSettings`: the lighting, inline, then the presets and the backdrop. */
-export function readLevelSettingsPart(s: Serializer): void {
+export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
   const { version, subVersion } = s.revision;
-  readLevelSettings(s); // the superclass, serialised first
+  const lighting = readLevelSettings(s); // the superclass, serialised first
+  const presets: LevelLighting[] = [];
   if (version >= 0x153) {
     const count = s.i32();
-    for (let i = 0; i < count; i += 1) readLevelSettings(s);
+    for (let i = 0; i < count; i += 1) presets.push(readLevelSettings(s));
   }
-  s.str(); // backdropAmbience
-  if (version >= 0x2f3) s.resource(); // backdropMesh
+  const backdropAmbience = s.str();
+  const backdropMesh = version >= 0x2f3 ? s.resource() : undefined;
   if (subVersion >= 0xaf) {
     s.i32(); // backgroundRepeatFlags
     s.f32(); // backgroundSkyHeight
   }
+  return { ...lighting, presets, backdropAmbience, backdropMesh };
 }
 
 /**

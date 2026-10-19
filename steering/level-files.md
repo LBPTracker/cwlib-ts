@@ -606,6 +606,28 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement. The bevel is `RBevel`, *Bevels* below.
 
+## Level settings — `PLevelSettings`
+
+`readLevelSettingsPart` returns `LevelSettingsPart`: the lighting cwlib calls `LevelSettings`
+(sun position and its scale, sun, ambient, fog and two rim colours as four floats each, sun
+multiplier, exposure, fog near and far), the presets that repeat it, the backdrop ambience and
+the backdrop's `RStaticMesh`; the bytes walked are unchanged. Over the game's own 229 levels that
+parse (`dev/settings-census.ts`, 2026-10-20):
+
+| | |
+|---|---|
+| levels with one `PLevelSettings` | 219; none on 9, two on 1 |
+| presets | 1 to 5, 3 on 134 |
+| a backdrop mesh named | 200 |
+| colours | within 0–1 bar a little headroom (sun up to 1.06, rim alpha up to 1.5); alpha 1 elsewhere |
+| `sunPosition` / `sunPositionScale` | components −0.93 to 1.42 / 20,000 to 848,036: a direction and a distance |
+| `fogNear` / `fogFar` | −1,062 to 200,000 / 1,000 to 300,000 |
+| `exposure` / `sunMultiplier` | 0.97 to 2.33 / 1.00 to 2.11 |
+
+⚠️ A story level's container world carries a set that looks like a default (sun `1,1,1` ×300,000,
+fog 1,000–4,000, the same on the containers sampled); the main world carries the level's.
+What the game does with each value is not measured here.
+
 ## Bevels — `RBevel`
 
 `readBevel` in `src/bevel.ts`: magic `BEVb`, dependency type 24, FileDB paths
