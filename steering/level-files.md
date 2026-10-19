@@ -587,8 +587,10 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
 | the stored z: none / all 0 / varying / one other value | 26,194 / 32,118 / 5,767 / 4,963 |
 | ⚠️ the stored z, all equal to **minus the Thing's world z** | **10,960** |
 
-- ⚠️ **Which side of its plane a shape is extruded to is not in these bytes**: thicknesses of
-  90 or 190 on planes 100 apart tile either way, and centred too. lbprender centres it and says so.
+- ❗ **A shape's front face is at z = +thickness in its own space, its back on its plane.** Not
+  from the shape's bytes but from its decorations, which sit on the front: on Needlepoint Peaks
+  their offsets' z is the owner's thickness — 90-thick shapes carry theirs at 90–110, 190-thick at
+  190, 10-thick at 10–20 (lbprender's `dev/decorations.ts`, *Decorations* below).
 - ⚠️ **A shape's stored z is not where its face is**: on 10,960 shapes it is exactly minus the
   Thing's world z, which would put all of them at 0. What the game does with it is not known; a
   renderer that extrudes in the Thing's own z ignores it.
@@ -605,6 +607,22 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   keeps the byte; 255 below version `0x3c1`, where the field is absent.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement. The bevel is `RBevel`, *Bevels* below.
+
+## Decorations — `PDecorations`
+
+A decoration is a mesh stuck onto a Thing — a rivet, a button, a rope knot. `readDecorations`
+returns `Decoration[]`: its `PRenderMesh`, its `offset` (a 4x4 column-major like `PPos`), the bone,
+triangle and barycentric point it was placed on, its angle and scale, `reversed`, `playModeFrame`
+and `planGUID`; the bytes walked are cwlib's `Decoration.java`. Measured on Needlepoint Peaks, its
+chunks placed, **520 decorations** (lbprender's `dev/decorations.ts`, 2026-10-20):
+
+- ❗ **The offset is in the owning Thing's space**: the owner's `PPos` times the offset is where
+  the decoration is drawn. With that reading, **519 of 520** have their origin inside their
+  shape's outline.
+- ❗ **They sit on the shape's front face**: the offset's z is the owner's `PShape.thickness`, or
+  up to 20 beyond it (*Shapes* above).
+- ⚠️ **`decorationScale` is not known to add anything**: the offset's own columns already scale
+  the mesh, and match `decorationScale` on 45 of 520, are 1 on 11, and neither on 464.
 
 ## Level settings — `PLevelSettings`
 
