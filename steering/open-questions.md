@@ -90,9 +90,10 @@ branch, into one that stands between a reader and a song. What is left:
   Music Sequencer, so this one is in the way of music.
 - **The game's own archives** — *What of the game's own Things opens* in
   [level-files.md](level-files.md). Not refused by the bound and still failing: **186 plans and
-  48 levels** (`dev/things-census.ts` lists them). Levels: 25 "the world Thing carried no WORLD
-  part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above; about 20 LBP3
-  story levels on missed test markers and short reads. Plans: mostly the same crossplay Vita
+  30 levels** (`dev/things-census.ts` lists them). Levels: 25 "the world Thing carried no WORLD
+  part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above; then
+  `manglewood_hub_container.bin` (a short read) and four early LBP3 levels (`sack_town.bin`,
+  `stitchem_manor.bin` at `0xc8`–`0x130`, `fickle_mistress.bin`, `game_outro.bin`). Plans: mostly the same crossplay Vita
   resources, then missed test markers and leftover tails — the shape of one part reader taking the
   wrong count. Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
   decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws

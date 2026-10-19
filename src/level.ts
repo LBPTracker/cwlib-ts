@@ -135,8 +135,13 @@ function readChunkFile(s: Serializer): void {
 /** `LevelData`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
 function readLevelData(s: Serializer): void {
   readSlotId(s);
-  s.i32(); // type
-  s.references(readChunkFile);
+  const type = s.i32();
+  // ❗ **A type-2 LevelData has no chunk list**: its type is followed straight
+  // by the offset. Not in cwlib, whose reader fails on these files too; measured
+  // on LBP3 PS4's own story levels, where a second LevelData of type 2 follows
+  // the main one and the walk ends right only without the list
+  // (steering/level-files.md, *Streaming levels*).
+  if (type !== 2) s.references(readChunkFile);
   s.vector3(); // offset
   s.vector3(); // min
   s.vector3(); // max

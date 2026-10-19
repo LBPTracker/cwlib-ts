@@ -227,6 +227,27 @@ chunk's own stream ending exactly on its last byte; `plan.test.ts` pins all four
 chunks fetched from the public archive (three levels, PS3 and PS4) hold 5,832 Things and **no
 sequencer at all** — the plumbing is proved and the payoff still hypothetical.
 
+The game's own story levels (`official_adventure_levels/…_container.bin`, subVersion
+`0x19f`–`0x1ab`) put two things in front of that layout, measured on the 57 game levels the two
+changes opened — 39 by the gates, 18 by the type-2 rule (`dev/things-census.ts`, 2026-10-19):
+
+```
+StreamingManager  editingThingsList, LevelData[] (references), i32 numIslands,
+                  i32 numPendingIslands  > 0x1ff only,  descriptor fartDesc, v3 startingPoint,
+                  i32 zoneShape, zoneSize, numInUsePlans,  i32 maintainIslandsCount  >= 0x1a9
+LevelData         SlotID, i32 type,  ChunkFile[] (references)  NOT WHEN type IS 2,
+                  v3 offset, v3 min, v3 max, LevelData parent,  guid farcGuid  >= 0x1ac
+```
+
+- ❗ **A `LevelData` of type 2 has no chunk list.** Every story container carries a second
+  `LevelData` after the main one (type 0, its chunks), of type 2, whose type is followed straight
+  by the offset — 12 bytes, usually zero — and plausible bounds, then the main one as its parent.
+  Read with a count there, 18 containers failed a Thing marker a few bytes on; without it all 18
+  end right. cwlib does not know it, and its own reader fails on these files with "Test
+  serialization marker is invalid" (`CwlibTrace parts`, 2026-10-19). Only types 0 and 2 occur.
+- ⚠️ The two gates on `farcGuid` and `numPendingIslands` were in a comment and not in the code;
+  the PS3 saves are `0x213`, past both, so nothing failed until the game's own `0x1ab`.
+
 ⚠️ **An island that will not open is reported, not swallowed.** Islands are independent resources
 in one list, so one failing says nothing about its neighbours: `LevelParse.problems` carries them
 out and `readBackup` puts them in `failed`. This is the one place in the reader where a partial
@@ -406,10 +427,11 @@ row's GUID is "the same as row.to" is wrong: it is the pair's second word.
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`
-(2026-10-19, evening): **10,370 of 17,624 plans and 209 of 522 levels parse.** 7,068 plans and 265
+(2026-10-19, evening): **10,370 of 17,624 plans and 227 of 522 levels parse.** 7,068 plans and 265
 levels are refused by the version bound or the oldest header layout — most at `0x397`, the LBP2-era
-assets LBP3 still ships — and **186 plans and 48 levels fail on something else**. The morning's
-count was 10,368 and 147; what moved it:
+assets LBP3 still ships — and **186 plans and 30 levels fail on something else**: 25 of the levels
+are crossplay Vita, and of the story levels only `manglewood_hub_container.bin` and four
+`pre_alpha`/early ones still fail. The morning's count was 10,368 and 147; what moved it:
 
 - two part readers ported from cwlib, `POPPET_POWERUP` (the popit puzzles, 14 levels) and
   `TAG_SYNCHRONIZER` (the crossplay levels, 9);
@@ -417,7 +439,8 @@ count was 10,368 and 147; what moved it:
   subVersion `0x1ac` and `StreamingManager.numPendingIslands` above `0x1ff`. The PS3 saves that
   proved the streaming chain are `0x213`, where both are present; **LBP3 PS4's own story levels
   are `0x19f`–`0x1ab`**: 39 of them open now. `space.bin` read its 1,476 chunk files correctly and
-  then failed a Thing marker 100 KB later, which is how a gate this small shows itself. `maintainIslandsCount` is gated at `0x1a9` with them.
+  then failed a Thing marker 100 KB later, which is how a gate this small shows itself;
+- a `LevelData` of type 2 has no chunk list (18 levels) — *Streaming levels* above. `maintainIslandsCount` is gated at `0x1a9` with them.
 
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first
