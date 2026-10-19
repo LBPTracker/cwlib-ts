@@ -52,9 +52,11 @@ The readers are measured ([level-files.md](level-files.md), *The game's textures
 materials*); what a renderer still has to decide on its own:
 
 - **The UV transform.** `materialSummary`'s `uvTransform` is cwlib's reading of a sample box's
-  params — scale and offset, or a 2x3 matrix when `subType` is 1 — and **which way V runs against
-  a texture's first row** is unmeasured. lbprender drawing a textured mesh is the measurement: a
-  texture upside down or offset by the transform's amount says which.
+  params — scale and offset, or a 2x3 matrix when `subType` is 1. Which way V runs is measured
+  (as stored, [level-files.md](level-files.md)); the transform is not: the cut-out census that
+  settled V ties on 39 of the 46 transformed primitives it can use. A textured mesh whose transform
+  is a visible offset or rotation — `scoreboard_wood.gmat` turns its wood a quarter — drawn both
+  ways in lbprender is the measurement left.
 - **sRGB.** Nothing in a texture says how it is sampled except `GTF ` flags bit 0, which is on
   normal maps (4,393 of 4,393). Bits 1 and 2 of the same byte (`flags` 2 on 16,231, 6 on 7,388) are
   the candidates for "colour data"; untested.

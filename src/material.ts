@@ -301,6 +301,8 @@ export interface SampleSummary {
    * `[a, b, c, d, e, f]`: `u' = a·u + b·v + c`, `v' = d·u + e·v + f`. From
    * `params` 0--3 as scale and offset when `subType` is 0, from params 0, 1, 2,
    * 3, 6, 7 as a 2x3 matrix when it is 1 -- cwlib's reading, not measured.
+   * ✔ `v' = 0` is the texture's first row as stored, with no flip
+   * (`dev/uv-census.ts`, steering/level-files.md).
    */
   readonly uvTransform: readonly [number, number, number, number, number, number];
   /** `TextureWrap` of the slot, 1 wrap … 5 clamp. */
