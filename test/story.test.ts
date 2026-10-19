@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { readThings } from '../src/level.ts';
+import type { ShapePart } from '../src/parts.ts';
 import { readFar } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 
@@ -22,6 +23,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   if (!existsSync(LEVEL)) return t.skip(`no game under ${GAME}`);
   const counts: number[] = [];
   let things = 0;
+  let shapes = 0;
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
     for (const { bytes } of chunks) {
@@ -30,9 +32,17 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
       const parse = await readThings(bytes, nodeInflate);
       assert.deepEqual(parse.problems ?? [], []);
       things += parse.things.length;
+      for (const thing of parse.things) {
+        const shape = thing?.parts.get('SHAPE') as ShapePart | undefined;
+        if (shape === undefined) continue;
+        shapes += 1;
+        // The loops are runs of the vertex list: 80,002 of 80,002 over all 88 archives.
+        assert.equal(shape.loops.reduce((a, b) => a + b, 0), shape.vertices.length / 3);
+      }
     }
     counts.push(chunks.length);
   }
   assert.deepEqual(counts, [880, 63]);
   assert.equal(things, 9214);
+  assert.equal(shapes, 2521);
 });

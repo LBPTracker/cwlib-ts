@@ -9,7 +9,8 @@
  * (`gamedata/lbp3/official_adventure_levels/…`), and they hold nothing but
  * `CHKb`. `readFar` opens them and checks every SHA-1. Prints how many chunks
  * read, their Things, and the islands that did not, grouped by error --
- * steering/level-files.md, *Streaming levels*.
+ * steering/level-files.md, *Streaming levels* -- and then the shapes, the
+ * level's material geometry: the checks behind *Shapes* there.
  */
 
 import path from 'node:path';
@@ -17,6 +18,8 @@ import { readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import { readThings } from '../src/level.ts';
+import type { GeneratedMeshPart, ShapePart } from '../src/parts.ts';
+import type { Thing } from '../src/thing.ts';
 import { readFar } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 
@@ -38,6 +41,35 @@ const bump = (key: string, what = '', by = 1): void => {
   tally.set(key, (tally.get(key) ?? 0) + by);
   if (what && !example.has(key)) example.set(key, what);
 };
+/** What a shape's bytes say about how it is drawn. */
+function shape(thing: Thing): void {
+  const part = thing.parts.get('SHAPE') as ShapePart | undefined;
+  if (part === undefined) return;
+  const mesh = thing.parts.get('GENERATED_MESH') as GeneratedMeshPart | undefined;
+  const pos = thing.parts.get('POS') as Float32Array | undefined;
+  const count = part.vertices.length / 3;
+  bump('shape: shapes');
+  bump(`shape: with a GENERATED_MESH ${mesh !== undefined}`);
+  bump(`shape: loops sum ${part.loops.reduce((a, b) => a + b, 0) === count ? 'to' : 'NOT to'} the vertex count`);
+  bump(`shape: loops ${part.loops.length > 1 ? 'more than one' : part.loops.length}`);
+  if (part.requiresZ) {
+    const zs = new Set<number>();
+    for (let i = 2; i < part.vertices.length; i += 3) zs.add(Math.round(part.vertices[i]));
+    const kind = zs.size === 1 && zs.has(0) ? 'all 0'
+      : pos && zs.size === 1 && Math.round(pos[14]) === -[...zs][0] ? "all minus the Thing's world z"
+      : zs.size === 1 ? 'one other value' : 'varying';
+    bump(`shape: stored z ${kind}`);
+  } else bump('shape: no stored z');
+  if (pos) {
+    bump(`shape: world z ${Math.round(pos[14]) % 100 === 0 ? 'a multiple of 100' : 'not a multiple of 100'}`);
+    bump(`shape: thickness ${[10, 50, 90, 190].includes(Math.round(part.thickness)) ? Math.round(part.thickness) : 'other'}`);
+  }
+  if (mesh) {
+    bump(`shape: visibilityFlags ${mesh.visibilityFlags}`);
+    bump(`shape: gfx material ${mesh.gfxMaterial ? 'named' : 'none'}, bevel ${mesh.bevel ? 'named' : 'none'}`);
+  }
+}
+
 for (const file of archives) {
   const where = path.relative(ROOT, file);
   const resources = await readFar(new Uint8Array(await readFile(file)));
@@ -51,6 +83,7 @@ for (const file of archives) {
       const parse = await readThings(bytes, nodeInflate);
       bump('chunks read');
       bump('Things', '', parse.things.length);
+      for (const thing of parse.things) if (thing) shape(thing);
       for (const problem of parse.problems ?? []) bump(`island problem: ${problem.replace(/\d+/g, 'N').slice(0, 100)}`, `${where} ${sha1}`);
     } catch (error) {
       bump(`chunk FAILED: ${(error as Error).message.replace(/\d+/g, 'N').slice(0, 100)}`, `${where} ${sha1}`);

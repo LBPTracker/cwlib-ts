@@ -164,22 +164,57 @@ export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartRead
  * that follows the count -- the one place in this format where an array's
  * element size is decided by a later field.
  */
-function readPolygon(s: Serializer): void {
+/**
+ * `PShape`: a Thing's outline and what it is made of -- the polygon a level's
+ * material geometry is extruded from. steering/level-files.md, *Shapes*, has
+ * what of it is measured.
+ */
+export interface ShapePart {
+  /** `x, y, z` per vertex, in the Thing's own space; z is 0 when the file stores only x and y. */
+  readonly vertices: Float32Array;
+  /** Whether the file stored a z per vertex. */
+  readonly requiresZ: boolean;
+  /** The vertex count of each closed loop, in order. */
+  readonly loops: number[];
+  /** The physical material (`MATb`, dependency type 16). */
+  readonly material?: ResourceRef;
+  readonly thickness: number;
+  /** Packed ARGB, `>>> 0`; from four floats below version 0x389. */
+  readonly color: number;
+  readonly brightness: number;
+  readonly bevelSize: number;
+}
+
+/** `PGeneratedMesh`: how a shape is drawn. */
+export interface GeneratedMeshPart {
+  /** The `RGfxMaterial` (`GMTb`, type 7) the extruded shape is drawn with. */
+  readonly gfxMaterial?: ResourceRef;
+  /** The `RBevel` (`BEVb`, type 24). */
+  readonly bevel?: ResourceRef;
+  readonly uvOffset: readonly [number, number, number, number];
+  readonly planGUID: number;
+  /** cwlib's bit 0 play mode, bit 1 edit mode; -1 when the revision has no field. */
+  readonly visibilityFlags: number;
+  readonly noBevel: boolean;
+  readonly includeSides: boolean;
+}
+
+function readPolygon(s: Serializer): Pick<ShapePart, 'vertices' | 'requiresZ' | 'loops'> {
   const count = s.i32();
   // ❗ **`requiresZ` arrives at 0x341, and below it there is no flag byte at
   // all** -- cwlib `Polygon.serialize` takes an early return where every vertex
   // is a v3. Reading the flag anyway costs a byte and then picks the vertex
   // width from whatever that byte happened to be.
   const requiresZ = s.revision.version < 0x341 ? true : s.bool();
+  const vertices = new Float32Array(count * 3);
   for (let i = 0; i < count; i += 1) {
-    if (requiresZ) s.vector3();
-    else {
-      s.f32();
-      s.f32();
-    }
+    vertices[i * 3] = s.f32();
+    vertices[i * 3 + 1] = s.f32();
+    if (requiresZ) vertices[i * 3 + 2] = s.f32();
   }
   // ⚠️ An `intvector`, not an array: see `Serializer.intVector`.
-  s.intVector(); // loops
+  const loops = s.intVector();
+  return { vertices, requiresZ, loops };
 }
 
 /** `ContactCache`: who this shape is touching. */
@@ -204,20 +239,23 @@ function readContactCache(s: Serializer, readers: ReadonlyMap<string, PartReader
  * `canCollect` needs `0x3e2`. A reader written against one file's revision and
  * assumed constant would desynchronise on the others.
  */
-export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader>): ShapePart {
   const { version, subVersion } = s.revision;
-  readPolygon(s);
-  s.resource(); // material
+  const polygon = readPolygon(s);
+  const material = s.resource();
   if (version >= 0x15c) s.resource(); // oldMaterial
-  s.f32(); // thickness
+  const thickness = s.f32();
   if (version >= 0x227) s.f32(); // massDepth
   // ❗ **The colour is four floats until 0x389 and a packed ARGB after.** The
   // comment here used to say exactly that above a line that always read the
   // packed form -- 12 bytes short on every pre-0x389 Thing. cwlib `PShape`.
-  if (version <= 0x389) s.vector4();
-  else s.i32(); // color
-  if (version >= 0x301) s.f32(); // brightness
-  s.f32(); // bevelSize
+  let color: number;
+  if (version <= 0x389) {
+    const [r, g, b, a] = s.vector4().map((x) => Math.max(0, Math.min(255, Math.round(x * 255))));
+    color = ((a << 24) | (r << 16) | (g << 8) | b) >>> 0;
+  } else color = s.i32() >>> 0;
+  const brightness = version >= 0x301 ? s.f32() : 1;
+  const bevelSize = s.f32();
   if (version <= 0x340 || version >= 0x38e) s.matrix(); // COM
   if (version <= 0x306) {
     s.u8(); // interactPlayMode
@@ -283,6 +321,7 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.u8(); // fireDensity
     s.u8(); // fireLifetime
   }
+  return { ...polygon, material, thickness, color, brightness, bevelSize };
 }
 
 /**
@@ -398,26 +437,28 @@ export function readLevelSettingsPart(s: Serializer): void {
  * above it — the same byte either way, but the *gate* differs, so a file with a
  * subVersion in between would read neither. Both branches are here.
  */
-export function readGeneratedMesh(s: Serializer): void {
+export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   const { version, subVersion } = s.revision;
-  s.resource(); // gfxMaterial
-  s.resource(); // bevel
-  s.vector4(); // uvOffset
-  if (version >= 0x258) s.guid(); // planGUID
-  if (version >= 0x27c && subVersion < 0xfb) s.bool(); // visibilityFlags, as a bool
-  if (subVersion >= 0xfb) s.u8(); // visibilityFlags, as a byte
+  const gfxMaterial = s.resource();
+  const bevel = s.resource();
+  const uvOffset = s.vector4();
+  const planGUID = version >= 0x258 ? s.guid() : 0;
+  let visibilityFlags = -1;
+  if (version >= 0x27c && subVersion < 0xfb) visibilityFlags = s.bool() ? 3 : 0;
+  if (subVersion >= 0xfb) visibilityFlags = s.u8();
   if (version >= 0x305) {
     s.f32(); // textureAnimationSpeed
     s.f32(); // textureAnimationSpeedOff
   }
-  if (subVersion >= 0x34) s.bool(); // noBevel
+  const noBevel = subVersion >= 0x34 ? s.bool() : false;
   if (subVersion >= 0x97) s.bool(); // sharded
-  if (subVersion >= 0x13d) s.bool(); // includeSides
+  const includeSides = subVersion >= 0x13d ? s.bool() : true;
   if (subVersion >= 0x155) s.u8(); // slideImpactDamping
   if (subVersion >= 0x13d) {
     s.u8(); // slideSteer
     s.u8(); // slideSpeed
   }
+  return { gfxMaterial, bevel, uvOffset, planGUID, visibilityFlags, noBevel, includeSides };
 }
 
 /** What `readRenderMesh` keeps: everything a renderer needs to draw the Thing. */

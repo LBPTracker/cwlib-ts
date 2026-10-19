@@ -549,6 +549,35 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
   is not. `test/mesh.test.ts` pins `ascetic.lvl`'s 104.
 - `visibilityFlags`: 3 on 11,937, 2 on 1,073, 0 on 23 — cwlib's bit 0 play mode, bit 1 edit mode.
 
+## Shapes — `PShape` and `PGeneratedMesh`
+
+A level's material geometry — wood, cardboard, stone — is not a mesh: it is a Thing's `PShape`
+outline, extruded, and drawn as its `PGeneratedMesh` says. `readShape` returns `ShapePart` (the
+polygon as `x, y, z` per vertex, the loops, the physical material, thickness, colour as ARGB,
+brightness, bevel size) and `readGeneratedMesh` returns `GeneratedMeshPart` (the gfx material, the
+`RBevel`, `uvOffset`, `planGUID`, `visibilityFlags`, `noBevel`, `includeSides`); the bytes walked
+are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/story-census.ts`,
+2026-10-19):
+
+| what | count |
+|---|---|
+| the loops sum to the vertex count | **80,002 of 80,002** — the loops are runs of the vertex list, in order |
+| one loop / more / none | 78,172 / 1,828 / 2 |
+| with a `PGeneratedMesh` | 65,637; of those, a gfx material and a bevel named on 63,322, a gfx material alone on 2,306, neither on 9 |
+| `visibilityFlags` | 3 on 64,818, 2 (edit mode only, by cwlib's bits) on 819 |
+| the Thing's world z a multiple of 100 | 76,985 |
+| thickness 10 / 90 / 50 / 190 / other | 32,418 / 28,347 / 5,071 / 5,625 / 8,541 — one layer is 100 units, less a 10 gap |
+| the stored z: none / all 0 / varying / one other value | 26,194 / 32,118 / 5,767 / 4,963 |
+| ⚠️ the stored z, all equal to **minus the Thing's world z** | **10,960** |
+
+- ⚠️ **Which side of its plane a shape is extruded to is not in these bytes**: thicknesses of
+  90 or 190 on planes 100 apart tile either way, and centred too. lbprender centres it and says so.
+- ⚠️ **A shape's stored z is not where its face is**: on 10,960 shapes it is exactly minus the
+  Thing's world z, which would put all of them at 0. What the game does with it is not known; a
+  renderer that extrudes in the Thing's own z ignores it.
+- What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
+  scale a face is mapped at are a reading, not a measurement; `RBevel` is not read.
+
 ## The game's textures — `GTF ` and `TEX `
 
 `readTexture` in `src/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is
