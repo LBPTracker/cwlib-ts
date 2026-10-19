@@ -628,6 +628,40 @@ parse (`dev/settings-census.ts`, 2026-10-20):
 fog 1,000–4,000, the same on the containers sampled); the main world carries the level's.
 What the game does with each value is not measured here.
 
+## Backdrops — `RStaticMesh`
+
+`readStaticMesh` in `src/staticmesh.ts`: magic `SMHb`, dependency type 44, FileDB paths
+`…/palettes/….smh`, named by `PLevelSettings.backdropMesh`. cwlib's `SerializedResource`,
+`RStaticMesh.java` and `structs/staticmesh/` (toolkit `fee22399`), measured on **all 47 in the four
+FARCs, revisions `0x335`–`0x3f9`: 47 of 47 read** (`dev/staticmesh-census.ts`, 2026-10-20).
+
+```
+0x00 "SMHb"   0x04 u32 head   0x08 u32 depsOffset
+0x0c StaticMeshInfo, plain big-endian, where other resources have branch, flags and the compressed bool:
+     resource lightmap, risemap, fallmap; i32 primitiveCount, unknownStructCount,
+     indexBufferSize, vertexStreamSize;
+     StaticPrimitive[]  v4 min, v4 max, resource gmat, i32 vertexStart, indexStart, numIndices, u8 type
+     UnknownStruct[]    v3 min, i16 a, i16 b, v3 max, i16 firstPrimitive, i16 numPrimitives
+     u32 "HELP"
+     the chunk table, always compressed
+payload: the vertex stream, 0x20 a vertex  f32 x3 position, u32 normal, f16 x2 uv0,
+                                           u32 tangent, f16 x2 uv1, u32 smooth normal
+         then u16 indices to the end
+```
+
+| convention | measurement |
+|---|---|
+| ❗ **the container**: `StaticMeshInfo` in the header, then the chunk table with no compressed flag | the chunk data ends on `depsOffset` in 47 of 47 |
+| the payload is the vertex stream and then the indices | the indices fill what is left exactly, `indexBufferSize` bytes, in 47 of 47 |
+| **a primitive's indices are offset by its `vertexStart`** | with it added, every one of 37,184 runs stays inside the vertices; and **99.4% of 5.34 M triangles wind counter-clockwise about their own normals** (5,308,262 against 32,891), which a wrong offset could not give — the check on the offset, the strip parity and cwlib's `unpackNormal32` together |
+| strips (type 6) on 33,344 runs, lists (5) on 3,840; restart on `0xffff` | the winding above |
+| every primitive names a gfx material; every backdrop names its three maps | 37,184 of 37,184; 47 of 47 |
+| positions in the level's world | Needlepoint Peaks' settings Thing has an identity `PPos`, and its backdrop spans x −31,862 to 36,258 and z −28,768 to 249, around and behind the level's chunks; drawn in lbprender its textures read the right way round (a "SACKTOWN WELCOME" sign) |
+
+The tangent and "smooth normal" packs are not returned (the mesh's equivalents failed their
+measurement, *The game's meshes*), nor the `UnknownStruct`s; the three light maps are named but
+what they hold is not measured.
+
 ## Bevels — `RBevel`
 
 `readBevel` in `src/bevel.ts`: magic `BEVb`, dependency type 24, FileDB paths

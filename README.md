@@ -26,6 +26,7 @@ console.log(level.things.length, musicSequencers(level).length);
 | `filedb.ts`, `farc.ts` | the game's FileDB (GUID → path, SHA-1), its GUID remap (old GUID → new) and its FARC archives (SHA-1 → bytes, read lazily) |
 | `mesh.ts` | the game's `RMesh` (`MSHb`): positions, normals, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
+| `staticmesh.ts` | the game's `RStaticMesh` (`SMHb`): a level's backdrop — positions, normals, two UV channels, a triangle list and a material per primitive |
 | `bevel.ts` | the game's `RBevel` (`BEVb`): the profile a shape's edge is swept with, its material slots and settings |
 | `material.ts` | the game's `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `psf.ts`, `zip.ts` | `PARAM.SFO`, and a stored/deflated ZIP reader and writer |
