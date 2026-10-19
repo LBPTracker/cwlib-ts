@@ -130,10 +130,30 @@ function readCollectableData(s: Serializer): void {
  * is in a file this list only names. See question 26 in
  * `steering/answered-questions.md` for what following the hash would take.
  */
+/**
+ * One `ChunkFile` of a streaming level: which chunk, and the box it fills in
+ * the level's world. steering/level-files.md, *The story levels' chunks*.
+ */
+export interface ChunkPlacement {
+  /** The `CHKb`'s SHA-1, lower-case hex. */
+  readonly sha1: string;
+  readonly min: readonly [number, number, number];
+  readonly max: readonly [number, number, number];
+}
+
+/** The chunk files each stream has read so far, collected for `readLevel` to hand out. */
+const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
+
+const hexOf = (bytes: Uint8Array): string => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+
 function readChunkFile(s: Serializer): void {
   const { subVersion } = s.revision;
-  if (subVersion > 0x130) s.sha1(); // chunkHash
-  else if (subVersion >= 0x73) s.resource(true); // chunkHash, as a descriptor
+  let sha1 = '';
+  if (subVersion > 0x130) sha1 = hexOf(s.sha1()); // chunkHash
+  else if (subVersion >= 0x73) {
+    const ref = s.resource(true); // chunkHash, as a descriptor
+    if (ref?.hash) sha1 = hexOf(ref.hash);
+  }
   readStreamingLists(s);
   if (subVersion >= 0xde) {
     // `userResources`: descriptors that carry their type inline.
@@ -141,8 +161,11 @@ function readChunkFile(s: Serializer): void {
     for (let i = 0; i < resources; i += 1) s.resource(true, true);
   }
   if (subVersion > 0x72) {
-    s.vector3(); // min
-    s.vector3(); // max
+    const min = s.vector3();
+    const max = s.vector3();
+    const list = chunkFiles.get(s) ?? [];
+    list.push({ sha1, min, max });
+    chunkFiles.set(s, list);
   }
   if (subVersion > 0x10d) {
     s.bool(); // hasObjectSaver
@@ -235,6 +258,12 @@ export interface LevelParse {
    * one stream where a bad read poisons what follows.
    */
   readonly problems?: readonly string[];
+  /**
+   * A streaming level's chunks and where each sits: every `ChunkFile` of its
+   * `LevelData`s, in order. ❗ A chunk's Things are in its own space, from
+   * (0, 0, 0); this box's `min` is where that origin is in the level.
+   */
+  readonly chunks?: readonly ChunkPlacement[];
 }
 
 /** Inflate a resource and start a serialiser on it, with the revision checked. */
@@ -324,14 +353,21 @@ export async function readPlan(
  * The island's Things are in `PlanData`, which is **a whole `PLNb` resource**,
  * header and all -- so it is read by `readPlan` rather than by anything here.
  */
-function readIsland(s: Serializer, plans: Uint8Array[]): void {
+/** A streaming island's bounds, as its chunk stores them. */
+export interface IslandBounds {
+  readonly min: readonly [number, number, number];
+  readonly max: readonly [number, number, number];
+}
+
+function readIsland(s: Serializer, plans: Uint8Array[], bounds: IslandBounds[]): void {
   s.i32(); // timeZone
   // ⚠️ Two i32s before the bounds at subVersion 0x213 (the PS3 saves), one at
   // 0x1ab (LBP3 PS4's own story chunks, 41,741 of them): the gate lies between,
   // where no file here sits. Which of the two is the newer is not known.
   if (s.revision.subVersion > 0x1ab) s.i32(); // flags
-  s.vector3(); // min
-  s.vector3(); // max
+  const min = s.vector3();
+  const max = s.vector3();
+  bounds.push({ min, max });
   plans.push(s.bytes(s.i32())); // planData
   readStreamingLists(s);
   readDependencyLists(s);
@@ -383,17 +419,18 @@ function readDependencyLists(s: Serializer): void {
 export async function readChunkIslands(
   bytes: Uint8Array,
   inflate: Inflate,
-): Promise<{ revision: RevisionInfo; plans: Uint8Array[] }> {
+): Promise<{ revision: RevisionInfo; plans: Uint8Array[]; bounds: IslandBounds[] }> {
   const { revision, s } = await open(bytes, inflate);
   const plans: Uint8Array[] = [];
-  s.references((self) => readIsland(self, plans));
+  const bounds: IslandBounds[] = [];
+  s.references((self) => readIsland(self, plans, bounds));
   if (revision.subVersion > 0x1ab) s.intVector(); // islandChunkCodeList
   if (s.remaining !== 0) {
     throw new SerializerError(
       `the chunk's island list left ${s.remaining} of ${s.data.length} bytes unread`,
     );
   }
-  return { revision, plans };
+  return { revision, plans, bounds };
 }
 
 export async function readChunk(
@@ -458,7 +495,7 @@ export async function readLevel(
   try {
     readThingRef(s, worldReaders);
   } catch (error) {
-    if (error instanceof StopParse) return { revision, things: error.things };
+    if (error instanceof StopParse) return { revision, things: error.things, chunks: chunkFiles.get(s) ?? [] };
     throw error;
   }
   throw new SerializerError('the world Thing carried no WORLD part');

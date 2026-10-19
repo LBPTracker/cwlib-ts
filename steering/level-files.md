@@ -259,6 +259,17 @@ islands do not open (`dev/story-census.ts`, 2026-10-19). The level's world, `…
 an `LVLb` in the FARCs; `test/story.test.ts` pins Needlepoint Peaks, 880 + 63 chunks and 9,214
 Things.
 
+❗ **A chunk's Things are in the chunk's own space, and the level says where it goes.** An island's
+bounds run from `(0, 0, 0)` to the chunk's size; the level's worlds list every chunk in their
+`ChunkFile`s with the box it fills, and **the box's min x and y is where the chunk's origin goes**
+(z is already the world's). Measured on Needlepoint Peaks (lbprender's `dev/chunkplace.ts`): its
+two worlds, `needlepoint_peaks.bin` and `…_container.bin`, list 880 and 63 chunks — every chunk of
+the two archives, the main one and the container's; **943 of 943 islands have bounds the size of
+their chunk's box**; 4,611 of 4,810 positioned Things lie within `[0, size]` in x and y, the rest
+overhanging, and 4,708 inside the box's z as stored. Drawn without the offset, every chunk sits on
+the others at the origin. `readLevel` returns the boxes as `LevelParse.chunks` (SHA-1, min, max);
+`readChunkIslands` returns the islands' `bounds`.
+
 The island and the lists it shares with `ChunkFile` were measured on the `0x213` PS3 saves, and
 three things change below:
 
@@ -576,8 +587,8 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   Thing's world z, which would put all of them at 0. What the game does with it is not known; a
   renderer that extrudes in the Thing's own z ignores it.
 - ❗ **Shapes are stacked on one layer**, and `zBias` is how some of them are ordered: on
-  Needlepoint Peaks 7,188 pairs of shapes overlap with their faces in one plane, and about half
-  differ in `zBias` (lbprender's `dev/coplanar.ts`). It is a byte read as signed: 0 on 1,476 of
+  Needlepoint Peaks, its chunks placed, 922 pairs of shapes overlap with their faces in one plane
+  and about two thirds differ in `zBias` (lbprender's `dev/coplanar.ts`). It is a byte read as signed: 0 on 1,476 of
   2,074 shapes, 10 on 270, 246 (−10) on 247, the rest between. `ShapePart.zBias` keeps it as
   stored; which sign is nearer is not measured.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
