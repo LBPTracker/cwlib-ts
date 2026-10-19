@@ -2712,6 +2712,59 @@ function readPocketItem(s: Serializer): void {
   if (subVersion > 0x55) s.i32(); // lifetime
 }
 
+/**
+ * `PPoppetPowerup` -- the popit a Thing hands the player, as in the game's
+ * popit puzzles. cwlib's `PPoppetPowerup.java`; every gate is on subVersion,
+ * so a subVersion-0 file (the crossplay levels) holds nothing at all.
+ */
+function readPoppetPowerup(s: Serializer): void {
+  const { subVersion } = s.revision;
+  if (subVersion > 0x124) {
+    s.u64(); // tools
+    const items = s.i32();
+    for (let i = 0; i < items; i += 1) s.resource(true); // a plan descriptor
+  }
+  if (subVersion >= 0x7 && subVersion < 0x124) {
+    // An InventoryItem array: no file in any corpus here sits in this span.
+    throw new SerializerError(`PPoppetPowerup at subVersion 0x${subVersion.toString(16)}: its inventory items are not ported`);
+  }
+  if (subVersion >= 0xb && subVersion < 0x123) {
+    const count = s.i32();
+    for (let i = 0; i < count; i += 1) {
+      s.i32();
+      s.i32();
+    }
+  }
+  if (subVersion >= 0x8 && subVersion < 0x174) {
+    s.u8(); // goodies
+    s.u8(); // tools
+  }
+  if (subVersion >= 0xb && subVersion < 0x174) s.s32(); // nextUid
+  if (subVersion > 0x8b) s.bool(); // vcrControlsEnabled
+  if (subVersion > 0xa1) s.s32(); // gridSnapMode
+  if (subVersion >= 0xc1 && subVersion < 0x174) s.u8(); // allowCursorToCopy
+  if (subVersion > 0x12d) s.bool(); // sackFreeze
+  if (subVersion > 0x12e) {
+    s.s32(); // minLayer
+    s.s32(); // maxLayer
+  }
+  if (subVersion > 0x14a) s.bool(); // vcrBackupTriggered
+  if (subVersion > 0x166) s.bool(); // filterContents
+}
+
+/** `PTagSynchroniser` -- a tag, as the crossplay levels use them. cwlib's `PTagSynchroniser.java`. */
+function readTagSynchroniser(s: Serializer): void {
+  s.s32(); // type
+  s.s32(); // colorIndex
+  if (s.revision.version >= 0x2dc) s.wstr(); // name
+  s.f32(); // radius
+  s.f32(); // minRadius
+  s.f32(); // scaleX
+  s.f32(); // scaleY
+  s.bool(); // useLayers
+  s.bool(); // visible
+}
+
 /** Everything implemented so far, ready to hand to `readLevel`. */
 export function partReaders(): Map<string, PartReader> {
   const readers = new Map<string, PartReader>();
@@ -2768,6 +2821,8 @@ export function partReaders(): Map<string, PartReader> {
   bind('WORMHOLE', readWormhole);
   bind('MATERIAL_OVERRIDE', readMaterialOverride);
   bind('CONNECTOR_HOOK', readConnectorHook);
+  readers.set('POPPET_POWERUP', (s) => readPoppetPowerup(s));
+  readers.set('TAG_SYNCHRONIZER', (s) => readTagSynchroniser(s));
   return readers;
 }
 

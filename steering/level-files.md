@@ -405,12 +405,23 @@ row's GUID is "the same as row.to" is wrong: it is the pair's second word.
 
 ### What of the game's own Things opens
 
-Every `PLNb` and `LVLb` in the four archives through `readThings` (2026-10-19): **10,368 of 17,624
-plans and 147 of 522 levels parse.** 7,068 plans and 262 levels are refused by the version bound
-— most at `0x397`, the LBP2-era assets LBP3 still ships — and **188 plans and 113 levels fail on
-something else**. Before the container's header gates, 567 of those plans and 116 of those levels
-died in the container instead of at the bound, and the count was 755 and 229. That makes the game's own archives the largest corpus this reader has met, and
-the first with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
+Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`
+(2026-10-19, evening): **10,370 of 17,624 plans and 209 of 522 levels parse.** 7,068 plans and 265
+levels are refused by the version bound or the oldest header layout — most at `0x397`, the LBP2-era
+assets LBP3 still ships — and **186 plans and 48 levels fail on something else**. The morning's
+count was 10,368 and 147; what moved it:
+
+- two part readers ported from cwlib, `POPPET_POWERUP` (the popit puzzles, 14 levels) and
+  `TAG_SYNCHRONIZER` (the crossplay levels, 9);
+- ❗ **two streaming gates that were in a comment and not in the code**: `LevelData.farcGuid` from
+  subVersion `0x1ac` and `StreamingManager.numPendingIslands` above `0x1ff`. The PS3 saves that
+  proved the streaming chain are `0x213`, where both are present; **LBP3 PS4's own story levels
+  are `0x19f`–`0x1ab`**: 39 of them open now. `space.bin` read its 1,476 chunk files correctly and
+  then failed a Thing marker 100 KB later, which is how a gate this small shows itself. `maintainIslandsCount` is gated at `0x1a9` with them.
+
+Before the container's header gates, 567 plans and 116 levels died in the container instead of at
+the bound. That makes the game's own archives the largest corpus this reader has met, and the first
+with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
 
 ## The game's meshes — `RMesh`
 
@@ -536,7 +547,8 @@ and refuses the others.
 | mips back to back; the chain padded to 128 bytes, each face's on a cube map | every `GTF ` payload is exactly that long; the cube maps 6 of 6 only with the padding per face |
 | the mip offsets | the first level no wider than 64 against the next, box-filtered: under half the error of the same comparison rolled by half a width on **23,682 of 23,852** textures the roll changes (the rest are too uniform to tell) |
 | `TEX`: the DDS used up exactly; `DDSD_MIPMAPCOUNT`, or one level | 2,937 of 2,944; the other 7 end in `BUMP` |
-| `flags` bit 0: a normal map | set on 4,393, every one's path naming a normal or bump map; clear on 36 such paths. Bits 1 and 2 (`flags` 0 / 1 / 2 / 3 / 6 / 7 on 1,958 / 3,292 / 16,231 / 501 / 7,388 / 600) are not understood — *64* |
+| `flags` bit 0: a normal map | set on 4,393, every one's path naming a normal or bump map; clear on 36 such paths. (`flags` 0 / 1 / 2 / 3 / 6 / 7 on 1,958 / 3,292 / 16,231 / 501 / 7,388 / 600.) |
+| `flags` bit 1: **re-exported for the PS4**, not a colour space | set on 24,719 of the 24,720 `GTF ` under `gamedata_orbis/` and clear on 5,250 of the 5,251 under `gamedata/`. Crossed with the material ports a texture is wired into, neither bit 1 nor bit 2 separates colour from data: flags 2 and 6 sit on diffuse-only and specular-only textures alike, and 3 and 7 on bump-only ones. Bit 2 is on 7,988 `gamedata_orbis/` textures and nowhere else, and is not understood — *64* |
 | `remap`: `0xaae4` on all but 82 `B8`s | `0xa9ff` (79, the `_sdf` icons) reads B into R, G and B with alpha one, and the icons come out grey and opaque; `0x02ff` (3) reads it into alpha alone. A reading of the RSX's remap register that the images agree with, not a measurement of its bits |
 
 - The levels come ready for WebGPU: `bc1`/`bc2`/`bc3` are the raw blocks for

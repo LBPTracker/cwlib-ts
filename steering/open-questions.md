@@ -58,8 +58,11 @@ materials*); what a renderer still has to decide on its own:
   is a visible offset or rotation — `scoreboard_wood.gmat` turns its wood a quarter — drawn both
   ways in lbprender is the measurement left.
 - **sRGB.** Nothing in a texture says how it is sampled except `GTF ` flags bit 0, which is on
-  normal maps (4,393 of 4,393). Bits 1 and 2 of the same byte (`flags` 2 on 16,231, 6 on 7,388) are
-  the candidates for "colour data"; untested.
+  normal maps (4,393 of 4,393). The other bits are not it: bit 1 marks a PS4 re-export, and
+  neither it nor bit 2 separates the textures wired to colour ports from those wired to data
+  ports ([level-files.md](level-files.md), *The game's textures*). So the file does not say; a
+  renderer decides by the port a texture feeds, and whether the game decodes colour ports as sRGB
+  is the eboot's to say.
 - **`alphaMode` and `alphaLayer`.** Raw values 0–5 and 0 / 1 / 128 / 192, which line up with names
   (`_alpha`, `_glassy`, `_refract`) and with nothing measured. The eboot's material setup is where
   the blend states live.
@@ -86,14 +89,14 @@ branch, into one that stands between a reader and a song. What is left:
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
   Music Sequencer, so this one is in the way of music.
 - **The game's own archives** — *What of the game's own Things opens* in
-  [level-files.md](level-files.md). Not refused by the bound and still failing: **188 plans and
-  113 levels**, since the container's header gates moved 567 plans and 116 levels to the bound.
-  Levels: 25 "the world Thing carried no WORLD part", parts with no reader (`POPPET_POWERUP` on 14,
-  `TAG_SYNCHRONIZER` on 9), and missed test markers. Plans: missed test markers and leftover
-  tails — the shape of one part reader taking the wrong count. Below the bound, 7,068 plans and
-  262 levels are the coverage the allowed-set decision lacked. None of this is in the way of music;
-  it is in the way of lbprender, which draws the game's own furniture. The full tally of 2026-10-19
-  is in the side-session notes, not here; `test/archive.test.ts` opens the files.
+  [level-files.md](level-files.md). Not refused by the bound and still failing: **186 plans and
+  48 levels** (`dev/things-census.ts` lists them). Levels: 25 "the world Thing carried no WORLD
+  part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above; about 20 LBP3
+  story levels on missed test markers and short reads. Plans: mostly the same crossplay Vita
+  resources, then missed test markers and leftover tails — the shape of one part reader taking the
+  wrong count. Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
+  decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws
+  the game's own furniture.
 
 The archive's leftovers are not in the way of music; Vita is. The next one is
 found by `dev/archive-sample.mjs` for what Mm's servers held, and by a search

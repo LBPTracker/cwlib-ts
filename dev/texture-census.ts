@@ -193,6 +193,7 @@ function measure(t: Texture, name: string): void {
   if (t.gcm) {
     const named = /norm|bump|_nm\b|_n\.tex/i.test(name);
     bump(`flags bit 0 ${t.gcm.flags & 1 ? 'set' : 'clear'} on ${named ? 'a normal/bump name' : 'other names'}`);
+    bump(`flags bit 1 ${(t.gcm.flags >> 1) & 1}, bit 2 ${(t.gcm.flags >> 2) & 1} under ${name.split('/')[0]}/`);
   }
 }
 

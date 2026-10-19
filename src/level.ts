@@ -132,7 +132,7 @@ function readChunkFile(s: Serializer): void {
   for (let i = 0; i < hashes; i += 1) s.sha1();
 }
 
-/** `LevelData`, at subVersion 0x213. */
+/** `LevelData`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
 function readLevelData(s: Serializer): void {
   readSlotId(s);
   s.i32(); // type
@@ -141,22 +141,26 @@ function readLevelData(s: Serializer): void {
   s.vector3(); // min
   s.vector3(); // max
   s.reference(readLevelData); // parent
-  s.guid(); // farcGuid, subVersion >= 0x1ac
+  // ⚠️ The gate was in this comment and not in the code for a month: LBP3's own
+  // story levels are subVersion 0x1ab, one below it, and every one of them
+  // failed a Thing marker 100 KB later (steering/answered-questions.md).
+  if (s.revision.subVersion >= 0x1ac) s.guid(); // farcGuid
 }
 
-/** `StreamingManager`, at subVersion 0x213. */
+/** `StreamingManager`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
 function readStreamingManager(s: Serializer): void {
   emptyOnly(s, 'StreamingManager.editingThingsList');
   const count = s.i32();
   for (let i = 0; i < count; i += 1) s.reference(readLevelData);
+  const { subVersion } = s.revision;
   s.i32(); // numIslands
-  s.i32(); // numPendingIslands
+  if (subVersion > 0x1ff) s.i32(); // numPendingIslands
   s.resource(true); // fartDesc, a descriptor
   s.vector3(); // startingPointPosition
   s.i32(); // streamingZoneShape
   s.i32(); // streamingZoneSize
   s.i32(); // numInUsePlans
-  s.i32(); // maintainIslandsCount
+  if (subVersion >= 0x1a9) s.i32(); // maintainIslandsCount
 }
 
 /**

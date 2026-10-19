@@ -85,7 +85,9 @@ export interface GcmTexture {
    * cwlib calls bit 0 "bump texture, no sRGB". Over the game: 0 on 1,958, 1 on
    * 3,292, 2 on 16,231, 3 on 501, 6 on 7,388, 7 on 600. Bit 0 is set on 4,393,
    * every one of whose paths names a normal or bump map, and clear on 36 such
-   * paths. Bits 1 and 2 are not understood.
+   * paths. Bit 1 marks a PS4 re-export (set on 24,719 of 24,720 under
+   * `gamedata_orbis/`, clear on 5,250 of 5,251 under `gamedata/`); bit 2 is not
+   * understood. Neither says colour or data.
    */
   readonly flags: number;
   /** Row stride in bytes of a `LN` texture; 0 otherwise. */

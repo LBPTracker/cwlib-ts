@@ -5,11 +5,14 @@
  * values do not. Used here to recover what a real sequencer plan holds in the
  * parts this reader otherwise discards -- the chassis the writer has to
  * reproduce.
+ *
+ *   node dev/dump-fields.ts <file> [PART,PART] [start..end]
+ *
+ * Any level, plan or chunk; a failing parse still prints its reads.
  */
 import { readFile } from 'node:fs/promises';
 
-import { readPlan } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
+import { readThings } from '../src/level.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { Serializer } from '../src/serializer.ts';
 import { setTrace } from '../src/thing.ts';
@@ -41,7 +44,13 @@ function show(v: unknown): string {
 
 const spans: { name: string; start: number; end: number }[] = [];
 setTrace((name, start, end) => { if (end >= 0) spans.push({ name, start, end }); });
-await readPlan(new Uint8Array(await readFile(FILE)), nodeInflate, partReaders());
+// A level, plan or chunk by its magic. A parse that throws still prints what it
+// read up to there, which is the point when hunting the field that is wrong.
+try {
+  await readThings(new Uint8Array(await readFile(FILE)), nodeInflate);
+} catch (error) {
+  console.log(`FAILED: ${(error as Error).message}`);
+}
 setTrace(undefined);
 
 const RANGE = (process.argv[4] ?? '').split('..').map(Number);

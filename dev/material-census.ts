@@ -111,6 +111,7 @@ for (const [sha1, m] of materials) {
     const port = w.portTo === 0 ? 'diffuse (0)' : w.portTo === 3 ? 'bump (3)' : w.portTo === 2 ? 'specular (2)' : undefined;
     if (!port) continue;
     bump(`sample wired straight into ${port}: GTF flags bit 0 ${t.flags & 1 ? 'set' : 'clear'}`);
+    bump(`sample wired straight into ${port}: GTF flags ${t.flags}`);
     bump(`sample wired straight into ${port}: path ${NORMAL_NAME.test(row.path) ? 'names' : 'does not name'} a normal/bump map`);
   }
   const summary = materialSummary(m);
