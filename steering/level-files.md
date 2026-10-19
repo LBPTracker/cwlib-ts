@@ -591,6 +591,12 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   and about two thirds differ in `zBias` (lbprender's `dev/coplanar.ts`). It is a byte read as signed: 0 on 1,476 of
   2,074 shapes, 10 on 270, 246 (−10) on 247, the rest between. `ShapePart.zBias` keeps it as
   stored; which sign is nearer is not measured.
+- ❗ **`colorOpacity` is a percentage, and 0 means the shape is not seen.** On Needlepoint Peaks'
+  2,042 play-mode shapes (lbprender's `dev/markers.ts`): 100 on 1,099, 40–97 on 18, and **0 on
+  925** — 901 of them the 913 shapes drawn with `proc_base_virtual.gmat`, a material with no
+  texture that feeds the Thing's colour to the diffuse and glow ports (`alphaMode` 2, no shadow).
+  Drawn opaque, those are the large white slabs a story level does not have. `ShapePart.colorOpacity`
+  keeps the byte; 255 below version `0x3c1`, where the field is absent.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement; `RBevel` is not read.
 

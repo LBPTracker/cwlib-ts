@@ -185,6 +185,8 @@ export interface ShapePart {
   readonly bevelSize: number;
   /** subVersion 0x149 on; 0 before. See steering/level-files.md, *Shapes*. */
   readonly zBias: number;
+  /** A byte, version 0x3c1 on; 255 before. See steering/level-files.md, *Shapes*. */
+  readonly colorOpacity: number;
 }
 
 /** `PGeneratedMesh`: how a shape is drawn. */
@@ -296,8 +298,9 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.u8(); // grabbability
     s.u8(); // grabFilter
   }
+  let colorOpacity = 255;
   if (version >= 0x3c1) {
-    s.u8(); // colorOpacity
+    colorOpacity = s.u8();
     s.u8(); // colorOffOpacity
   }
   if (subVersion >= 0x12c) s.u8(); // colorShininess
@@ -323,7 +326,7 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.u8(); // fireDensity
     s.u8(); // fireLifetime
   }
-  return { ...polygon, material, thickness, color, brightness, bevelSize, zBias };
+  return { ...polygon, material, thickness, color, brightness, bevelSize, zBias, colorOpacity };
 }
 
 /**
