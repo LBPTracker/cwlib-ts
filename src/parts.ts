@@ -411,6 +411,9 @@ export interface LevelSettingsPart extends LevelLighting {
   readonly backdropAmbience: string;
   /** An `RStaticMesh`, version 0x2f3 on. */
   readonly backdropMesh?: ResourceRef;
+  /** subVersion 0xaf on; 0 before. See steering/level-files.md, *Level settings*. */
+  readonly backgroundRepeatFlags: number;
+  readonly backgroundSkyHeight: number;
 }
 
 function readLevelSettings(s: Serializer): LevelLighting {
@@ -462,11 +465,13 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
   }
   const backdropAmbience = s.str();
   const backdropMesh = version >= 0x2f3 ? s.resource() : undefined;
+  let backgroundRepeatFlags = 0;
+  let backgroundSkyHeight = 0;
   if (subVersion >= 0xaf) {
-    s.i32(); // backgroundRepeatFlags
-    s.f32(); // backgroundSkyHeight
+    backgroundRepeatFlags = s.i32();
+    backgroundSkyHeight = s.f32();
   }
-  return { ...lighting, presets, backdropAmbience, backdropMesh };
+  return { ...lighting, presets, backdropAmbience, backdropMesh, backgroundRepeatFlags, backgroundSkyHeight };
 }
 
 /**

@@ -62,6 +62,10 @@ function measure(m: StaticMesh): void {
   bump('triangles counter-clockwise about their normals', ccw);
   bump('triangles clockwise about their normals', cw);
   bump(`maps: light ${m.lightmap ? 'x' : '-'} rise ${m.risemap ? 'x' : '-'} fall ${m.fallmap ? 'x' : '-'}`);
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < m.positions.length; i += 3) for (let k = 0; k < 3; k += 1) { lo[k] = Math.min(lo[k], m.positions[i + k]); hi[k] = Math.max(hi[k], m.positions[i + k]); }
+  bump(`bounds x ${Math.round(lo[0])}..${Math.round(hi[0])}`);
 }
 
 const byRevision = new Map<string, { ok: number; failed: number }>();

@@ -624,6 +624,15 @@ parse (`dev/settings-census.ts`, 2026-10-20):
 | `fogNear` / `fogFar` | −1,062 to 200,000 / 1,000 to 300,000 |
 | `exposure` / `sunMultiplier` | 0.97 to 2.33 / 1.00 to 2.11 |
 
+❗ **`backgroundRepeatFlags` marks a backdrop built as a tile.** `LevelSettingsPart` keeps it and
+`backgroundSkyHeight` (subVersion `0xaf` on). Over the 221 sets: the flags are 0 on 136 and 3 on 85,
+nothing else. Against the width of the backdrop each names (`dev/settings-census.ts`): **flags 0 with
+a backdrop 80,000 units wide or more on 101 of 101 read, flags 3 with one narrower on 59 of 66** —
+the LBP3 `env_background_slot_*` family shares one 68,120-unit box (`dev/staticmesh-census.ts`
+tallies the boxes), and Needlepoint Peaks, flags 3, runs 114,000 units over a 68,000-unit backdrop.
+Which bit is which axis is not told by values that are only 0 and 3. 33 backdrops were not read by
+the census, which closes each archive before the next. The sky height is 0 to 100,000.
+
 ⚠️ A story level's container world carries a set that looks like a default (sun `1,1,1` ×300,000,
 fog 1,000–4,000, the same on the containers sampled); the main world carries the level's.
 What the game does with each value is not measured here.

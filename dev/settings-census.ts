@@ -14,6 +14,7 @@ import { readFileDB } from '../src/filedb.ts';
 import { readThings } from '../src/level.ts';
 import type { LevelLighting, LevelSettingsPart } from '../src/parts.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { readStaticMesh } from '../src/staticmesh.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
@@ -30,6 +31,28 @@ const widen = (k: string, v: number): void => {
 };
 const examples: string[] = [];
 const seen = new Set<string>();
+/** A backdrop's x extent and the level's own, for the repeat flags: GUID to width. */
+const widths = new Map<number, number | undefined>();
+const farcsOpen: { get(sha1: string): Promise<Uint8Array | undefined> }[] = [];
+async function backdropWidth(guid: number): Promise<number | undefined> {
+  if (!widths.has(guid)) {
+    const row = db.get(guid);
+    let width: number | undefined;
+    for (const f of farcsOpen) {
+      const bytes = row && (await f.get(row.sha1));
+      if (!bytes) continue;
+      try {
+        const m = await readStaticMesh(bytes, nodeInflate);
+        let lo = Infinity; let hi = -Infinity;
+        for (let i = 0; i < m.positions.length; i += 3) { lo = Math.min(lo, m.positions[i]); hi = Math.max(hi, m.positions[i]); }
+        width = hi - lo;
+      } catch { /* not readable */ }
+      break;
+    }
+    widths.set(guid, width);
+  }
+  return widths.get(guid);
+}
 function measure(l: LevelLighting): void {
   for (const k of ['sunColor', 'ambientColor', 'fogColor', 'rimColor', 'rimColor2'] as const) {
     l[k].forEach((v, i) => widen(`${k}[${i}]`, v));
@@ -41,6 +64,7 @@ for (const file of FARCS) {
   const access = await openFileAccess(path.join(GAME, file));
   try {
     const farc = await openFarc(access);
+    farcsOpen.push(farc);
     for (const entry of farc.entries.values()) {
       if (seen.has(entry.sha1) || entry.size < 8) continue;
       seen.add(entry.sha1);
@@ -56,6 +80,12 @@ for (const file of FARCS) {
         measure(s);
         bump(`presets ${s.presets.length}`);
         bump(`backdropMesh ${s.backdropMesh ? 'named' : 'none'}`);
+        bump(`backgroundRepeatFlags 0x${s.backgroundRepeatFlags.toString(16)}`);
+        if (s.backdropMesh) {
+          const w = await backdropWidth(s.backdropMesh.guid);
+          bump(`repeat 0x${s.backgroundRepeatFlags.toString(16)} with a backdrop ${w === undefined ? 'not read' : w < 80000 ? 'under 80,000 wide' : '80,000 wide or more'}`);
+        }
+        widen('backgroundSkyHeight', s.backgroundSkyHeight);
         if (examples.length < 4) examples.push(`${pathOf.get(entry.sha1)}: sun ${s.sunPosition.map(Math.round)} x${s.sunPositionScale} col ${s.sunColor.map((x) => x.toFixed(2))} amb ${s.ambientColor.map((x) => x.toFixed(2))} fog ${s.fogColor.map((x) => x.toFixed(2))} ${Math.round(s.fogNear)}..${Math.round(s.fogFar)} exp ${s.exposure.toFixed(2)} mult ${s.sunMultiplier.toFixed(2)}`);
       }
     }
