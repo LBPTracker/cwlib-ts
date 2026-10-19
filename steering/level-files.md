@@ -803,6 +803,16 @@ ParamAnim[] f32 x 4 base, f32[] values, i32 n + n chars of name, u8 componentsAn
 | what feeds port 0 | a sample 6,317 · multiply 3,586 · colour 712 · blend 141 · mix 120 · Thing colour 90 · add 19 · constant 11 · nothing 15 |
 | texture slots | 29,915 named; 29,902 land on texture bytes (4,934 through the FileDB, 24,968 through the remap), 2 on a row with no bytes, 11 nowhere |
 
+**How the game wires two of the boxes**, counted over the 11,011 (lbprender's `dev/boxes.ts`):
+
+- **Mix (12)**: 2,327 of 2,521 take a colour box on port 0 and a texture sample on port 1, and their
+  param 0 is a factor — 0.5 on 374, 0.3 on 281, 0.1 on 269, from 0.02 to 0.8 in all; port 2 is wired
+  on 42. So the factor is param 0, not a fixed half, where port 2 is not wired.
+- **Blend (16)**: 196 of 201 have **three** inputs, port 2 a texture sample — a mask, swizzled to one
+  channel on 6 — and params a low–high pair, `(0, 1)` on 196 and `p0 < p1` on every one. Read as
+  input 0 into input 1 by the mask remapped from `[p0, p1]`; the gingham materials put the Thing's
+  colour on port 1 and come out as the red-and-white check they are named for.
+
 **The ports, checked against what is wired to them** — cwlib's `BrdfPort` names measured rather
 than read: a sample wired straight into **port 3 (BUMP)** is a `GTF ` with `flags` bit 0 set on
 **6,577 of 6,649**, its path naming a normal or bump map on 6,578; one wired straight into **port
