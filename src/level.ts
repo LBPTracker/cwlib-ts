@@ -65,33 +65,53 @@ function readStreamingId(s: Serializer): void {
   s.i32();
 }
 
-/** `StreamingCheckpoint`, at subVersion >= 0x13b. */
+/**
+ * The streaming structs below carry cwlib's subVersion gates
+ * (`structs/streaming/`). ⚠️ They were written for the PS3 saves at `0x213`,
+ * past every gate, and read LBP3 PS4's own `0x12c` story chunks wrong until
+ * the gates were put in -- steering/level-files.md, *Streaming levels*.
+ */
+
+/** `StreamingCheckpoint`. */
 function readStreamingCheckpoint(s: Serializer): void {
-  s.i32(); // type
-  s.vector3(); // position
-  readStreamingId(s); // startPointName
-  readSlotId(s); // slotID
+  const { subVersion } = s.revision;
+  if (subVersion > 0x72) {
+    s.i32(); // type
+    s.vector3(); // position
+  }
+  if (subVersion > 0xdc) readStreamingId(s); // startPointName
+  if (subVersion >= 0x13b) readSlotId(s); // slotID
+  if (subVersion > 0x115 && subVersion <= 0x128) s.s32();
 }
 
-/** `QuestTracker`, at subVersion > 0x140. */
+/** `QuestTracker`. */
 function readQuestTracker(s: Serializer): void {
-  s.vector3(); // position
-  readStreamingId(s); // questID
-  readStreamingId(s); // objectiveID
-  s.i32(); // questKey
-  s.i32(); // objectiveKey
+  const { subVersion } = s.revision;
+  if (subVersion > 0xeb) {
+    s.vector3(); // position
+    readStreamingId(s); // questID
+  }
+  if (subVersion > 0xf3) readStreamingId(s); // objectiveID
+  if (subVersion > 0x140) {
+    s.i32(); // questKey
+    s.i32(); // objectiveKey
+  }
 }
 
-/** `QuestSwitch`, at subVersion > 0x17a. */
+/** `QuestSwitch`. */
 function readQuestSwitch(s: Serializer): void {
-  readStreamingId(s); // questID
-  s.i32(); // questAction
-  s.i32(); // questKey
-  s.i32(); // objectiveID
+  const { subVersion } = s.revision;
+  if (subVersion > 0x118) {
+    readStreamingId(s); // questID
+    s.i32(); // questAction
+  }
+  if (subVersion > 0x140) s.i32(); // questKey
+  if (subVersion > 0x17a) s.i32(); // objectiveID
 }
 
-/** `CollectableData`, at version >= 0x1c2. */
+/** `CollectableData`: empty below version 0x1c2. */
 function readCollectableData(s: Serializer): void {
+  if (s.revision.version < 0x1c2) return;
   s.resource(true); // plan
   s.s32(); // source
 }
@@ -111,25 +131,26 @@ function readCollectableData(s: Serializer): void {
  * `steering/answered-questions.md` for what following the hash would take.
  */
 function readChunkFile(s: Serializer): void {
-  s.sha1(); // chunkHash, subVersion > 0x130
-  s.array(readStreamingCheckpoint);
-  s.array(readQuestTracker);
-  s.array(readQuestSwitch);
-  s.array(readCollectableData);
-  // `userResources`: descriptors that carry their type inline.
-  const resources = s.i32();
-  for (let i = 0; i < resources; i += 1) s.resource(true, true);
-  s.vector3(); // min
-  s.vector3(); // max
-  s.bool(); // hasObjectSaver
-  s.bool(); // deleteObjectSavers
-  s.bool(); // deleteOtherThings
-  s.bool(); // antiStreaming, subVersion > 0x133
-  // subVersion > 0x169: the GUIDs and hashes this chunk depends on.
-  const guids = s.i32();
-  for (let i = 0; i < guids; i += 1) s.guid();
-  const hashes = s.i32();
-  for (let i = 0; i < hashes; i += 1) s.sha1();
+  const { subVersion } = s.revision;
+  if (subVersion > 0x130) s.sha1(); // chunkHash
+  else if (subVersion >= 0x73) s.resource(true); // chunkHash, as a descriptor
+  readStreamingLists(s);
+  if (subVersion >= 0xde) {
+    // `userResources`: descriptors that carry their type inline.
+    const resources = s.i32();
+    for (let i = 0; i < resources; i += 1) s.resource(true, true);
+  }
+  if (subVersion > 0x72) {
+    s.vector3(); // min
+    s.vector3(); // max
+  }
+  if (subVersion > 0x10d) {
+    s.bool(); // hasObjectSaver
+    s.bool(); // deleteObjectSavers
+    s.bool(); // deleteOtherThings
+  }
+  if (subVersion > 0x133) s.bool(); // antiStreaming
+  readDependencyLists(s); // the GUIDs and hashes this chunk depends on
 }
 
 /** `LevelData`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
@@ -299,14 +320,32 @@ export async function readPlan(
  */
 function readIsland(s: Serializer, plans: Uint8Array[]): void {
   s.i32(); // timeZone
-  s.i32(); // flags
+  // ⚠️ Two i32s before the bounds at subVersion 0x213 (the PS3 saves), one at
+  // 0x1ab (LBP3 PS4's own story chunks, 41,741 of them): the gate lies between,
+  // where no file here sits. Which of the two is the newer is not known.
+  if (s.revision.subVersion > 0x1ab) s.i32(); // flags
   s.vector3(); // min
   s.vector3(); // max
   plans.push(s.bytes(s.i32())); // planData
-  s.array(readStreamingCheckpoint);
-  s.array(readQuestTracker);
-  s.array(readQuestSwitch);
-  s.array(readCollectableData);
+  readStreamingLists(s);
+  readDependencyLists(s);
+}
+
+/**
+ * The four lists and the dependency lists a `ChunkFile` and a
+ * `StreamingIsland` share, under cwlib's `ChunkFile` gates: below `0x16a` an
+ * island ends after its collectables (the `0x12c` story chunks).
+ */
+function readStreamingLists(s: Serializer): void {
+  const { subVersion } = s.revision;
+  if (subVersion > 0x72) s.array(readStreamingCheckpoint);
+  if (subVersion > 0xeb) s.array(readQuestTracker);
+  if (subVersion > 0x118) s.array(readQuestSwitch);
+  if (subVersion > 0x11d) s.array(readCollectableData);
+}
+
+function readDependencyLists(s: Serializer): void {
+  if (s.revision.subVersion <= 0x169) return;
   const guids = s.i32();
   for (let i = 0; i < guids; i += 1) s.guid();
   const hashes = s.i32();
@@ -342,7 +381,7 @@ export async function readChunkIslands(
   const { revision, s } = await open(bytes, inflate);
   const plans: Uint8Array[] = [];
   s.references((self) => readIsland(self, plans));
-  s.intVector(); // islandChunkCodeList
+  if (revision.subVersion > 0x1ab) s.intVector(); // islandChunkCodeList
   if (s.remaining !== 0) {
     throw new SerializerError(
       `the chunk's island list left ${s.remaining} of ${s.data.length} bytes unread`,

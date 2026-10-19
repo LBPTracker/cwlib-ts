@@ -248,6 +248,34 @@ LevelData         SlotID, i32 type,  ChunkFile[] (references)  NOT WHEN type IS 
 - ⚠️ The two gates on `farcGuid` and `numPendingIslands` were in a comment and not in the code;
   the PS3 saves are `0x213`, past both, so nothing failed until the game's own `0x1ab`.
 
+### The story levels' chunks — 88 `FAR4`s beside the FARCs
+
+❗ **The game's story chunks are not in the four FARCs**, which hold no `CHKb` at all. Each story
+level has a `.farc` and a `_container.farc` under `gamedata/lbp3/…` (`official_adventure_levels`,
+`marketing_demo2`): **88 archives that are `FAR4` in the clear** — a save's layout, unencrypted,
+like a `.mod`'s `data.farc` — and hold nothing but `CHKb`. `readFar` opens all 88 with every SHA-1
+checking out: **41,741 chunks, subVersions `0x12c`–`0x1ab`, 41,741 read, 284,662 Things**; 11
+islands do not open (`dev/story-census.ts`, 2026-10-19). The level's world, `…_container.bin`, is
+an `LVLb` in the FARCs; `test/story.test.ts` pins Needlepoint Peaks, 880 + 63 chunks and 9,214
+Things.
+
+The island and the lists it shares with `ChunkFile` were measured on the `0x213` PS3 saves, and
+three things change below:
+
+| subVersion | the island | measured |
+|---|---|---|
+| `0x213` | `i32` timeZone, `i32` flags, then the bounds | the PS3 saves |
+| `0x12c`–`0x1ab` | **one `i32`** before the bounds; which of the two is not known | 41,741 of 41,741 |
+| `0x213` | the chunk ends in an `intvector` of chunk codes | the PS3 saves |
+| `0x12c`–`0x1ab` | **no chunk code list**: the island list is the whole chunk | 41,512 of 41,741 read so before the gates below; dropping the hash list instead read 36,622 and left bytes over on 4,890 |
+| `<= 0x169` | an island ends after its collectables, no GUID or hash list — cwlib's `ChunkFile` gate | the `0x12c`–`0x167` chunks |
+
+The streaming structs (`StreamingCheckpoint`, `QuestTracker`, `QuestSwitch`, `CollectableData`,
+`ChunkFile`) now carry cwlib's subVersion gates; they had been written past all of them. The two
+gates in the island are bracketed by measurement — absent at `0x1ab`, present at `0x213` — and no
+file here sits between. Left over: `HUD_ELEM` has no part reader (2 islands), a nested `WORLD` in
+an island (3), and 6 islands of `game_outro` that read short.
+
 ⚠️ **An island that will not open is reported, not swallowed.** Islands are independent resources
 in one list, so one failing says nothing about its neighbours: `LevelParse.problems` carries them
 out and `readBackup` puts them in `failed`. This is the one place in the reader where a partial
@@ -427,11 +455,11 @@ row's GUID is "the same as row.to" is wrong: it is the pair's second word.
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`
-(2026-10-19, evening): **10,370 of 17,624 plans and 227 of 522 levels parse.** 7,068 plans and 265
+(2026-10-19, evening): **10,370 of 17,624 plans and 229 of 522 levels parse.** 7,068 plans and 265
 levels are refused by the version bound or the oldest header layout — most at `0x397`, the LBP2-era
-assets LBP3 still ships — and **186 plans and 30 levels fail on something else**: 25 of the levels
-are crossplay Vita, and of the story levels only `manglewood_hub_container.bin` and four
-`pre_alpha`/early ones still fail. The morning's count was 10,368 and 147; what moved it:
+assets LBP3 still ships — and **186 plans and 28 levels fail on something else**: 25 of the levels
+are crossplay Vita, and the others `manglewood_hub_container.bin`, `fickle_mistress.bin` and the
+pre-alpha `sack_town.bin`. The morning's count was 10,368 and 147; what moved it:
 
 - two part readers ported from cwlib, `POPPET_POWERUP` (the popit puzzles, 14 levels) and
   `TAG_SYNCHRONIZER` (the crossplay levels, 9);
@@ -440,7 +468,8 @@ are crossplay Vita, and of the story levels only `manglewood_hub_container.bin` 
   proved the streaming chain are `0x213`, where both are present; **LBP3 PS4's own story levels
   are `0x19f`–`0x1ab`**: 39 of them open now. `space.bin` read its 1,476 chunk files correctly and
   then failed a Thing marker 100 KB later, which is how a gate this small shows itself;
-- a `LevelData` of type 2 has no chunk list (18 levels) — *Streaming levels* above. `maintainIslandsCount` is gated at `0x1a9` with them.
+- a `LevelData` of type 2 has no chunk list (18 levels) — *Streaming levels* above;
+- cwlib's subVersion gates in the streaming structs, which also opened the story chunks (2). `maintainIslandsCount` is gated at `0x1a9` with them.
 
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first
