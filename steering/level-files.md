@@ -545,9 +545,11 @@ and refuses the others.
   is not in the file beyond `bump` — *64*.
 - ⚠️ **A texture's zlib streams are `78 da` as often as `68 de`**: the game wrote both windows,
   and the platform inflaters take either (*47* in [answered-questions.md](answered-questions.md)).
-- ⚠️ **No user `TEX ` from a level is in any corpus here**: the levels in `fixtures/archive` name
-  hashed type-1 dependencies and none was fetched. The game's own 2,944 are the corpus, and that a
-  user's are the same is a hypothesis — *64*.
+- ✔ **A user's `TEX ` is the same format.** The 103 levels of `fixtures/archive` name 621 hashed
+  type-1 dependencies; `dev/fetch-textures.ts` fetched 619 (2 are not in the archive), each
+  matching its SHA-1, into `fixtures/textures`, and **619 of 619 read**: every one `TEX `, one level
+  with no mips, DXT1 on 590 and DXT5 on 29, and 617 not a power of two — photographs and stickers
+  at 320 x 180 and 320 x 240 mostly. Their chunks start `68` on 599 and `78` on 20.
 - `out/textures/`, written by `node dev/texture-census.ts out/textures` and gitignored, holds
   decoded samples: a BC1 diffuse map, a BC3 normal map, a cube map's faces, a volume's slices
   stacked, a `B8` icon, three `TEX`, the A8R8G8B8 promo, and a small mip of each.
@@ -629,6 +631,7 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 | six PS3 saves | the two in the checkout, plus downloaded backups | 663 resources, 224 plans, 172 + 19 sequencers |
 | the archive sample | `fixtures/archive/` | 103 root levels spread over LBP1, LBP2 and LBP3 slots |
 | the archived chunks | fetched through the dependency walk | 32 `CHKb`, 5,832 Things — the only `cf0` corpus |
+| the archive's user textures | `fixtures/textures/`, by `dev/fetch-textures.ts` | 619 `TEX ` named by the archive sample's levels |
 | the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans, 522 levels, 5,941 meshes, 32,914 textures and 11,011 materials; the FileDB and its GUID remap beside them. Sony's, read in place, never copied |
 
 `test/resource.test.ts` and its siblings read `LBP_LEVELS` and **skip** when it is

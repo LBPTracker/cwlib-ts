@@ -175,3 +175,26 @@ test('dc_comics_promo_32bit and an auto icon: a swizzled A8R8G8B8 and a TEX', as
     await open.close();
   }
 });
+
+/* ------------------------------------------------------- the users' TEX */
+
+const FIXTURES = process.env.LBP_FIXTURES ?? path.join(import.meta.dirname, '..', '..', 'lbptracker', 'fixtures');
+const USER_TEXTURES = path.join(FIXTURES, 'textures');
+
+test("every user texture the archive sample's levels name reads, a DDS used up exactly", async (t) => {
+  // `dev/fetch-textures.ts` gathers them: 619 of the 621 hashed type-1
+  // dependencies of fixtures/archive, each checked against its SHA-1.
+  if (!existsSync(USER_TEXTURES)) return t.skip(`no ${USER_TEXTURES}`);
+  const { readdir } = await import('node:fs/promises');
+  const formats = new Map<string, number>();
+  let count = 0;
+  for (const file of await readdir(USER_TEXTURES)) {
+    const tex = await readTexture(new Uint8Array(await readFile(path.join(USER_TEXTURES, file))), nodeInflate);
+    assert.equal(tex.magic, 'TEX ');
+    assert.equal(tex.mipCount, 1);
+    formats.set(tex.format, (formats.get(tex.format) ?? 0) + 1);
+    count += 1;
+  }
+  assert.equal(count, 619);
+  assert.deepEqual(Object.fromEntries(formats), { bc1: 590, bc3: 29 });
+});

@@ -61,9 +61,6 @@ materials*); what a renderer still has to decide on its own:
 - **`alphaMode` and `alphaLayer`.** Raw values 0–5 and 0 / 1 / 128 / 192, which line up with names
   (`_alpha`, `_glassy`, `_refract`) and with nothing measured. The eboot's material setup is where
   the blend states live.
-- **A user `TEX ` from a level.** None is in a corpus here: `fixtures/archive`'s levels name
-  hashed type-1 dependencies and none was fetched. The game's own 2,944 `TEX ` read; that a user's
-  are the same DDS-in-a-chunk-table is the hypothesis a fetch would test.
 - **The other 3,081 diffuse graphs.** The summary names the first sample and colour it finds;
   mix, blend and Thing-colour graphs need the boxes evaluated, and the box types 13–19 are cwlib's
   partial list.

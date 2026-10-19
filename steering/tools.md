@@ -30,6 +30,7 @@ files.
 | `dev/texture-census.ts` | **what proves `readTexture`**: every `GTF ` and `TEX ` in the four FARCs read, failures by format, then the layout checks — each texture's smoothness as read against the other layout (Morton for linear BC blocks, linear for swizzled texels), each small mip against its box-filtered parent with a rolled control, the bump bit against the paths. `node dev/texture-census.ts out/textures` also writes decoded samples there as PNG; `out/` is gitignored, because they are Sony's |
 | `dev/material-census.ts` | **what proves `readMaterial` and `materialSummary`**: every `GMTb` read per revision; the graph's box types and ports; each port against the textures wired to it; every texture slot and every mesh primitive's material resolved through the FileDB and the GUID remap; each sample's UV channel against the meshes that use it. ⚠️ Without `orbisguids.remap` nine in ten of those references "do not resolve" |
 | `dev/dry-search.ts` | the archive's index by name: `dry-search.ts "music gallery"` over `dry.db`, printing slot id, game and root hash. The way to find a level to fetch when all you have is its title |
+| `dev/fetch-textures.ts` | **the user `TEX ` corpus**: every hashed type-1 dependency of a directory of levels, out of the public archive into `fixtures/textures/`, each checked against its SHA-1. Run from an lbptracker checkout. ⚠️ They are other people's images — photographs among them — so look at a decode to check it and do not keep the PNGs |
 | `dev/archive-sample.mjs` | **a corpus from the archive's own index**: `node dev/archive-sample.mjs 60` reads `dry.db`, picks an even spread of ids per game, downloads the root levels into `fixtures/archive/` and leaves them for `walk-levels.ts` |
 
 - ❗ **Reach for `CwlibTrace` before tracing bytes by hand.** Question 28 spent one session on a hex
@@ -60,7 +61,7 @@ files.
 
 | variable | read by | meaning |
 |---|---|---|
-| `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts` | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
+| `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts`, `test/texture.test.ts` (`textures/`) | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
 | `LBP_LEVELS` | `test/resource.test.ts`, `test/project.test.ts`, `test/plan.test.ts` | a directory of level resources; default the toolkit checkout's `sequencerdump` data. The corpus tests **skip** without it |
 | `LBP_PLANS` | `test/write.test.ts` | the gallery plans, overriding `$LBP_FIXTURES/plans` |
 | `LBP_GAME` | `test/archive.test.ts`, `test/mesh.test.ts`, `test/texture.test.ts`, `test/material.test.ts`, `dev/mesh-census.ts`, `dev/texture-census.ts`, `dev/material-census.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`; default `D:\PS4Games\CUSA00063`. The FileDB and FARC tests **skip** without it |
