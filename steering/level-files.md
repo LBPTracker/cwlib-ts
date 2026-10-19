@@ -50,8 +50,14 @@ The offsets are a header with every field, which every level and plan the reader
   `SerializedResource.java`. ✔ Measured on the game's meshes, **1,409 of them below `0x271` and
   1,745 below `0x297`**, every one of which now lands its chunk data on `depsOffset` — as do the
   archive sample's `0x26e` level and `0-aaaffe` (`0x237`), once put down to a container nobody knew
-  and to a truncated file. Below `0x189` cwlib lays the header out differently again;
-  `loadResource` refuses those rather than guess.
+  and to a truncated file.
+- ❗ **Below `0x189` there is no compressed flag: the payload is always compressed**, and the chunk
+  table follows the dependency offset; **below `0x109` there is no dependency offset either**, and
+  the chunks run to the end of the file (cwlib's `SerializedResource`). ✔ Measured on the game's 44
+  bevels at `0x132`–`0x188`, which `loadResource` had refused: all 44 now end their chunk data on the
+  dependency table and walk to their last byte (*Bevels* below). No file below `0x109` was here.
+- ⚠️ **In a resource reference the flag's bits swap below version `0x191`**: 1 is a GUID and 2 a
+  SHA-1 there, the other way round above (cwlib's `Serializer.resource`). The same 44 bevels need it.
 - ⚠️ **A chunk whose two sizes are equal is stored, not deflated**, with no zlib header at all —
   cwlib's `Compressor.decompressData`. 8 chunks of the game's meshes are so, one of them the fourth
   of `spawn_point_start_chrome.mol`, which otherwise failed to inflate.
@@ -598,7 +604,37 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   Drawn opaque, those are the large white slabs a story level does not have. `ShapePart.colorOpacity`
   keeps the byte; 255 below version `0x3c1`, where the field is absent.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
-  scale a face is mapped at are a reading, not a measurement; `RBevel` is not read.
+  scale a face is mapped at are a reading, not a measurement. The bevel is `RBevel`, *Bevels* below.
+
+## Bevels — `RBevel`
+
+`readBevel` in `src/bevel.ts`: magic `BEVb`, dependency type 24, FileDB paths
+`gamedata/bevels/….bev`, named by `PGeneratedMesh.bevel`. The field list is cwlib's
+`resources/RBevel.java` and `BevelVertex.java` (toolkit `fee22399`), which have no revision gates,
+and it holds: **256 of 256 bevels in the four FARCs read to the last byte of their payload**, revisions
+`0x132`–`0x3f9` (`dev/bevel-census.ts`, 2026-10-20) — the 44 below `0x189` once the container's
+oldest header and the swapped reference bits were in (*The container* above).
+
+```
+i32 4, resource x 4   materials: four RGfxMaterial slots
+i32 4, f32 x 4        uvScales
+f32                   autoSmoothCutoffAngle (degrees)
+BevelVertex[]         f32 y, f32 z, f32 rigidity, s8 smoothWithPrevious, s8 gmatSlot, u8 mappingMode
+bool includeBackface, bool smoothWithFront, f32 relaxStrength, f32 subDivRadius,
+f32 fixedBevelSize, bool spongy, resource softPhysicsSettings, f32 textureRepeats
+```
+
+- The profile, over the 256: 2 to 7+ vertices (101 have more than six); **z from −2.23 to 2.36, most
+  between −1 and 1**, the first vertex at the back (z ≈ −1) and the last near the front on the ones
+  read by eye; y from −4.04 to 2.77, mostly 0 at the back and negative toward the front — the
+  front face inset. What y and z mean (an inset in units of the bevel's width, a depth through the
+  shape) is cwlib's and the reference's reading; z is not monotonic on 165 of 256.
+- ⚠️ **cwlib's `BevelMappingMode` names 0, 1, 3 and 5; the game's profiles use 0 (67 vertices), 1
+  (830), 2 (590), 3 (177) and 4 (33)** — 2 and 4 are not in its enum. `mappingMode` is kept as the
+  byte.
+- `gmatSlot` 0 on 943 vertices, 1 on 582, 2 on 152, 3 on 20; slot 0 of `materials` is empty on 214
+  of 256, the shape's own material taking it. `fixedBevelSize` is non-zero on all 256; `spongy` on
+  46; `includeBackface` on 12.
 
 ## The game's textures — `GTF ` and `TEX `
 

@@ -35,7 +35,7 @@ Steering files (read on demand, per the hints):
 - [steering/level-files.md](steering/level-files.md) — **read before writing a parser for any LBP
   resource, save or archive**: the container and its dependency table, the Thing stream, plans,
   streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB, its GUID remap and FARCs, its meshes (`RMesh`,
-  `PRenderMesh`), textures (`GTF `, `TEX `) and materials (`RGfxMaterial`), the corpora, the version bound, and the technique for finding a reader bug.
+  `PRenderMesh`), textures (`GTF `, `TEX `), materials (`RGfxMaterial`) and bevels (`RBevel`), the corpora, the version bound, and the technique for finding a reader bug.
 - [steering/sequencer-data-model.md](steering/sequencer-data-model.md) — **read before touching
   `project.ts`, `notes.ts` or `chips.ts`**: the `PSequencer` and `PInstrument` schemas with field
   names and struct offsets, `Colour`, the stream conventions (endianness, stream order, varints,

@@ -71,7 +71,10 @@ export async function loadResource(
   const magic = magicOf(bytes);
   reader.position = 4;
   const revision = new Revision(reader.u32());
-  const dependencyTableOffset = reader.u32();
+  // ❗ Below head 0x109 there is no dependency table, and so no offset to it:
+  // the chunks run to the end of the file (cwlib's `SerializedResource`).
+  const oldest = revision.raw < 0x109;
+  const dependencyTableOffset = oldest ? bytes.length : reader.u32();
 
   // ⚠️ These three sit between the dependency-table offset and the chunk table,
   // and the reader used to jump straight past them. `compressionFlags` is not
@@ -87,16 +90,17 @@ export async function loadResource(
   // "fails to inflate". cwlib's `SerializedResource`, measured on the meshes in
   // LBP3 PS4's FARCs -- steering/level-files.md.
   const head = revision.raw;
-  if (head < 0x189) {
-    throw new ResourceFormatError(
-      `revision 0x${head.toString(16)} is older than the header layout this reader implements (0x189)`,
-    );
-  }
-  const branchId = head >= 0x271 ? reader.u16() : 0;
-  const branchRevision = head >= 0x271 ? reader.u16() : 0;
-  const hasFlags = head >= 0x297 || (head === 0x272 && branchId === 0x4c44 && branchRevision >= 2);
+  // ❗ **Below 0x189 there is no compressed flag either: the payload is always
+  // compressed**, and the chunk table follows the dependency offset (or the
+  // head, below 0x109). cwlib's `SerializedResource`; measured on the game's
+  // 44 bevels at 0x132--0x188, which then end on their dependency table and
+  // walk to their last byte (steering/level-files.md, *Bevels*).
+  const modern = head >= 0x189;
+  const branchId = modern && head >= 0x271 ? reader.u16() : 0;
+  const branchRevision = modern && head >= 0x271 ? reader.u16() : 0;
+  const hasFlags = modern && (head >= 0x297 || (head === 0x272 && branchId === 0x4c44 && branchRevision >= 2));
   const compressionFlags = hasFlags ? reader.u8() : 0;
-  const isCompressed = reader.u8() !== 0;
+  const isCompressed = modern ? reader.u8() !== 0 : true;
   const tableAt = reader.position;
 
   // ⚠️ **`isCompressed` is a real branch and was ignored here for months.** An

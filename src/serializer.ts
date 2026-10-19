@@ -290,8 +290,10 @@ export class Serializer {
    *
    * `isDescriptor` suppresses the leading flags word; the callers that need it
    * are the ones serialising a descriptor rather than a live reference. The
-   * flag byte is `0` for none, `1` for a hash and `2` for a GUID — the two
-   * swap below version `0x191`, which this reader does not accept.
+   * flag byte is `0` for none, `1` for a hash and `2` for a GUID — and **the two
+   * swap below version `0x191`** (cwlib's `Serializer.resource`), which the
+   * game's 44 bevels at `0x132`--`0x188` need: read the other way, their four
+   * material slots come out as a GUID and three garbage hashes.
    */
   resource(isDescriptor = false, includeType = false): ResourceRef | undefined {
     if (this.revision.version > 0x22e && !isDescriptor) this.i32();
@@ -303,8 +305,9 @@ export class Serializer {
     if (flag === 0) return undefined;
     let guid = 0;
     let hash: Uint8Array | undefined;
-    if ((flag & 2) !== 0) guid = this.guid();
-    if ((flag & 1) !== 0) hash = this.sha1();
+    const [GUID, HASH] = this.revision.version < 0x191 ? [1, 2] : [2, 1];
+    if ((flag & GUID) !== 0) guid = this.guid();
+    if ((flag & HASH) !== 0) hash = this.sha1();
     if (includeType) this.i32(); // the resource type, written inline
     return guid === 0 && !hash ? undefined : { guid, hash };
   }
