@@ -254,7 +254,7 @@ LevelData         SlotID, i32 type,  ChunkFile[] (references)  NOT WHEN type IS 
 level has a `.farc` and a `_container.farc` under `gamedata/lbp3/…` (`official_adventure_levels`,
 `marketing_demo2`): **88 archives that are `FAR4` in the clear** — a save's layout, unencrypted,
 like a `.mod`'s `data.farc` — and hold nothing but `CHKb`. `readFar` opens all 88 with every SHA-1
-checking out: **41,741 chunks, subVersions `0x12c`–`0x1ab`, 41,741 read, 284,662 Things**; 11
+checking out: **41,741 chunks, subVersions `0x12c`–`0x1ab`, 41,741 read, 288,519 Things**; 9
 islands do not open (`dev/story-census.ts`, 2026-10-19). The level's world, `…_container.bin`, is
 an `LVLb` in the FARCs; `test/story.test.ts` pins Needlepoint Peaks, 880 + 63 chunks and 9,214
 Things.
@@ -273,8 +273,9 @@ three things change below:
 The streaming structs (`StreamingCheckpoint`, `QuestTracker`, `QuestSwitch`, `CollectableData`,
 `ChunkFile`) now carry cwlib's subVersion gates; they had been written past all of them. The two
 gates in the island are bracketed by measurement — absent at `0x1ab`, present at `0x213` — and no
-file here sits between. Left over: `HUD_ELEM` has no part reader (2 islands), a nested `WORLD` in
-an island (3), and 6 islands of `game_outro` that read short.
+file here sits between. `HUD_ELEM` got its reader from cwlib (2 islands), and a plan now reads a
+`WORLD` part the way a level reads an inner world. Left over: those 3 islands of `titan_2` then miss
+a Thing marker inside the nested world, and 6 islands of `game_outro` read short.
 
 ⚠️ **An island that will not open is reported, not swallowed.** Islands are independent resources
 in one list, so one failing says nothing about its neighbours: `LevelParse.problems` carries them

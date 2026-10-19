@@ -93,7 +93,7 @@ branch, into one that stands between a reader and a song. What is left:
   28 levels** (`dev/things-census.ts` lists them). Levels: 25 "the world Thing carried no WORLD
   part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above; then
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
-  `sack_town.bin`. In the story chunks, 11 islands (`dev/story-census.ts`). Plans: mostly the same crossplay Vita
+  `sack_town.bin`. In the story chunks, 9 islands (`dev/story-census.ts`): 3 of `titan_2` with a world nested in an island, 6 of `game_outro`. Plans: mostly the same crossplay Vita
   resources, then missed test markers and leftover tails — the shape of one part reader taking the
   wrong count. Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
   decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws

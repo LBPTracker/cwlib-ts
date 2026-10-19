@@ -296,6 +296,12 @@ export async function readPlan(
   if (revision.subVersion >= STREAMING_PLAN) s.bool();
   s.i32();
   const inner = new Serializer(s.bytes(s.i32()), revision, flags);
+  // A plan can hold a world Thing -- 3 islands of the game's story chunks do --
+  // and its WORLD part is read like an inner world of a level: its Things are
+  // the part's value, not the plan's. Installed on the map the readers close
+  // over, as `readLevel` does, and only where nothing installed one already.
+  const map = readers as Map<string, PartReader>;
+  if (!map.has('WORLD')) map.set('WORLD', (self) => readWorld(self, map));
   const count = inner.i32();
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(inner, readers));
