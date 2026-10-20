@@ -924,17 +924,36 @@ function readSwitchSignal(s: Serializer): void {
 }
 
 /** `SwitchTarget`: one Thing a switch drives, and which port on it. */
-function readSwitchTarget(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  readThingRef(s, readers); // thing
-  if (s.revision.version > 0x326) s.i32(); // port
+/** `SwitchTarget`: one wire, to a Thing's input port. */
+export interface SwitchTarget {
+  readonly thing?: Thing;
+  /** The input port on that Thing; 0 below `0x327`, which has none. */
+  readonly port: number;
+}
+
+function readSwitchTarget(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchTarget {
+  const thing = readThingRef(s, readers);
+  const port = s.revision.version > 0x326 ? s.i32() : 0;
+  return { thing, port };
 }
 
 /** `SwitchOutput`: one output port and everything wired to it. */
-function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchTarget[] {
   readSwitchSignal(s);
   const count = s.i32();
-  for (let i = 0; i < count; i += 1) readSwitchTarget(s, readers);
+  const targets: SwitchTarget[] = [];
+  for (let i = 0; i < count; i += 1) targets.push(readSwitchTarget(s, readers));
   if (s.revision.version >= 0x34d) s.wstr(); // userDefinedName
+  return targets;
+}
+
+/** `PSwitch`, what a renderer needs of it: its kind and its wires. steering/level-files.md, *Wires*. */
+export interface SwitchPart {
+  /** cwlib's `SwitchType`; 0 below `0x1a5`. */
+  readonly type: number;
+  readonly hideInPlayMode: boolean;
+  /** Each output port's wires, in port order; one output below `0x329`. */
+  readonly outputs: SwitchTarget[][];
 }
 
 /**
@@ -947,7 +966,7 @@ function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader
  * extra block. Reading `type` and then ignoring it works on every level that
  * happens to use no stickers.
  */
-export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchPart {
   const { version, subVersion } = s.revision;
   s.bool(); // inverted
   s.f32(); // radius
@@ -957,22 +976,25 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version >= 0x38f) s.bool(); // crappyOldLbp1Switch
   s.s32(); // behaviorOld
 
+  const outputs: SwitchTarget[][] = [];
   if (version < 0x329) {
     s.f32(); // the single output's activation
     if (version > 0x2a2) s.i32(); // player
-    const targets = s.i32();
-    for (let i = 0; i < targets; i += 1) readSwitchTarget(s, readers);
+    const count = s.i32();
+    const targets: SwitchTarget[] = [];
+    for (let i = 0; i < count; i += 1) targets.push(readSwitchTarget(s, readers));
+    outputs.push(targets);
   } else {
     const count = s.i32();
     for (let i = 0; i < count; i += 1) {
-      s.reference((self) => readSwitchOutput(self, readers));
+      outputs.push(s.reference((self) => readSwitchOutput(self, readers)) ?? []);
     }
   }
 
  
   if (version < 0x398 && version >= 0x140) s.resource(true); // stickerPlan
 
-  if (version > 0x197) s.bool(); // hideInPlayMode
+  const hideInPlayMode = version > 0x197 ? s.bool() : false;
   let type = 0;
   if (version > 0x1a4) {
     // ⚠️ `enum32(type, true)` — the second argument is **signed**, not "force
@@ -1096,6 +1118,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (subVersion > 0x67) s.bool(); // isLbp3Switch
   if (subVersion > 0x68) s.bool(); // randomNonRepeating
   if (subVersion > 0x102) s.i32(); // stickerSwitchMode
+  return { type, hideInPlayMode, outputs };
 }
 
 /**

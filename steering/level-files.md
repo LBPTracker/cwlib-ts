@@ -693,6 +693,16 @@ holds exactly one texture, its inventory icon**: the sticker itself for a sticke
 `…_icon.tex` for a decoration, costume or material — so the icon is found without reading the
 plan's inventory block, which `readPlan` never reads.
 
+## Wires — `PSwitch` outputs
+
+`readSwitch` returns `SwitchPart`: the switch's `type` (cwlib's `SwitchType`), `hideInPlayMode`,
+and each output port's wires as `SwitchTarget`s — the Thing and its input port (0 below `0x327`).
+The outputs are references from `0x329` on, so two switches naming one output share its list. The
+bytes walked are unchanged. On Needlepoint Peaks, its chunks placed
+(`../lbprender/dev/wires.ts`, 2026-10-21): **3,253 switches, 2,316 wires, 738 of them between two
+Things that both have a `PPos`**; between those, 831 units at the median and 7,805 at most. The
+two most common types, 36 and 37, are 658 each; no switch is hidden in play mode.
+
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the
