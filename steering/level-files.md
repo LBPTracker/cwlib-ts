@@ -650,6 +650,29 @@ list is still walked and discarded. Measured on Needlepoint Peaks, its chunks pl
   show. lbprender's `open-questions.md` (*12*) holds the rest.
 - `color` is −21163 on the birds; what a 16-bit colour does to a sticker is not read.
 
+## Joints — `PJoint`
+
+`readJoint` returns `JointPart`: the two Things `a` and `b`, where it holds each (`aContact`,
+`bContact`, in that Thing's own space), its length and angle, cwlib's `type`, `renderScale` and
+`hideInPlayMode`; the rest of cwlib's `PJoint` is walked. Measured on Needlepoint Peaks, its chunks
+placed (lbprender's `dev/joints.ts`, 2026-10-20): **380 joints**, every one with both Things posed and
+none with a `PPos` of its own but the one rail.
+
+| type | mesh | count |
+|---|---|---|
+| 0 | none | 3 |
+| 1, 2, 5 | `joint_string.mol` | 5, 11, 125 |
+| 3 | `joint_chain.mol` | 14 |
+| 4 | `joint_piston.mol` | 37 |
+| 6 | `joint_rod.mol` | 1 |
+| 7, 8, 9 | `joint_bolt.mol`, `joint_bolt_sprung.mol`, `joint_bolt_motor.mol` | 20, 9, 152 |
+| 12 | `joint_rail.mol` | 1 |
+
+- ✔ **A contact is in its Thing's space**: on the two motor bolts holding the blue tits, `a`'s and
+  `b`'s contacts taken through their Things' `PPos` land on one x and y, and 100 apart in z — the
+  bolt reaches across two layers. Across all bolts most land apart only because of that z.
+- Which type is which tool is read off the mesh each draws with, not from a name in the bytes.
+
 ## Level settings — `PLevelSettings`
 
 `readLevelSettingsPart` returns `LevelSettingsPart`: the lighting cwlib calls `LevelSettings`

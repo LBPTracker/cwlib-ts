@@ -79,19 +79,38 @@ export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 }
 
 /** `PJoint`: the connector between two Things. Long, and all of it fixed-width. */
-export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  readThingRef(s, readers); // a
-  readThingRef(s, readers); // b
-  s.vector3(); // aContact
-  s.vector3(); // bContact
-  s.f32(); // length
-  s.f32(); // angle
+/**
+ * `PJoint`: a bolt, spring, piston, string or the like between two Things.
+ * steering/level-files.md, *Joints*, says what of it is measured.
+ */
+export interface JointPart {
+  readonly a?: Thing;
+  readonly b?: Thing;
+  /** Where the joint holds each Thing, in that Thing's own space. */
+  readonly aContact: [number, number, number];
+  readonly bContact: [number, number, number];
+  readonly length: number;
+  readonly angle: number;
+  /** cwlib's `JointType`. */
+  readonly type: number;
+  readonly renderScale: number;
+  /** false when the revision has no field. */
+  readonly hideInPlayMode: boolean;
+}
+
+export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader>): JointPart {
+  const a = readThingRef(s, readers);
+  const b = readThingRef(s, readers);
+  const aContact = s.vector3();
+  const bContact = s.vector3();
+  const length = s.f32();
+  const angle = s.f32();
   s.f32(); // offsetTime
   s.bool(); // invertAngle
   s.resource(); // settings
   s.array((self) => self.i32()); // boneIdx
   s.vector4(); // boneLengths
-  s.i32(); // type
+  const type = s.i32();
   s.f32(); // strength
   s.bool(); // stiff
   s.vector3(); // slideDir
@@ -112,7 +131,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.u8(); // interactPlayMode
     s.u8(); // interactEditMode
   }
-  s.f32(); // renderScale
+  const renderScale = s.f32();
   if (jv > 0x169) s.i32(); // jointSoundEnum
   // ❗ A pair of floats above 0x280 and a pair of **integers** at or below it.
   // Same width on paper, different width in a compressed stream: the ints are
@@ -126,7 +145,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   }
   if (jv > 0x21e) s.bool(); // currentlyEditing
   if (jv > 0x22f && jv < 0x2c4) s.bool(); // modScaleActive
-  if (jv > 0x25c) s.bool(); // hideInPlayMode
+  const hideInPlayMode = jv > 0x25c ? s.bool() : false;
   if (jv > 0x2c3) s.i32(); // behaviour
   if (s.revision.subVersion >= 0xed) {
     const count = s.i32();
@@ -138,6 +157,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.bool(); // createdByPoppetPowerup
   }
   if (s.revision.subVersion >= 0x1a4) s.bool(); // oldJointOutputBehavior
+  return { a, b, aContact, bContact, length, angle, type, renderScale, hideInPlayMode };
 }
 
 /** `PTrigger`: the volume a switch senses in. */
