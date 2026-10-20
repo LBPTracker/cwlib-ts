@@ -642,15 +642,17 @@ list is still walked and discarded. Measured on Needlepoint Peaks, its chunks pl
 - ❗ **A mesh's decal space is its UV channel 1**: all 56 mesh decals have their centre inside channel
   1's range, 7 of them outside channel 0's. On the 8 decals of three-channel meshes channel 2 holds
   the centre too, so which of 1 and 2 is meant there is not settled.
-- A decal's `xvec` and `yvec` are its texture's x and y axes in that space, sized as the sticker:
-  the reading that lays the texture's alpha over a silhouette-cut shape (below) is P − (u, v) =
-  (s − ½)·xvec + (t − ½)·yvec, the texture's rows taken as stored.
-- ⚠️ **On a shape the decal space is not the face's texture mapping**, and what it is was fitted, not
-  measured in general: on the two shapes cut to `animal_bluetit.tex`'s silhouette, at x–y scales 3.46
-  and 3.72, U = x·sx/1095 and V = 1.033 − y·sy/1095 (x, y in the Thing's space, sx, sy its matrix's
-  scale) lays the alpha over the outline at IoU 0.915 on both (lbprender's `dev/stickeroffset.ts`).
-  That the space follows the shape's world size, not its own coordinates, is what the two scales
-  show. lbprender's `open-questions.md` (*12*) holds the rest.
+- ❗ **A decal's `xvec` and `yvec` are half-axes** of its texture in that space: P − (u, v) =
+  (2s − 1)·xvec + (2t − 1)·yvec, the texture's rows taken as stored. Only so do the two fits below
+  agree.
+- ⚠️ **On a shape the decal space is not the face's texture mapping.** It is U = x·sx·k,
+  V = 1 − y·sy·k, x and y in the Thing's space and sx, sy its matrix's scale — world-size units,
+  which the two blue tits at scales 3.46 and 3.72 show. Fitted two ways that agree (lbprender's
+  `dev/decalfit.ts` and `dev/stickeroffset.ts`): over all 301 decals on Needlepoint Peaks' shapes,
+  origin (0, 1) with +x and −y puts the most centres inside their own outline, 245, for k from
+  1/575 to 1/625; on the two blue tits, shapes cut to their sticker's silhouette, that origin with
+  half-axes lays the alpha over both outlines at IoU 0.91 for k from 1/540 to 1/550. lbprender
+  takes 1/545; its `open-questions.md` (*12*) holds what is left.
 - `color` is −21163 on the birds; what a 16-bit colour does to a sticker is not read.
 
 ## Joints — `PJoint`
