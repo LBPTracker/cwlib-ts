@@ -677,6 +677,10 @@ none with a `PPos` of its own but the one rail.
   `b`'s contacts taken through their Things' `PPos` land on one x and y, and 100 apart in z — the
   bolt reaches across two layers. Across all bolts most land apart only because of that z.
 - Which type is which tool is read off the mesh each draws with, not from a name in the bytes.
+- `settings` names a `.joint` file under `gamedata/joints/`: `pin.joint` on every string, chain,
+  piston, rod and plain bolt, `cog.joint` on the sprung and motor bolts, `neck.joint` on the three
+  type 0 (lbprender, 2026-10-20). Physics settings by their names; no rope look is in them — the
+  ropes' materials are lbprender's *Joints*.
 
 ## Level settings — `PLevelSettings`
 

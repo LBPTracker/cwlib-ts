@@ -96,6 +96,8 @@ export interface JointPart {
   readonly renderScale: number;
   /** false when the revision has no field. */
   readonly hideInPlayMode: boolean;
+  /** cwlib's `settings`: steering/level-files.md, *Joints*, says what it names. */
+  readonly settings?: ResourceRef;
 }
 
 export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader>): JointPart {
@@ -107,7 +109,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   const angle = s.f32();
   s.f32(); // offsetTime
   s.bool(); // invertAngle
-  s.resource(); // settings
+  const settings = s.resource();
   s.array((self) => self.i32()); // boneIdx
   s.vector4(); // boneLengths
   const type = s.i32();
@@ -157,7 +159,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
     s.bool(); // createdByPoppetPowerup
   }
   if (s.revision.subVersion >= 0x1a4) s.bool(); // oldJointOutputBehavior
-  return { a, b, aContact, bContact, length, angle, type, renderScale, hideInPlayMode };
+  return { a, b, aContact, bContact, length, angle, type, renderScale, hideInPlayMode, settings };
 }
 
 /** `PTrigger`: the volume a switch senses in. */
