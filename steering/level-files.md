@@ -711,6 +711,14 @@ parse (`dev/settings-census.ts`, 2026-10-20):
 | `fogNear` / `fogFar` | −1,062 to 200,000 / 1,000 to 300,000 |
 | `exposure` / `sunMultiplier` | 0.97 to 2.33 / 1.00 to 2.11 |
 
+✔ **The names and their order are the game's.** LBP3's own `CLevelSettings` serializer (eboot
+1.28, file offset 0xd41570; the toolchain in `../lbptracker/steering/eboot-re.md`) names its
+fields as it writes them: SunPosition, SunPositionScale, SunColor, AmbientColor, SunMultiplier,
+Exposure, FogColor, FogNear, FogFar, RimColor, RimColor2, BakedShadowAmount, BakedShadowBlur,
+BakedAOBias, BakedAOScale, DynamicAOAmount, DOFNear, DOFFar, ZEffectAmount, ZEffectBright,
+ZEffectContrast, DOFNear2, DOFFar2, DOFFar3 — `readLevelSettings`'s order, field for field. The
+version gates are cwlib's, not checked there: one build writes only its own revision.
+
 ❗ **`backgroundRepeatFlags` marks a backdrop built as a tile.** `LevelSettingsPart` keeps it and
 `backgroundSkyHeight` (subVersion `0xaf` on). Over the 221 sets: the flags are 0 on 136 and 3 on 85,
 nothing else. Against the width of the backdrop each names (`dev/settings-census.ts`): **flags 0 with
