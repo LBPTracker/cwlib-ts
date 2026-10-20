@@ -693,6 +693,17 @@ holds exactly one texture, its inventory icon**: the sticker itself for a sticke
 `…_icon.tex` for a decoration, costume or material — so the icon is found without reading the
 plan's inventory block, which `readPlan` never reads.
 
+## Lights — `PSpriteLight`
+
+`readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the
+multiplier, glow radius, `farDist`, source size and whether it is a spotlight; the bytes walked are
+unchanged, the rest (the off colour and multiplier, the falloff texture, the look-at Thing, the
+flicker, the tracking) still skipped. On Needlepoint Peaks, its chunks placed
+(`../lbprender/dev/lights.ts`, 2026-10-20): **185 lights, 65 spotlights, none on a Thing with a
+mesh**; `farDist` 2 to 22.5 (median 3.78), `sourceSize` 0.13 to 0.55, `glowRadius` 20 on every
+one, `multiplier` 0.2 to 1.73; their Things' matrices scale 49 to 853 (median 232). So `farDist`
+and `sourceSize` are not world units on their own; what they are in is not measured.
+
 ## Level settings — `PLevelSettings`
 
 `readLevelSettingsPart` returns `LevelSettingsPart`: the lighting cwlib calls `LevelSettings`

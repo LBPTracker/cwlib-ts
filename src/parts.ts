@@ -1761,19 +1761,30 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   if (subVersion > 0x75) s.bool(); // emitToNearestRearLayer
 }
 
-/** `PSpriteLight`: a light. */
-export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PSpriteLight`: a light placed in the level. steering/level-files.md, *Lights*. */
+export interface SpriteLightPart {
+  /** Four floats as stored: the light's colour when on. */
+  readonly color: readonly [number, number, number, number];
+  readonly multiplier: number;
+  readonly glowRadius: number;
+  /** How far the light reaches, in world units. */
+  readonly farDist: number;
+  readonly sourceSize: number;
+  readonly spotlight: boolean;
+}
+
+export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, PartReader>): SpriteLightPart {
   const { version, subVersion } = s.revision;
-  s.vector4(); // color
+  const color = s.vector4();
   if (version >= 0x2fd) s.vector4(); // colorOff
-  s.f32(); // multiplier
+  const multiplier = s.f32();
   if (version >= 0x30a) s.f32(); // multiplierOff
-  s.f32(); // glowRadius
-  s.f32(); // farDist
-  s.f32(); // sourceSize
+  const glowRadius = s.f32();
+  const farDist = s.f32();
+  const sourceSize = s.f32();
   s.resource(); // falloffTexture
   readThingRef(s, readers); // lookAt
-  s.bool(); // spotlight
+  const spotlight = s.bool();
   if (version < 0x337) {
     s.bool(); // enableFogShadows
     s.bool(); // enableFog
@@ -1803,6 +1814,7 @@ export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, Part
     s.vector3(); // beamDir
     s.vector3(); // azimuth
   }
+  return { color, multiplier, glowRadius, farDist, sourceSize, spotlight };
 }
 
 /** `MachineType`: how a script field's value is stored. */
