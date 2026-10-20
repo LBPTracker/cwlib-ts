@@ -682,6 +682,17 @@ none with a `PPos` of its own but the one rail.
   type 0 (lbprender, 2026-10-20). Physics settings by their names; no rope look is in them — the
   ropes' materials are lbprender's *Joints*.
 
+## Prize bubbles — `PGameplayData`
+
+`readGameplayData` returns `GameplayDataPart`: `gameplayType`, `fluffCost` and `prize`, the plan
+its `EggLink` names (a reference: two Things naming one link share the plan). Measured on
+Needlepoint Peaks (lbprender's `dev/prizes.ts`, 2026-10-20): 166 Things carry the part — 85 score
+bubbles (`resource_sponge.mol`, type 3, fluff 1, no prize) and 81 prize bubbles
+(`collectible_sphere.mol`) whose prize plan is in the game. ✔ **Each prize plan's dependency table
+holds exactly one texture, its inventory icon**: the sticker itself for a sticker plan, a
+`…_icon.tex` for a decoration, costume or material — so the icon is found without reading the
+plan's inventory block, which `readPlan` never reads.
+
 ## Level settings — `PLevelSettings`
 
 `readLevelSettingsPart` returns `LevelSettingsPart`: the lighting cwlib calls `LevelSettings`
