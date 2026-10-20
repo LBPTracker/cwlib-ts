@@ -605,6 +605,9 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   texture that feeds the Thing's colour to the diffuse and glow ports (`alphaMode` 2, no shadow).
   Drawn opaque, those are the large white slabs a story level does not have. `ShapePart.colorOpacity`
   keeps the byte; 255 below version `0x3c1`, where the field is absent.
+- ❗ **A later loop is a hole in the first**: on Needlepoint Peaks, the Casino and the Caverns
+  (lbprender's `dev/holes.ts`), all 200 loops after the first lie wholly inside it and wind the
+  other way. `ShapePart.loops` keeps them in stored order; the first is the outline.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement. The bevel is `RBevel`, *Bevels* below.
 
