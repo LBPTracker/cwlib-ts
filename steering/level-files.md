@@ -624,6 +624,32 @@ chunks placed, **520 decorations** (lbprender's `dev/decorations.ts`, 2026-10-20
 - ⚠️ **`decorationScale` is not known to add anything**: the offset's own columns already scale
   the mesh, and match `decorationScale` on 45 of 520, are 1 on 11, and neither on 464.
 
+## Stickers — `PStickers`
+
+A sticker is a texture laid on a Thing's surface. `readStickers` returns `StickersPart`: the
+Thing's `decals` and one list per costume piece; each `Decal` keeps its texture, its centre
+`(u, v)`, its axes `xvec` and `yvec`, the colour, type, metadata index, play-mode frame, scorch
+flag and plan. The bytes walked are cwlib's `Decal.java` and `PStickers.java`, unchanged; the eyetoy
+list is still walked and discarded. Measured on Needlepoint Peaks, its chunks placed (lbprender's
+`dev/stickers.ts`, 2026-10-20):
+
+- **970 decals** on 827 Things: 301 on 175 shapes, 56 on 39 meshes, 613 on Things that have neither
+  part. Every one is type 0, and 969 name a texture by GUID (the game's `stickers/` folders), one
+  none.
+- ❗ **A mesh's decal space is its UV channel 1**: all 56 mesh decals have their centre inside channel
+  1's range, 7 of them outside channel 0's. On the 8 decals of three-channel meshes channel 2 holds
+  the centre too, so which of 1 and 2 is meant there is not settled.
+- A decal's `xvec` and `yvec` are its texture's x and y axes in that space, sized as the sticker:
+  the reading that lays the texture's alpha over a silhouette-cut shape (below) is P − (u, v) =
+  (s − ½)·xvec + (t − ½)·yvec, the texture's rows taken as stored.
+- ⚠️ **On a shape the decal space is not the face's texture mapping**, and what it is was fitted, not
+  measured in general: on the two shapes cut to `animal_bluetit.tex`'s silhouette, at x–y scales 3.46
+  and 3.72, U = x·sx/1095 and V = 1.033 − y·sy/1095 (x, y in the Thing's space, sx, sy its matrix's
+  scale) lays the alpha over the outline at IoU 0.915 on both (lbprender's `dev/stickeroffset.ts`).
+  That the space follows the shape's world size, not its own coordinates, is what the two scales
+  show. lbprender's `open-questions.md` (*12*) holds the rest.
+- `color` is −21163 on the birds; what a 16-bit colour does to a sticker is not read.
+
 ## Level settings — `PLevelSettings`
 
 `readLevelSettingsPart` returns `LevelSettingsPart`: the lighting cwlib calls `LevelSettings`
