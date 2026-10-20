@@ -918,6 +918,11 @@ ParamAnim[] f32 x 4 base, f32[] values, i32 n + n chars of name, u8 componentsAn
   channel and slot — and varints under `COMPRESSED_INTEGERS`: read them as `u32` and reinterpret,
   or a float loses its bits.
 - ⚠️ A parameter animation's name length is a plain `i32`, not the zigzagged `s32` of a string.
+- A box's two `ParamAnim`s animate its parameters 0–3 and 4–7, one key per row of `keys`. On the
+  effects (2026-10-21, `../lbprender/dev/gcnslice.ts` and a dump of their boxes): the god rays'
+  texture boxes hold 1,000 keys whose U offset climbs 0 → 1.998 and 0 → 0.999, the aurora's 1,024,
+  the scrolling stars' 256 — loops, the last key one step short of the first plus a whole tile.
+  At how many keys a second the game plays them is not in the file.
 - The swizzle is ASCII, NUL-padded: of 53,278 wires `""` on 52,834, `"a"` 404, `"r"` 20, `"b"` 11,
   `"g"` 8, `"rgb"` 1.
 
