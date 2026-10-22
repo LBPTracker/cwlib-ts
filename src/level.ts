@@ -212,14 +212,175 @@ function readStreamingManager(s: Serializer): void {
   if (subVersion >= 0x1a9) s.i32(); // maintainIslandsCount
 }
 
+/** `EggLink`, inline in `PWorld`'s reward lists: a plan, a bool, and an optional painting. */
+function readEggLink(s: Serializer): void {
+  const { version } = s.revision;
+  s.resource(); // plan
+  if (version > 0x23b) s.bool(); // shareable
+  if (version > 0x3e0 && s.bool()) s.resource(true); // painting, behind hasPainting
+}
+
+/** `GlobalSettings`: five factors (the Vita's `nonLinearFog` is not an LBP3 branch). */
+function readGlobalSettings(s: Serializer): void {
+  for (let i = 0; i < 5; i += 1) s.f32();
+}
+
+/** `MoveCursor`, in `PWorld` only below subVersion 0x118. */
+function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+  const { version } = s.revision;
+  if (version > 0x3c1) s.i32(); // selectionFrame
+  readThingRef(s, readers); // switchThing
+  readThingRef(s, readers); // selection
+  s.vector4(); // localPosition
+  s.f32(); // localAngle
+  if (version < 0x3c2) {
+    s.vector4();
+    s.vector4();
+  }
+  s.vector4(); // moveAngle
+  if (version > 0x3c1) {
+    for (let i = 0; i < 4; i += 1) s.vector4(); // lastRCStart, lastRCDir, currRCStart, currRCDir
+    s.f32(); // lastRoll
+    s.f32(); // currRoll
+  }
+  s.bool(); // prevMoveGrabbing
+  s.bool(); // moveGrabbing
+  if (version < 0x3c2) s.vector4();
+  s.f32(); // zMovePos, or the old layout's trailing float
+}
+
 /**
- * `PWorld`, read only as far as `things`.
+ * `PWorld` after `things`: cwlib's `PWorld.serialize`, with the branches LBP3's
+ * range (0x3b7..0x3ff) never takes left out and the Vita's branch ignored.
  *
- * The fields before it are few and all gated on subVersion, which the corpus
- * pins at 0x213 — so every branch below is the one that is always taken, and the
- * older ones are omitted rather than left as dead code.
+ * ❗ **A world Thing inside a plan has parts after its `WORLD`**, and they are
+ * read right only if this is. Three of LBP3 PS4's story chunks hold an island
+ * whose plan carries a world Thing (`3787a9bc` in `06_titan_2`, `e864d09e` in
+ * `c07_meet_giant`, `1f4a50ed` in `c09_titan_02_outro`; version 0x3f9,
+ * subVersion 0x1a9 and 0x1ab). With `readWorld` stopping at `things`, that
+ * Thing's `POS` began at `maxVel` and the island failed a Thing marker 8 bytes
+ * on (`e864d09e`: `WORLD` 10335..17233, the marker at 17241).
  */
-function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>): Thing[] {
+function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+  const { version, subVersion } = s.revision;
+  const things = (): void => {
+    const count = s.i32();
+    for (let i = 0; i < count; i += 1) readThingRef(s, readers);
+  };
+  s.f32(); // maxVel
+  s.f32(); // maxAVel
+  s.s32(); // frame
+  s.s32(); // simFrame
+  s.i32(); // frameLevelStarted
+  s.i32(); // thingUIDCounter
+  s.references((self) => {
+    self.str(); // EditorSelection.name
+    things(); // EditorSelection.things
+  }); // selections
+  readThingRef(s, readers); // backdrop
+  readThingRef(s, readers); // backdropNew
+  s.f32(); // backdropTimer
+  s.s32(); // lbp2NightDaySwapped
+  s.bool(); // isPaused
+  for (let i = 0; i < 5; i += 1) s.f32(); // lighting, colour correction, fog, fog tint, darkness factors
+  s.array(readEggLink); // completeRewards
+  s.array(readEggLink); // collectRewards
+  s.array(readEggLink); // aceRewards
+  s.bool(); // areRewardsShareable
+  readSlotId(s); // scoreboardLevelLinkSlot
+  for (let i = 0; i < 3; i += 1) s.array(readSlotId); // complete, collect and ace unlocks: `KeyLink`s
+  s.s32(); // maxNumPlayers
+  things(); // dissolvingThings
+  things(); // oldDissolvingThings
+  s.bool(); // everSpawned
+  s.s32(); // spawnFailureCount
+  readGlobalSettings(s); // targetGlobalSettings
+  readGlobalSettings(s); // fromGlobalSettings
+  s.f32(); // globalSettingsBlendFactor
+  s.bool(); // hasLevelLightingBeenSetup
+  s.s32(); // globalSettingsThingUID
+  // `CameraSettings`: four multipliers, and two pitch ones above subVersion 0x36.
+  for (let i = 0; i < (subVersion > 0x36 ? 6 : 4); i += 1) s.f32();
+  for (let i = 0; i < 9; i += 1) s.f32(); // water level, wave magnitude, gravity: each current, from, target
+  s.array((self) => self.f32()); // currGlobalSettingsBlendFactors
+  s.array((self) => self.i32()); // globalSettingsThingUIDs
+  s.array((self) => self.i32()); // globalSettingsThingPriority
+  s.f32(); // waterTint
+  s.vector4(); // fromWaterTintColor
+  s.f32(); // targetWaterTint
+  for (let i = 0; i < 6; i += 1) s.f32(); // water murkiness and bits: each current, from, target
+  s.bool(); // waterDrainSoundsEnabled
+  s.bool(); // currWaterDrainSoundsEnabled
+  if (subVersion >= 0xe8) {
+    s.bool(); // waterCausticsEnabled
+    s.bool(); // currWaterCausticsEnabled
+  }
+  if (subVersion >= 0xf8) for (let i = 0; i < 9; i += 1) s.s32(); // water main and hint colours: each current, from, target
+  if (subVersion >= 0xf8 && subVersion < 0x189) s.bool();
+  if (subVersion >= 0x182) {
+    s.bool(); // backdropEnabled
+    s.bool(); // currBackdropEnabled
+  }
+  s.f32(); // currWavePos
+  s.i32(); // gameMode
+  if (subVersion >= 0x218) s.i32(); // gameModeRequested
+  s.s32(); // nextSackbotPlayerNumber
+  // `CutsceneCameraManager`.
+  s.i32(); // state
+  readThingRef(s, readers); // currentCutSceneCamera
+  s.s32(); // timeInCurrentCamera
+  s.s32(); // endCountdown
+  s.f32(); // transitionStage
+  s.bool(); // currentCameraTweaking
+  // `GlobalAudioSettings`.
+  s.s32(); // reverb
+  for (let i = 0; i < 4; i += 1) s.f32(); // music, sfx, background, dialogue volumes
+  for (let i = 0; i < 6; i += 1) s.f32(); // reverb sends and low-pass filters
+  if (subVersion >= 0xd8) for (let i = 0; i < 3; i += 1) s.f32(); // high-pass filters
+  if (subVersion >= 0xe2) s.str(); // ambianceTrack
+  s.resource(true); // backdropPlan
+  s.resource(true); // backdropNewPlan
+  s.bool(); // subLevel
+  s.bool(); // scoreLocked
+  s.s32(); // debugTimeInLevel
+  s.bool(); // useEvenNewerCheckpointCode
+  if (version >= 0x3bd && subVersion <= 0x117) s.array((self) => readMoveCursor(self, readers)); // moveCursors
+  if (subVersion > 0x215) s.bool(); // singlePlayer
+  if (version >= 0x3d0) {
+    s.u8(); // minPlayers
+    s.u8(); // maxPlayers
+    s.bool(); // moveRecommended
+  }
+  if (version >= 0x3dd) s.bool(); // fixInvalidInOutMoverContacts
+  if (version >= 0x3f1) s.bool(); // continueMusic
+  if (subVersion >= 0x2f) {
+    s.array((self) => {
+      readThingRef(self, readers); // sourceMicrochip
+      readThingRef(self, readers); // clonedMicrochip
+    }); // broadcastMicroChipEntries
+  }
+  if (subVersion >= 0x5d) s.i32(); // manualJumpDown
+  if (subVersion >= 0x98 && subVersion < 0xe5) things();
+  if (subVersion >= 0xc3 && subVersion < 0xe5) things();
+  if (subVersion >= 0x98 && subVersion < 0xe5) things();
+  if (subVersion >= 0xe5) things(); // deferredDestroys
+  if (subVersion >= 0xcf) for (let i = 0; i < 3; i += 1) s.f32(); // globalDofFront, globalDofBack, globalDofSackTrack
+  if (subVersion >= 0xda) s.bool(); // enableSackpocket
+  if (subVersion >= 0x170) s.bool(); // showQuestLog
+  if (subVersion >= 0x11d) readSlotId(s); // scoreboardUnlockLevelSlot
+  if (subVersion >= 0x154) s.wstr(); // progressBoardLevelLinkStartPoint
+  if (subVersion >= 0x15e) s.bool(); // isLBP3World
+}
+
+/**
+ * `PWorld`: its Things, and with `tail` everything after them.
+ *
+ * The fields before `things` are few and all gated on subVersion, which the corpus
+ * pins at 0x213 — so every branch below is the one that is always taken, and the
+ * older ones are omitted rather than left as dead code. `readLevel`'s outermost
+ * world passes `tail` false: the parse stops at its Things and reads nothing after.
+ */
+function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): Thing[] {
   const { subVersion } = s.revision;
   if (subVersion >= 0x6d) {
     s.f32(); // backdropOffsetX
@@ -235,6 +396,7 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>): Thi
   const count = s.i32();
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(s, readers));
+  if (tail) readWorldTail(s, readers);
   // ⚠️ **It returns; only the OUTERMOST world stops the parse.** `readLevel`
   // wraps this and throws `StopParse` the first time. A level can carry a second
   // world Thing deeper in the graph -- one turned up inside a `CREATURE` in
@@ -486,8 +648,8 @@ export async function readLevel(
   let outermost = true;
   const worldReaders = readers as Map<string, PartReader>;
   worldReaders.set('WORLD', (self) => {
-    const things = readWorld(self, worldReaders);
-    if (!outermost) return things;
+    if (!outermost) return readWorld(self, worldReaders);
+    const things = readWorld(self, worldReaders, false);
     outermost = false;
     throw new StopParse(things);
   });

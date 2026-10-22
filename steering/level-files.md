@@ -292,8 +292,10 @@ The streaming structs (`StreamingCheckpoint`, `QuestTracker`, `QuestSwitch`, `Co
 `ChunkFile`) now carry cwlib's subVersion gates; they had been written past all of them. The two
 gates in the island are bracketed by measurement — absent at `0x1ab`, present at `0x213` — and no
 file here sits between. `HUD_ELEM` got its reader from cwlib (2 islands), and a plan now reads a
-`WORLD` part the way a level reads an inner world. Left over: those 3 islands of `titan_2` then miss
-a Thing marker inside the nested world, and 6 islands of `game_outro` read short.
+`WORLD` part the way a level reads an inner world — **all of `PWorld`, not only up to `things`**,
+because the world Thing's other parts follow it; the 3 islands holding one read since 0.2.73
+(question 57 in [answered-questions.md](answered-questions.md)). Left over: 6 islands of
+`game_outro` read short.
 
 ⚠️ **An island that will not open is reported, not swallowed.** Islands are independent resources
 in one list, so one failing says nothing about its neighbours: `LevelParse.problems` carries them

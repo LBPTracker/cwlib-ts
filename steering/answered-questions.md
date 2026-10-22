@@ -347,3 +347,20 @@ look at the byte before the null.
 ⚠️ **The trap to keep**: a gate written as a comment beside an unconditional read (`// rootRotationX,
 subVersion > 0x146`) is a guess that every file is above it. A reader transcribed from cwlib keeps
 every gate as code, including the ones no corpus file exercises yet.
+
+## 57. Three story-chunk islands that failed on the Thing marker — a world read only to its Things
+
+- **The symptom**: one island in each of three LBP3 PS4 story chunks — `3787a9bc` (`03_ziggurat/
+  06_titan_2`), `e864d09e` (`c07_meet_giant`), `1f4a50ed` (`c09_titan_02_outro`), version
+  `0x3f9`, subVersion `0x1a9`/`0x1ab` — failed with "Thing test marker was 0x0, not 0xaa" at
+  bytes 66,091, 17,241 and 196,985. They are the only islands whose plan holds a world Thing.
+- ✔ **What settled it**: the part trace (lbprender, 2026-10-22) on `e864d09e` showed `WORLD`
+  running 10335..17233 and the same Thing's `POS` starting there and reading a Thing 8 bytes later.
+  `readWorld` stopped after `PWorld.things`, which is all `readLevel` ever needs — its outermost
+  world ends the parse — and so never read `maxVel` and the ~100 fields cwlib's `PWorld.serialize`
+  has after it. With the rest of `PWorld` read (`readWorldTail` in `src/level.ts`), all three
+  islands read and each plan's Thing array ends on its last byte, the check `readPlan` makes.
+
+⚠️ **The trap to keep**: a reader that stops early because its caller stops there is a reader of a
+prefix. Once anything can embed the struct — a plan, a creature — what follows it is read from the
+middle of the struct's tail. `readLevel`'s outermost world is the one place the tail is skipped.
