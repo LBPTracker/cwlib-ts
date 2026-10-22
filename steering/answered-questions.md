@@ -311,3 +311,19 @@ The wrong turns, in the order they were taken, because each was reasonable:
 decoding a body, check that the part is the one the mask means at this revision. And a header that
 says "the range rules this out" is a claim about a range; check it against the lowest subVersion in
 that range, which here is 0.
+
+## 55. A null descriptor with an inline type — the type is still there
+
+- **The symptom**: Manglewood hub's container world (`02_manglewood/01_manglewood_hub/
+  manglewood_hub_container.bin`) failed reading a SHA-1 past its end, and with it the page lost
+  the level's main world too: all 1,157 chunks at the origin.
+- ✔ **What settled it**: tracing every read (lbprender, 2026-10-22) showed the chunk list's count of
+  54 read 53 chunk files and a "null" — the null was the second byte of chunk file 38's one
+  `userResources` descriptor, `00 07`: flag 0, then the type 7. `Serializer.resource` returned at
+  the flag, as a comment there said a null must ("the type is not there when the flag is zero"),
+  unmeasured. Reading the type after a null too, all 117 LBP3 worlds read as before bar this one,
+  which now reads; 1,393 descriptors in those worlds are non-null and this is the only null.
+
+⚠️ **The trap to keep**: a rule for the rare case written without a single instance of it is a guess,
+however confident its comment. When a list's count comes out one entry short with a null in it,
+look at the byte before the null.

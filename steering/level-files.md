@@ -221,6 +221,7 @@ resource; that holds the Things. Measured against the two PS3 saves that use it 
 ChunkFile      sha1 chunkHash                       subVersion > 0x130
                StreamingCheckpoint[] QuestTracker[] QuestSwitch[] CollectableData[]
                i32 n, then n resource descriptors WITH AN INLINE TYPE   (>= 0xde)
+                 -- the type follows a null descriptor (flag 0) too
                v3 min, v3 max, 4 bools, i32 n + n GUIDs, i32 n + n SHA-1s
 StreamingIsland i32 timeZone, i32 flags, v3 min, v3 max
                bytearray planData        <- a complete PLNb resource, header and all

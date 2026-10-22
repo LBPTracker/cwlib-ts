@@ -298,11 +298,18 @@ export class Serializer {
   resource(isDescriptor = false, includeType = false): ResourceRef | undefined {
     if (this.revision.version > 0x22e && !isDescriptor) this.i32();
     const flag = this.u8();
-    // ⚠️ **The type is not there when the flag is zero.** The reference ends at
-    // the flag byte for a null resource, so reading the type unconditionally
-    // eats four bytes of whatever came next. `ChunkFile.userResources` is the
-    // one place `includeType` is set, and it is a list where nulls are common.
-    if (flag === 0) return undefined;
+    // ✔ **A null descriptor still carries its type when the type is inline.**
+    // `ChunkFile.userResources` is the one place `includeType` is set; over the
+    // 117 LBP3 worlds in the install it holds 1,393 non-null descriptors and one
+    // null -- Manglewood hub's container, where the flag 0 is followed by the
+    // type 7, and skipping it cost one byte, read the next chunk entry as a null
+    // and left every one of the level's 1,157 chunks unplaced (lbprender's
+    // `dev/storyrun.ts`, 2026-10-22). An earlier comment here said the opposite,
+    // unmeasured.
+    if (flag === 0) {
+      if (includeType) this.i32(); // the resource type, written inline
+      return undefined;
+    }
     let guid = 0;
     let hash: Uint8Array | undefined;
     const [GUID, HASH] = this.revision.version < 0x191 ? [1, 2] : [2, 1];
