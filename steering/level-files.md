@@ -763,6 +763,13 @@ What the game does with each value is not measured here.
 `RStaticMesh.java` and `structs/staticmesh/` (toolkit `fee22399`), measured on **all 47 in the four
 FARCs, revisions `0x335`–`0x3f9`: 47 of 47 read** (`dev/staticmesh-census.ts`, 2026-10-20).
 
+✔ **In LBP3 the backdrop is only ever this mesh.** `PWorld` names two more — a `backdrop` Thing and
+a `backdropPlan` (with `backdropNew` and `backdropNewPlan`), LBP2's way — and on **all 117 LBP3
+worlds** in the install both are null (lbprender, 2026-10-22, reading them through a probe;
+`readWorld` walks them and keeps neither, rightly). A level whose `PLevelSettings` names no
+`backdropMesh` — Fickle Mistress (`04_bunkum/03_fickle_mistress`), ambience `amb_empty_world`,
+fog (0.3, 0.5, 0.7) — has no backdrop anywhere in its file.
+
 ```
 0x00 "SMHb"   0x04 u32 head   0x08 u32 depsOffset
 0x0c StaticMeshInfo, plain big-endian, where other resources have branch, flags and the compressed bool:
