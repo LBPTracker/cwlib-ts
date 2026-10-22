@@ -327,3 +327,23 @@ that range, which here is 0.
 ⚠️ **The trap to keep**: a rule for the rare case written without a single instance of it is a guess,
 however confident its comment. When a list's count comes out one entry short with a null in it,
 look at the byte before the null.
+
+## 56. Two LBP3 levels that failed on the Thing marker — gates written as comments
+
+- **The symptom**: the two story levels stored whole in one `.bin`, `pre_alpha_story_levels/
+  sack_town.bin` (subVersion `0xc8`) and `04_bunkum/03_fickle_mistress/fickle_mistress.bin`
+  (`0x144`), failed on the `0xAA` marker at bytes 14,869 and 569,855. Every other LBP3 level in
+  the install is at a subVersion high enough to hide the cause.
+- ✔ **What settled it**: tracing every read (lbprender, 2026-10-22). Four readers in `parts.ts`
+  read fields cwlib gates on `subVersion`, some with the gate only in a comment:
+  `PAnimationTweak.rootRotationX` (`> 0x146`), `PConnectorHook`'s `spinDamping`, `audioEnable`
+  and `hookType` (`> 0x103`, `> 0x13d`, `> 0x14e`), `PAtmosphericTweak.maxParticles` (`> 0x135`,
+  with a `u8` and `f32` in its place for `0xb9..0xd3`); and `PPoppetPowerup` refused the
+  `InventoryItem` array below `0x124`, which Sack Town fills with 3 items. With cwlib's gates on
+  every field of those parts and `InventoryItem` ported (its details only above version `0x37c`),
+  both levels read to their end; each fix moved Sack Town's failure on to the next one, and each
+  failing part's bytes end exactly where the next Thing or reference begins.
+
+⚠️ **The trap to keep**: a gate written as a comment beside an unconditional read (`// rootRotationX,
+subVersion > 0x146`) is a guess that every file is above it. A reader transcribed from cwlib keeps
+every gate as code, including the ones no corpus file exercises yet.

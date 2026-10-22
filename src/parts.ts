@@ -2597,16 +2597,25 @@ function readMaterialOverride(s: Serializer): void {
   }
 }
 
-/** `PConnectorHook`: a grapple point's motor settings. */
+/**
+ * `PConnectorHook`: a grapple point's motor settings.
+ *
+ * ❗ **Every field keeps cwlib's `subVersion` gate (`PConnectorHook.java`)**, as
+ * `readAnimationTweak` does. `spinDamping`, `audioEnable` and `hookType` were
+ * read always; measured 2026-10-22, `sack_town.bin` (subVersion 0xc8) read the
+ * next Thing's UID as `hookType` and failed 8 bytes on, at 367139.
+ */
 function readConnectorHook(s: Serializer): void {
   const { subVersion } = s.revision;
   s.i32(); // mode
+  if (subVersion <= 0xbb) s.i32();
   s.i32(); // inputAction
+  if (subVersion <= 0xbd) s.vector3();
   s.f32(); // poweredSpeed
   s.f32(); // accel
   s.f32(); // decel
-  s.f32(); // delay
-  s.bool(); // reverse
+  if (subVersion > 0x7b) s.f32(); // delay
+  if (subVersion > 0x7c) s.bool(); // reverse
   if (subVersion > 0xfd) {
     s.bool(); // tryLatch
     s.bool(); // clamped
@@ -2616,9 +2625,9 @@ function readConnectorHook(s: Serializer): void {
     s.vector4(); // pivot
   }
   if (subVersion >= 0xff && subVersion < 0x15d) s.i32();
-  s.f32(); // spinDamping
-  s.bool(); // audioEnable
-  s.i32(); // hookType, subVersion > 0x14e
+  if (subVersion > 0x103) s.f32(); // spinDamping
+  if (subVersion > 0x13d) s.bool(); // audioEnable
+  if (subVersion > 0x14e) s.i32(); // hookType
 }
 
 /** `PAnimation`: a plain animation playing on a Thing. */
@@ -2636,8 +2645,15 @@ function readAtmosphericTweak(s: Serializer): void {
   s.f32(); // directionStrength
   s.s32(); // inputAction
   if (subVersion < 0x1a8) s.bool(); // disableAudio
-  s.f32(); // maxParticles, subVersion > 0x135
-  s.f32(); // currentInput
+  // ❗ cwlib's gates (`PAtmosphericTweak.java`), measured 2026-10-22 on
+  // `sack_town.bin` (subVersion 0xc8): no maxParticles, and the u8 and f32 pair
+  // instead, the part's 22 bytes ending on that f32's 0.5.
+  if (subVersion > 0x135) s.f32(); // maxParticles
+  if (subVersion > 0xb3) s.f32(); // currentInput
+  if (subVersion >= 0xb9 && subVersion < 0xd4) {
+    s.u8();
+    s.f32();
+  }
   if (subVersion > 0x19b) {
     s.f32(); // intensityOff
     s.f32(); // directionStrengthOff
@@ -2840,32 +2856,52 @@ function readRef(s: Serializer): void {
   if (version >= 0x13d && version < 0x321) s.bool(); // stripChildren
 }
 
-/** `PAnimationTweak`: an animated mesh's playback settings. */
+/**
+ * `PAnimationTweak`: an animated mesh's playback settings.
+ *
+ * ❗ **Every field keeps cwlib's `subVersion` gate (`PAnimationTweak.java`).**
+ * `rootRotationX` used to be read always, with its gate only in a comment, which
+ * holds from subVersion 0x147 but not below it. Measured 2026-10-22 on the two
+ * LBP3 levels stored whole in one `.bin`: `sack_town.bin` (subVersion 0xc8)
+ * read `rootRotationY` as 2.35e-38 and failed on the next `0xAA` marker, at
+ * byte 14869; `fickle_mistress.bin` (0x144) failed at 569855 and, without the
+ * field, reads to its end. See answered question 56.
+ */
 function readAnimationTweak(s: Serializer): void {
   const { subVersion } = s.revision;
   s.f32(); // animSpeed
-  s.f32(); // animPos
-  s.f32(); // animBlendTime
+  if (subVersion > 0x1d) s.f32(); // animPos
+  if (subVersion >= 0x25) s.f32(); // animBlendTime
   s.i32(); // behavior
-  s.i32(); // blendAction
-  s.resource(); // anim
-  s.bool(); // animLoop
-  s.guid(); // cachedMeshFile
-  s.guid(); // containerFile
-  s.f32(); // animStart
-  s.f32(); // animEnd
-  s.bool(); // animPlaying
-  s.bool(); // animResetOnInactive
-  s.f32(); // rootRotationX, subVersion > 0x146
-  s.f32(); // rootRotationY
-  s.bool(); // usesRootRotation
-  s.i32(); // type
-  s.i32(); // animToOverride
+  if (subVersion >= 0x25) s.i32(); // blendAction
+  if (subVersion > 0x1d) {
+    s.resource(); // anim
+    s.bool(); // animLoop
+  }
+  if (subVersion > 0x1f) s.guid(); // cachedMeshFile
+  if (subVersion > 0x20) {
+    s.guid(); // containerFile
+    s.f32(); // animStart
+    s.f32(); // animEnd
+  }
+  if (subVersion > 0x25) s.bool(); // animPlaying
+  if (subVersion > 0x26) s.bool(); // animResetOnInactive
+  if (subVersion > 0x146 || (subVersion > 0x13e && subVersion < 0x143)) s.f32(); // rootRotationX
+  if (subVersion > 0x39) {
+    s.f32(); // rootRotationY
+    s.bool(); // usesRootRotation
+  }
+  if (subVersion > 0x42) {
+    s.i32(); // type
+    s.i32(); // animToOverride
+  }
   if (subVersion >= 0x5c && subVersion < 0x152) s.u8();
-  s.guid(); // tweakMeshFile
-  s.i32(); // containerType
-  s.i32(); // subContainerIndex
-  s.wstr(); // actorName
+  if (subVersion > 0x66) s.guid(); // tweakMeshFile
+  if (subVersion > 0x69) {
+    s.i32(); // containerType
+    s.i32(); // subContainerIndex
+  }
+  if (subVersion > 0x6a) s.wstr(); // actorName
   if (subVersion > 0x151) {
     s.f32(); // yawRate
     s.f32(); // pitchRate
@@ -2937,6 +2973,85 @@ function readPocketItem(s: Serializer): void {
 }
 
 /**
+ * `InventoryItemDetails` above version 0x37c: cwlib's `InventoryItemDetails.java`,
+ * the same layout `writeInventoryDetails` in `write-plan.ts` writes. The two
+ * older layouts are not ported, and refuse.
+ */
+function readInventoryItemDetails(s: Serializer): void {
+  const { version } = s.revision;
+  if (version <= 0x37c) {
+    throw new SerializerError(`InventoryItemDetails at version 0x${version.toString(16)} is not ported`);
+  }
+  s.u64(); // dateAdded, an s64
+  s.i32(); // levelUnlockSlotID.slotType
+  s.u32(); // levelUnlockSlotID.slotNumber
+  s.guid(); // highlightSound
+  s.i32(); // colour
+  s.i32(); // type
+  s.i32(); // subType
+  s.u32(); // titleKey
+  s.u32(); // descriptionKey
+  s.reference((self) => {
+    // creationHistory: fixed 20-byte names above 0x37c
+    const count = self.i32();
+    for (let i = 0; i < count; i += 1) self.bytes(0x14);
+  });
+  s.resource(true); // icon
+  s.reference((self) => {
+    self.wstr(); // userCreatedDetails.name
+    self.wstr(); // userCreatedDetails.description
+  });
+  s.reference(readInventoryItemPhotoData); // photoData
+  s.reference(readEyetoyData); // eyetoyData
+  s.i16(); // locationIndex
+  s.i16(); // categoryIndex
+  s.i16(); // primaryIndex
+  s.reference(readNetworkPlayerId); // creator
+  s.i8(); // toolType
+  s.i8(); // flags
+}
+
+/** `InventoryItemPhotoData` and its `PhotoMetadata`: cwlib's `structs/inventory/`. */
+function readInventoryItemPhotoData(s: Serializer): void {
+  s.resource(true); // icon
+  s.resource(true); // sticker
+  s.resource(true); // photoMetadata.photo
+  s.i32(); // photoMetadata.level.slotType
+  s.u32(); // photoMetadata.level.slotNumber
+  s.wstr(); // photoMetadata.levelName
+  s.sha1(); // photoMetadata.levelHash
+  s.u64(); // photoMetadata.timestamp, an s64
+  s.array((self) => {
+    self.bytes(0x14); // PSID
+    self.wstr(); // user
+    self.vector4(); // bounds
+  });
+  if (s.revision.version > 0x3c7) s.resource(true); // painting
+}
+
+/**
+ * `InventoryItem`: cwlib's `structs/profile/InventoryItem.java`, from version
+ * 0x235 (`ITEM_FLAGS`). Its integers are fixed-width even in a compressed
+ * stream, as cwlib forces them.
+ */
+function readInventoryItem(s: Serializer): void {
+  const { version, subVersion } = s.revision;
+  if (version < 0x235) {
+    throw new SerializerError(`InventoryItem at version 0x${version.toString(16)} is not ported`);
+  }
+  s.resource(true); // plan
+  if (subVersion >= 0x106) s.guid(); // guid
+  readInventoryItemDetails(s);
+  s.i32(true); // UID
+  if (version < 0x36c) {
+    s.i32(true); // tutorialLevel
+    s.i32(true); // tutorialVideo
+  }
+  s.i32(true); // flags
+  if (version >= 0x34a) s.i32(true); // userCategoryIndex
+}
+
+/**
  * `PPoppetPowerup` -- the popit a Thing hands the player, as in the game's
  * popit puzzles. cwlib's `PPoppetPowerup.java`; every gate is on subVersion,
  * so a subVersion-0 file (the crossplay levels) holds nothing at all.
@@ -2949,8 +3064,9 @@ function readPoppetPowerup(s: Serializer): void {
     for (let i = 0; i < items; i += 1) s.resource(true); // a plan descriptor
   }
   if (subVersion >= 0x7 && subVersion < 0x124) {
-    // An InventoryItem array: no file in any corpus here sits in this span.
-    throw new SerializerError(`PPoppetPowerup at subVersion 0x${subVersion.toString(16)}: its inventory items are not ported`);
+    // Measured 2026-10-22: `sack_town.bin` (subVersion 0xc8) has powerups
+    // holding 0 and 3 items, and the level reads to its end through both.
+    s.array(readInventoryItem);
   }
   if (subVersion >= 0xb && subVersion < 0x123) {
     const count = s.i32();
