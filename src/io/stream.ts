@@ -165,3 +165,18 @@ export class Revision {
       : `0x${this.version.toString(16)}`;
   }
 }
+
+/**
+ * An IEEE 754 half float from its 16 bits: a backdrop's UVs, an animation's
+ * positions, scales and morph weights. Exact, subnormals and infinities
+ * included -- unlike cwlib's `MemoryInputStream.f16`, which sets the low
+ * mantissa bits of every power of two (1.0 comes back as 1.000122).
+ */
+export function halfToFloat(bits: number): number {
+  const sign = bits & 0x8000 ? -1 : 1;
+  const exponent = (bits >> 10) & 0x1f;
+  const fraction = bits & 0x3ff;
+  if (exponent === 0) return sign * 2 ** -14 * (fraction / 1024);
+  if (exponent === 31) return fraction ? NaN : sign * Infinity;
+  return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
+}

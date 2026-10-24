@@ -18,6 +18,7 @@
 import { inflateChunkTable, magicOf, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { PRIMITIVE_TRIANGLES, PRIMITIVE_TRIANGLE_STRIP } from './mesh.ts';
+import { halfToFloat } from '../io/stream.ts';
 
 export interface StaticPrimitive {
   readonly min: readonly [number, number, number, number];
@@ -51,16 +52,6 @@ export interface StaticMesh {
 }
 
 export class StaticMeshFormatError extends Error {}
-
-/** A half float, big-endian bits. */
-function half(bits: number): number {
-  const sign = bits & 0x8000 ? -1 : 1;
-  const exponent = (bits >> 10) & 0x1f;
-  const fraction = bits & 0x3ff;
-  if (exponent === 0) return sign * 2 ** -14 * (fraction / 1024);
-  if (exponent === 31) return fraction ? NaN : sign * Infinity;
-  return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
-}
 
 /** cwlib's `Bytes.unpackNormal32`: x and y in 10 bits with a sign bit, z in 9 with one. */
 function unpackNormal32(value: number, out: Float32Array, at: number): void {
@@ -171,11 +162,11 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
     positions[v * 3 + 1] = d.getFloat32(o + 4, false);
     positions[v * 3 + 2] = d.getFloat32(o + 8, false);
     unpackNormal32(d.getUint32(o + 12, false), normals, v * 3);
-    uv0[v * 2] = half(d.getUint16(o + 16, false));
-    uv0[v * 2 + 1] = half(d.getUint16(o + 18, false));
+    uv0[v * 2] = halfToFloat(d.getUint16(o + 16, false));
+    uv0[v * 2 + 1] = halfToFloat(d.getUint16(o + 18, false));
     // o + 20: the tangent, packed like the normal; o + 28: cwlib's "smooth normal". Neither is returned.
-    uv1[v * 2] = half(d.getUint16(o + 24, false));
-    uv1[v * 2 + 1] = half(d.getUint16(o + 26, false));
+    uv1[v * 2] = halfToFloat(d.getUint16(o + 24, false));
+    uv1[v * 2 + 1] = halfToFloat(d.getUint16(o + 26, false));
   }
   const indices = new Uint16Array(indexBufferSize / 2);
   for (let i = 0; i < indices.length; i += 1) indices[i] = d.getUint16(vertexStreamSize + i * 2, false);

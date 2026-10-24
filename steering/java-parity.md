@@ -34,21 +34,21 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 ## Resources with a Java class and no reader here
 
-`RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RGuidSubst`, `RScript`,
+`RBoneSet` (so a mesh's morphs stay walked, names only), `RGuidSubst`, `RScript`,
 `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`, `BigSave`, `RQuest`,
 `RDLC`, `RFontFace`, `RTranslationTable`.
 
 Which of them the game itself ships, so a reader can be proven on real files (four FARCs,
-2026-10-24): `RAnimation` as 2,664 `ANMb`, `RScript` as 534 `FSHb`, and `RQuest` as 25 `QSTb`. `RGuidSubst` and `RDLC` are there only in their
+2026-10-24): `RScript` as 534 `FSHb`, and `RQuest` as 25 `QSTb`. `RGuidSubst` and `RDLC` are there only in their
 text form (`GSBt`, `DLCt`), and the rest not at all. ⚠️ cwlib's `RQuest.serialize` is empty, so a
 `QSTb` reader has no reading to port.
 
 Readers here that Java also has: `readChunk` and `readChunkIslands` (`RStreamingChunk`),
 `readInstrument` (`RInstrument`), and from 2026-10-24 in `src/resources/`: `readPhysicsMaterial`
 (`RMaterial`), `readPalette`, `readOutfitList`, `readJointSettings` (`RJoint`), `readPins` and
-`readCachedCostumeData`, then `readSlotList` and `readPacks` over `src/structs/slot.ts` — two of
-them reading more than Java does
-([lbp-modding-toolchain.md](lbp-modding-toolchain.md), *Where we deliberately differ*, 10 and 11).
+`readCachedCostumeData`, then `readSlotList` and `readPacks` over `src/structs/slot.ts`, and `readAnimation`
+(`RAnimation`, all 2,664 `ANMb`) — three of them reading more than Java does
+([lbp-modding-toolchain.md](lbp-modding-toolchain.md), *Where we deliberately differ*, 14–19).
 
 ## Writing
 

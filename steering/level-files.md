@@ -870,6 +870,51 @@ bool dissolvable, bool explodable, bool cuttableByExplosion
 - The Alear branch's `explosionType`, which cwlib reads from a resource's extra data, is a custom
   server's and not in the game.
 
+## Animations — `RAnimation`
+
+`readAnimation` in `src/resources/animation.ts`: magic `ANMb`, FileDB paths `….anim`
+(`gamedata/lbp3/character/troll/dwarf/animation/dwarf_look_updown.anim`). The walk is cwlib's
+`resources/RAnimation.java` (ennuo/toolkit `d6a2ef8`) and it holds, with the four differences in
+rows 16–19 of *Where we deliberately differ* ([lbp-modding-toolchain.md](lbp-modding-toolchain.md)):
+✔ **2,664 of 2,664 in the four FARCs read to the last byte of their payload, over 97 head words,
+versions `0x34c` to `0x3f9`** (`dev/animation-census.ts`, `test/animation.test.ts`, 2026-10-25).
+
+```
+< 0x378   bones[] (i32 animHash, s32 parent, s32 firstChild, s32 nextSibling),
+          i32 numFrames, i32 fps, i32 morphCount,
+          i16[] rot / pos / scale / morph bones animated,
+          vector4[] rotations, positions, scales, f32[] morphs,  u16 0
+>= 0x378  i16 numFrames, i16 fps, i16 loopStart, i8 morphCount,
+          u8 bones, u8 rot, u8 pos, u8 scale, u8 morph animated, u16 locatorKeys,
+          (>= 0x38c) vector4 posOffset, vector4 posScale, (>= 0x3b2) i8 fat,
+          u8[] block, locators[] (vector3, string name, i8 looping, i8 type)
+block     per bone 8 bytes (i32 animHash, i8 parent, firstChild, nextSibling, pad),
+          4 × locatorKeys bytes, the four animated-index lists as bytes, aligned to 2,
+          rotations (3 × i16 / 0x7fff; x's low bit the sign of w), then positions,
+          scales (3 × f16) and morph weights (f16) — the first bones / morphCount of
+          each the base pose, then the animated ones for frames 1 … numFrames − 1;
+          then zeros
+```
+
+- Ranges: `numFrames` 2–2,000, `fps` 15–30, 1–49 bones, 0–29 morphs, 0–6 locators. 1,534,393
+  rotations, none whose stored x, y and z exceed unit length; every position, scale and morph
+  weight finite.
+- ✔ **A parent comes before its child** in all 100,035 bones, so a pose builds in one pass; and
+  **99.97% of them (100,008) name a bone of some `MSHb`** by `animHash` — measured once against
+  every mesh bone in the four FARCs (2026-10-25), not in the census.
+- ❗ **`fat` 1 makes every value four bytes**: rotations three `f32`, the rest `f32`. Two files
+  have it (`th_henry_garage/…/robotic_arm_claw.anim` and one more), and only so do
+  their blocks end where their padding begins. The sign of w still rides in the low bit of x's
+  word — set on 10 of 3,236 non-zero x, against about half of y's and z's.
+- ⚠️ **The block ends in zero padding of one of two lengths**: to the next multiple of 16 (1,554
+  files) or that and 16 more (1,103), with nothing in the header to say which. The reader refuses
+  any other tail.
+- ⚠️ The one head word below `0x378` (`0x34c`, five files) ends in two zero bytes after the
+  morphs, where cwlib stops at "TODO: Locators". They are taken as zeros and a non-zero pair is
+  refused: an empty locator array and a byte, or a 16-bit `loopStart`, would both write them.
+- `posOffset` and `posScale` are read and not applied, as cwlib does; `locatorKeys`' bytes are
+  skipped.
+
 ## Slots — `RSlotList` and `RPacks`
 
 `readSlotList` (`src/resources/slot-list.ts`, magic `SLTb`) and `readPacks`
