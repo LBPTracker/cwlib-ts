@@ -165,6 +165,7 @@ never silently follow the toolkit against our own measurement.
 | 17 | half floats (`RAnimation`, `RStaticMesh` UVs) | `MemoryInputStream.f16`, which sets the low mantissa bits of every power of two | IEEE 754 exactly (`halfToFloat` in `src/io/stream.ts`) | 1.0 comes back from theirs as 1.000122 |
 | 18 | `RAnimation` block, after the values | not looked at | zero padding to a multiple of 16, or that and 16 more; anything else refused | 1,554 and 1,103 of the game's 2,664 animations ([level-files.md](level-files.md), *Animations*) |
 | 19 | `RAnimation` below `0x378` | stops after the morphs, "TODO: Locators" | two bytes more, zero, and refused otherwise | the five `0x34c` files each end in `00 00` there |
+| 20 | `RBoneSet` flip types | `FlipType.fromValue`, which has nothing for 8 | the byte as stored | `characters.boneset` gives `Bip01 Footsteps` 8 in two of its five skeletons ([level-files.md](level-files.md), *Bone sets*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

@@ -956,6 +956,29 @@ modifiers: i16 from 0x3d9, i32 before
   constants. An instruction is kept as its 64 bits (`bytecode`, a `BigUint64Array`): its
   opcode is the low byte, and cwlib's per-class decoding of the rest is not ported.
 
+## Bone sets — `RBoneSet`, the toolkit's and not the game's
+
+`readBoneSet` in `src/resources/bone-set.ts`: magic `BSTb`. ❗ **The game has none**: no `BSTb`
+is in the four FARCs. The format is the toolkit's own, on its `MIZUKI` branch (`0x4d5a`), and
+the one file is its `lib/cwlib/src/main/resources/binary/characters.boneset` (head `0x021803f9`,
+branch revision 5), which its `ModelImporter` loads to know the playable characters'
+skeletons. The walk is cwlib's `resources/custom/RBoneSet.java` and `structs/custom/Skeleton.java`
+(ennuo/toolkit `d6a2ef8`): an array of skeletons, each `RMesh`'s bones (`readBone`) and then
+the mirror bones (`i16`s), their flip types (`u8`s), the cull bones (a matrix and two
+4-vectors), and — on the branch's revisions before `0x1` only — a skeleton type byte.
+
+- ✔ **The file reads to its last byte** (`test/bone-set.test.ts`, 2026-10-25): five skeletons of
+  43, 39, 40, 35 and 29 bones, each with a mirror and a cull bone per bone, every parent before
+  its child, and every mirror its own inverse (`mirror[mirror[i]] = i`).
+- ✔ **They are the five playable characters' skeletons.** Measured once against every `MSHb` in
+  the four FARCs by bone names in order (2026-10-25): 2,259 meshes share the 43 bones (Sackboy's
+  costumes), 94 the 39 (`playercharacter/…_g_…`, the big Toggle), 51 the 40 (`…_d_…`, the
+  small one), 63 the 35 (`bird_…`, Swoop) and 80 the 29 (`…_q_…` and `char_quad_…`, Oddsock);
+  942, 19, 1, 0 and 31 of them with every bind pose equal to the set's within `1e-5`.
+- ⚠️ Two skeletons, the 35 and the 29, give `Bip01 Footsteps` (its own mirror) flip type **8**,
+  past cwlib's `FlipType` (0 `MAX` to 6 `COPY`), whose `fromValue` has nothing for it. It is
+  kept as the number.
+
 ## Slots — `RSlotList` and `RPacks`
 
 `readSlotList` (`src/resources/slot-list.ts`, magic `SLTb`) and `readPacks`

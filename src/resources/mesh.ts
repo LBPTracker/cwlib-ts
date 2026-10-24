@@ -184,7 +184,7 @@ function readPrimitive(s: Serializer): Run {
 }
 
 /** `Bone`, which is `AnimBone`'s four fields and then its own. */
-function readBone(s: Serializer): MeshBone {
+export function readBone(s: Serializer): MeshBone {
   const name = latin1(s.bytes(32), true);
   const flags = s.i32();
   const animHash = s.i32();

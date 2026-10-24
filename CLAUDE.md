@@ -71,9 +71,9 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 
 ## Working here
 
-- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 106
+- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 107
   tests on 2026-10-25, the corpus ones skipping without `fixtures/` beside them or without
-  `LBP_GAME` and `LBP_LEVELS` (`steering/tools.md`).
+  `LBP_GAME`, `LBP_LEVELS` or `LBP_TOOLKIT` (`steering/tools.md`).
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package
   gets. ❗ **Consumers run `dist/*.js`, never `src/`**: Node 24 refuses to strip types under
   `node_modules`. The README has why and how the `exports` map keeps the specifiers `.ts`.
