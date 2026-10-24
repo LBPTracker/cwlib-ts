@@ -172,7 +172,7 @@ export function partReaders(): Map<string, PartReader> {
   bind('ANIMATION', readAnimation);
   bind('ATMOSPHERIC_TWEAK', readAtmosphericTweak);
   bind('SCRIPT_NAME', readScriptName);
-  bind('QUEST', readQuest);
+  readers.set('QUEST', (s) => readQuest(s));
   bind('METADATA', readMetadata);
   bind('EFFECTOR', readEffector);
   bind('WORMHOLE', readWormhole);

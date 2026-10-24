@@ -39,7 +39,7 @@ export interface QuestObjective {
   readonly count: number;
   readonly required: number;
   readonly hidden: boolean;
-  /** cwlib's `int key`; on `ziggurat_blueprint.qst` its one objective's key is the quest's own. */
+  /** What a level's `PQuest` names in `objectiveKey` (`dev/quest-keys.ts`). */
   readonly key: number;
 }
 
@@ -72,6 +72,7 @@ export interface Quest {
   readonly completedInLevels: readonly SlotId[];
   /** True in all 25. */
   readonly stateUpdateViewed: boolean;
+  /** ✔ What a level's `PQuest` names in `questKey`: 292 of the game's 299 non-zero ones (`dev/quest-keys.ts`). */
   readonly key: number;
   /**
    * ⚠️ **What follows the key, unnamed**: one integer at subVersion `0x154` and

@@ -1092,10 +1092,22 @@ What is measured and what is only a width:
 - ⚠️ The two extra bytes of an objective below subVersion `0x167` are on one objective in the
   game, `pp01_bridge.qst`'s at `0x154`, and zero there. Where between `0x154` and `0x167` they
   go is not known.
-- The keys are not any 32-bit hash tried of the strings (FNV-1 and 1a, CRC-32, Java's
-  `hashCode`, djb2); `ziggurat_blueprint.qst`'s one objective has the quest's own key. That
-  they are what a level's `PQuest` names in `questKey` and `objectiveKey` is the likely
-  reading and **unchecked**: the part reader walks those and keeps nothing.
+- ✔ **A quest's `key` is what a level's `PQuest` names in `questKey`, and an objective's
+  `key` its `objectiveKey`** (`dev/quest-keys.ts`, 2026-10-25). Of the 322 `QUEST` parts
+  in the four FARCs' levels and plans (99) and the story's chunks (223) that parse — the
+  7,537 that do not are mostly below the reader's bound — all of type 5:
+  - 299 have a non-zero `questKey`, and 292 of them are a `QSTb`'s `key`. The other 7 name
+    two quests the game has no `QSTb` for (`ZIGP04` and `ZIGP05` in the Caverns, and one key
+    in `manglewood_hub_base_virtual_305.plan`).
+  - 166 have a non-zero `objectiveKey`. 162 of those name a known quest, and 160 of the 162 are
+    one of **that same quest's** objectives. The other 2 are a `Fickle_Mistress` objective,
+    which `bunkum_relics.qst` no longer lists.
+  - 23 of the 25 quests and 28 of the 35 objectives are named by some part.
+  - ⚠️ **The part's strings are not the link.** `questId` is empty on 217 of the 322 parts, and
+    where it is set it is mostly another quest's name (`MW-QR-Bite Sized` on a part keyed to
+    `ZIG_Rocket_QR`), a copy left over when the part was. Read a part's quest by its key.
+  - The keys are no 32-bit hash of the strings that was tried (FNV-1 and 1a, CRC-32, Java's
+    `hashCode`, djb2); `ziggurat_blueprint.qst`'s one objective has the quest's own key.
 - ⚠️ **From `decals` to `key` the names are cwlib's comment's**; the bytes fit them (counts
   where it has arrays, slot arrays where it has slot arrays, booleans where it has booleans)
   and prove nothing more. `stateUpdateViewed` is true in all 25.

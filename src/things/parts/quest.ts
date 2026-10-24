@@ -19,20 +19,40 @@ import { Serializer, SerializerError } from '../../io/serializer.ts';
  * seemed to carry was a `PWormhole` read under the wrong mask bit (`partBit` in
  * `thing.ts`); types 1 to 4 have not been seen in a file.
  */
-export function readQuest(s: Serializer): void {
+export interface QuestPart {
+  readonly type: number;
+  /** subVersion `0x9d` on; empty before. */
+  readonly questId: string;
+  readonly objectiveId: string;
+  /**
+   * subVersion `0x141` on; 0 before. ✔ **The `key` of an `RQuest`, and of one of
+   * its objectives** (`dev/quest-keys.ts`, steering/level-files.md, *Quests*); read
+   * unsigned as `resources/quest.ts` reads those, so the two compare as they are.
+   * ⚠️ Not `questId`: that string is empty on most parts and stale on others.
+   */
+  readonly questKey: number;
+  readonly objectiveKey: number;
+}
+
+export function readQuest(s: Serializer): QuestPart {
   const { subVersion } = s.revision;
   const type = s.i32();
   if (type < 1 || type > 5) throw new SerializerError(`quest type ${type} is not one the game reads`);
+  let questId = '';
+  let objectiveId = '';
+  let questKey = 0;
+  let objectiveKey = 0;
   if (subVersion > 0x9c) {
-    s.wstr(); // questID
-    s.wstr(); // objectiveID
+    questId = s.wstr();
+    objectiveId = s.wstr();
   }
   if (subVersion > 0x140) {
-    s.i32(); // questKey
-    s.i32(); // objectiveKey
+    questKey = s.u32();
+    objectiveKey = s.u32();
   }
+  const part: QuestPart = { type, questId, objectiveId, questKey, objectiveKey };
   if (subVersion < 0x52) s.u8();
-  if (type === 5 || subVersion < 0x47) return;
+  if (type === 5 || subVersion < 0x47) return part;
   if (type === 1) {
     s.wstr();
     s.wstr();
@@ -46,4 +66,5 @@ export function readQuest(s: Serializer): void {
     s.wstr();
     s.wstr();
   }
+  return part;
 }

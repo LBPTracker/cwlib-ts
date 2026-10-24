@@ -71,7 +71,7 @@ materials*); what a renderer still has to decide on its own:
   mix, blend and Thing-colour graphs need the boxes evaluated, and the box types 13–19 are cwlib's
   partial list.
 
-## 65. A quest's unnamed fields — and whether its keys are a level's
+## 65. A quest's unnamed fields
 
 `readQuest` reads all 25 of the game's `QSTb` to the last byte, but part of that is widths
 only ([level-files.md](level-files.md), *Quests*): the two integers before each prize (0 and 3
@@ -80,9 +80,7 @@ subVersion `0x167`, and the one to four zero fields after the key. The game's lo
 `RQuest` in the eboot would name their widths and branches the way `v0xdc0290` did for
 `PQuest`; nothing in the files will, while every one of them is zero or constant.
 
-The cheaper check first: a story level's `PQuest` carries `questKey` and `objectiveKey`,
-which `readQuest` in `things/parts/quest.ts` walks and drops. Kept and compared with the
-`QSTb` keys over the story chunks, they would prove what `key` is — or that it is not.
+The keys are settled: they are what a level's `PQuest` names (*Quests*).
 
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's
 

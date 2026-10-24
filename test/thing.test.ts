@@ -79,6 +79,8 @@ test('bit 0x31 is a wormhole below subVersion 0x107, and a quest above it', () =
   const live = read(LBP3_PS4, thingBytes(LBP3_PS4, [0x31], QUEST_SV218));
   assert.deepEqual([...live.thing.parts.keys()], ['QUEST']);
   assert.equal(live.left, 0);
+  // The keys are what an RQuest's are: steering/level-files.md, *Quests*.
+  assert.deepEqual(live.thing.parts.get('QUEST'), { type: 5, questId: '', objectiveId: '', questKey: 2515720779, objectiveKey: 0 });
 });
 
 test('the creator anim has bit 0x29 below subVersion 0x107, and must be null', () => {
