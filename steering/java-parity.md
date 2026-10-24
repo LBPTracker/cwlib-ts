@@ -5,26 +5,26 @@ library covers. It lists what exists there and not here; whether Java's reading 
 separate question, and [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the rule for it —
 Java is a reading of the format, not evidence about it.
 
-Measured 2026-10-24 by listing the classes under `lib/cwlib/src/main/java/cwlib/` (`resources/`,
+Measured 2026-10-24, and again 2026-10-25 at 0.4.6, by listing the classes under `lib/cwlib/src/main/java/cwlib/` (`resources/`,
 `structs/things/parts/`, `types/`, `io/`, `util/`) of
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
-to touch `lib/cwlib/`) against this repository's modules at 0.2.74 and the return type of every
-reader `partReaders()` binds. ⚠️ A checkout of the toolkit can be far behind that: one at
+to touch `lib/cwlib/`) against this repository's modules and the return type of every reader `partReaders()` binds.
+On 2026-10-25 `main` was still `d6a2ef8`. ⚠️ A checkout of the toolkit can be far behind that: one at
 `bb79e81` (2024-04-30) lacks 147 files' worth of `lib/cwlib/` changes, `RCachedCostumeData`,
 `ROutfitList` and the two newer importers among them — so name the commit you read. Each line below
 is closed by a commit here; re-check against the current checkout before relying on one.
 
-## Thing parts: every one is read, sixteen are kept
+## Thing parts: every one is read, seventeen are kept
 
 `partReaders()` binds 53 readers and `readLevel`/`readPlan` install `WORLD`: 54 of the 55 entries of
 `PARTS`, which is every part of `Part.java`. `CREATOR_ANIM` has none, and Java too expects it null.
 So any file in range walks to its end. What differs is what a reader returns:
 
-- **Kept** (16): `POS`, `SHAPE`, `RENDER_MESH`, `GENERATED_MESH`, `DECORATIONS`, `JOINT`,
+- **Kept** (17): `POS`, `SHAPE`, `RENDER_MESH`, `GENERATED_MESH`, `DECORATIONS`, `JOINT`,
   `STICKERS`, `SWITCH`, `SPRITE_LIGHT`, `LEVEL_SETTINGS`, `GROUP`, `GAMEPLAY_DATA`, `INSTRUMENT`,
-  `SEQUENCER`, `MICROCHIP`, `WORLD`.
-- **Walked, nothing returned** (38): `BODY`, `CREATURE`, `ENEMY`, `NPC`, `EMITTER`, `TRIGGER`,
-  `CHECKPOINT`, `SWITCH_KEY`, `SWITCH_INPUT`, `CONTROLINATOR`, `QUEST`, `WORMHOLE`, `POWER_UP`,
+  `SEQUENCER`, `MICROCHIP`, `QUEST` (its keys, 0.4.6), `WORLD`.
+- **Walked, nothing returned** (37): `BODY`, `CREATURE`, `ENEMY`, `NPC`, `EMITTER`, `TRIGGER`,
+  `CHECKPOINT`, `SWITCH_KEY`, `SWITCH_INPUT`, `CONTROLINATOR`, `WORMHOLE`, `POWER_UP`,
   `POPPET_POWERUP`, `POCKET_ITEM`, `HUD_ELEM`, `FADER`, `TAG_SYNCHRONIZER`, `TRANSITION`, `REF`,
   `PHYSICS_TWEAK`, `MATERIAL_TWEAK`, `MATERIAL_OVERRIDE`, `CAMERA_TWEAK`, `WIND_TWEAK`,
   `ATMOSPHERIC_TWEAK`, `ANIMATION_TWEAK`, `AUDIO_WORLD`, `ANIMATION`, `CONNECTOR_HOOK`, `EFFECTOR`,
@@ -32,28 +32,26 @@ So any file in range walks to its end. What differs is what a reader returns:
   `YELLOWHEAD`. Java builds an object for each. Keeping one is a return value on a reader that
   already reads every field.
 
-## Resources with a Java class and no reader here
+## Resources: Java's 29 classes, and which have a reader here
 
-`RGuidSubst`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`, `BigSave`,
-`RDLC`, `RFontFace`, `RTranslationTable`.
+`resources/` holds 28 classes and `resources/custom/` one, and `BigSave` is in `types/save/`.
 
-Which of them the game itself ships, so a reader can be proven on real files (four FARCs,
-2026-10-24): `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`), the rest not at
-all.
-
-`RQuest` has a Java class and no reading: its `serialize` is empty. `readQuest`
-(`src/resources/quest.ts`) is a reading of our own, proven on all 25 of the game's `QSTb` and
-named after the class's comment where the bytes fit it ([level-files.md](level-files.md),
-*Quests*).
-
-Readers here that Java also has: `readChunk` and `readChunkIslands` (`RStreamingChunk`),
-`readInstrument` (`RInstrument`), and from 2026-10-24 in `src/resources/`: `readPhysicsMaterial`
-(`RMaterial`), `readPalette`, `readOutfitList`, `readJointSettings` (`RJoint`), `readPins` and
-`readCachedCostumeData`, then `readSlotList` and `readPacks` over `src/structs/slot.ts`,
-`readAnimation` (`RAnimation`, all 2,664 `ANMb`), `readScript` (`RScript`, all 534 `FSHb`, its
-instructions kept as 64-bit words) and `readBoneSet` (`RBoneSet`, the toolkit's own format: its one
-file, none of the game's) — four of them reading more than Java does
-([lbp-modding-toolchain.md](lbp-modding-toolchain.md), *Where we deliberately differ*, 14–20).
+- **A reader here, on Java's walk** (20): `RLevel` and `RPlan` (`readThings`, `things/level.ts`),
+  `RStreamingChunk` (`readChunk`, `readChunkIslands`), `RMesh`, `RTexture`, `RGfxMaterial`,
+  `RBevel`, `RStaticMesh`, `RInstrument`, and from 2026-10-24 `RMaterial`
+  (`readPhysicsMaterial`), `RPalette`, `ROutfitList`, `RJoint` (`readJointSettings`), `RPins`,
+  `RCachedCostumeData`, `RSlotList`, `RPacks`, `RAnimation`, `RScript` (its instructions kept as
+  64-bit words, not decoded per class) and `RBoneSet` (the toolkit's own format: its one file,
+  none of the game's). Where one reads differently from Java, *Where we deliberately differ* in
+  [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the row (numbered 1 to 21 on 2026-10-25, with a 3b).
+- **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
+  `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
+  the levels' `PQuest`s name ([level-files.md](level-files.md), *Quests*).
+- **No reader here** (8, and `BigSave`): `RGuidSubst`, `RDLC`, `RTranslationTable`, `RFontFace`,
+  `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`. Of these the
+  game's four FARCs hold `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`) and
+  the rest not at all (2026-10-24); the profiles and `BigSave` are save data, so a reader would
+  be proven on a save, not on the install.
 
 ## Writing
 
