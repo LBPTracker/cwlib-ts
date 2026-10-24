@@ -34,12 +34,21 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 ## Resources with a Java class and no reader here
 
-`RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RJoint`, `RGuidSubst`, `RScript`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
-`RAdventureCreateProfile`, `BigSave`, `RSlotList`, `RPacks`, `RPins`, `RQuest`, `RPalette`, `RDLC`,
-`RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk`, `RInstrument` and
-`RMaterial` have readers here: `readChunk` and `readChunkIslands`, `readInstrument` in
-`src/resources/rinstrument.ts`, and `readPhysicsMaterial` in `src/resources/physics-material.ts`,
-added 2026-10-24.)
+`RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RGuidSubst`, `RScript`,
+`RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`, `BigSave`,
+`RSlotList`, `RPacks`, `RQuest`, `RDLC`, `RFontFace`, `RTranslationTable`.
+
+Which of them the game itself ships, so a reader can be proven on real files (four FARCs,
+2026-10-24): `RAnimation` as 2,664 `ANMb`, `RScript` as 534 `FSHb`, `RQuest` as 25 `QSTb`,
+`RPacks` as 8 `PCKb` and `RSlotList` as 7 `SLTb`. `RGuidSubst` and `RDLC` are there only in their
+text form (`GSBt`, `DLCt`), and the rest not at all. ⚠️ cwlib's `RQuest.serialize` is empty, so a
+`QSTb` reader has no reading to port.
+
+Readers here that Java also has: `readChunk` and `readChunkIslands` (`RStreamingChunk`),
+`readInstrument` (`RInstrument`), and from 2026-10-24 in `src/resources/`: `readPhysicsMaterial`
+(`RMaterial`), `readPalette`, `readOutfitList`, `readJointSettings` (`RJoint`), `readPins` and
+`readCachedCostumeData` — two of them reading more than Java does
+([lbp-modding-toolchain.md](lbp-modding-toolchain.md), *Where we deliberately differ*, 10 and 11).
 
 ## Writing
 

@@ -34,6 +34,8 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
 | `physics-material.ts` | `RMaterial` (`MATb`): a shape's physics — density, friction, bounce, its sound family, what it collides with, whether it breaks |
+| `palette.ts`, `outfit-list.ts` | `RPalette` (`PALb`), a page of the popit; `ROutfitList` (`OUTb`), costumes as their pieces |
+| `joint-settings.ts`, `pins.ts`, `cached-costume-data.ts` | `RJoint` (`JNTb`), what a kind of joint does; `RPins` (`PINb`), the pin definitions; `RCachedCostumeData` (`CCDb`), the costume index |
 | `rinstrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`sequencer/`** | |
 | `project.ts`, `notes.ts`, `chips.ts` | the music sequencer as data — note records, chaining, automation, the chips' plans and colours |

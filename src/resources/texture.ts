@@ -134,9 +134,7 @@ const CHAIN_ALIGN = 0x80;
  */
 async function inflateChunks(bytes: Uint8Array, at: number, inflate: Inflate): Promise<Uint8Array> {
   if (at + 4 > bytes.length) throw new TextureFormatError('no chunk table');
-  if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(at + 2, false) === 0) {
-    return bytes.slice(at + 4); // a copy: the levels are views into what this returns
-  }
+  // With no chunks the payload is a copy, so the levels can be views into it.
   const { data, end } = await inflateChunkTable(bytes, at, inflate, { error: TextureFormatError });
   if (end !== bytes.length) throw new TextureFormatError(`chunks end at ${end} of ${bytes.length}`);
   return data;

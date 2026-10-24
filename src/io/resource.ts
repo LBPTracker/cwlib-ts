@@ -139,6 +139,7 @@ export async function loadResource(
   // out of the public archive (0x23d, 0x26e) said only "chunk 0/26 failed to
   // inflate", which sends you looking at zlib.
   const { chunks, data, end } = await inflateChunkTable(bytes, tableAt, inflate, {
+    storedEnd: dependencyTableOffset,
     inflateHint: `revision 0x${revision.version.toString(16)} sub 0x${revision.subVersion.toString(16)}` +
       ', whose header layout may not be the one this reader implements',
   });
@@ -169,6 +170,13 @@ export async function loadResource(
  * is why this is the one reader of it. Where the chunks have to end is the
  * caller's check: `end` is the byte after the last one.
  *
+ * ❗ **A table of zero chunks means the payload is stored as it is**, from the
+ * table's end to `storedEnd` -- the dependency table in a resource, the file's
+ * end in a texture (cwlib's `Compressor.decompressData`). 71 of the game's
+ * 178 `PALb` palettes and 51 of its 59 `OUTb` outfit lists are written so, a
+ * few dozen bytes each that would not shrink (steering/level-files.md, *The
+ * container*). The payload is then a copy, so it is never a view of `bytes`.
+ *
  * `error` makes the exception, so each format throws its own class.
  */
 export async function inflateChunkTable(
@@ -179,12 +187,19 @@ export async function inflateChunkTable(
     readonly error?: new (message: string, options?: ErrorOptions) => Error;
     /** Appended to "failed to inflate", for the caller to say what it suspects. */
     readonly inflateHint?: string;
+    /** Where a payload stored with no chunks ends; the file's end when not given. */
+    readonly storedEnd?: number;
   } = {},
 ): Promise<{ chunks: ResourceChunk[]; data: Uint8Array; end: number }> {
   const Fail = options.error ?? ResourceFormatError;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (at + 4 > bytes.length) throw new Fail('no chunk table: the file ends first');
   const count = view.getUint16(at + 2, false);
+  if (count === 0) {
+    const end = options.storedEnd ?? bytes.length;
+    if (end < at + 4 || end > bytes.length) throw new Fail(`a stored payload from ${at + 4} to ${end} is outside the file`);
+    return { chunks: [], data: bytes.slice(at + 4, end), end };
+  }
   if (at + 4 + count * 4 > bytes.length) throw new Fail(`a table of ${count} chunks runs past the end of the file`);
 
   const chunks: ResourceChunk[] = [];

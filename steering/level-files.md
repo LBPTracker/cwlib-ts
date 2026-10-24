@@ -61,6 +61,13 @@ The offsets are a header with every field, which every level and plan the reader
 - ⚠️ **A chunk whose two sizes are equal is stored, not deflated**, with no zlib header at all —
   cwlib's `Compressor.decompressData`. 8 chunks of the game's meshes are so, one of them the fourth
   of `spawn_point_start_chrome.mol`, which otherwise failed to inflate.
+- ❗ **A compressed resource with a table of zero chunks stores its payload as it is**, from the
+  table's end to `depsOffset` (the same cwlib function). ✔ Measured 2026-10-24 over the four
+  FARCs: 71 of the game's 178 `PALb`, 51 of 59 `OUTb`, all 24 `ATXb`, 3 of 91 `RECb`, 2 of 4
+  `VOPb`, 1 of 2 `GLTb` and 1 of 2 `TUTb` are written so — a few dozen bytes that would not
+  shrink. `loadResource` called them "chunk data ends at 0x16" until it read them this way; the
+  122 palettes and outfit lists now walk to their last byte. `inflateChunkTable` in
+  `src/io/resource.ts` is where the rule lives, for textures as well.
 - ❗ **An uncompressed resource has no chunk table.** The payload starts straight after the flag
   and runs to `depsOffset`. `CHKb` chunks are stored that way, and a reader that ignored the flag
   took "96 chunks" out of the payload's own first bytes.
@@ -862,6 +869,53 @@ bool dissolvable, bool explodable, bool cuttableByExplosion
   friction 0–30, gravity multiplier −1 to 1. `grabbable` on 37, `breakable` on 7.
 - The Alear branch's `explosionType`, which cwlib reads from a resource's extra data, is a custom
   server's and not in the game.
+
+## Smaller resources — palettes, outfit lists, joints, pins, the costume index
+
+Five readers in `src/resources/` whose proof is that every file of their type in the four FARCs
+reads to its payload's last byte (`dev/resources-census.ts`, 2026-10-24); the walks are cwlib's at
+ennuo/toolkit `d6a2ef8` except where a row of *Where we deliberately differ* in
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) says otherwise.
+
+| magic | reader | files | head words |
+|---|---|---|---|
+| `PALb` | `readPalette` (`palette.ts`) | 178 of 178 | 72, `0x2bb`–`0x3f9` |
+| `OUTb` | `readOutfitList` (`outfit-list.ts`) | 59 of 59 | 12, `0x38c`–`0x3f9` |
+| `JNTb` | `readJointSettings` (`joint-settings.ts`) | 9 of 9 | 1, `0x336` |
+| `PINb` | `readPins` (`pins.ts`) | 1 of 1 | `0x3f9` |
+| `CCDb` | `readCachedCostumeData` (`cached-costume-data.ts`) | 1 of 1 | `0x3f9` |
+
+### Palettes
+
+A page of the popit: an array of plan references (5,340 over the 178, none null), a location, a
+LAMS description key, and from `0x323` the converted plans. ⚠️ **A converted plan is two
+descriptors, a hash then a GUID** — one palette of the 178 has any,
+`pal_unthemed_toys_vehicles_palette.pal` at `0x3b4`, six pairs whose GUIDs run 173454–173459, and
+read one descriptor at a time it leaves 75 bytes. Which half is the converted plan is not known.
+
+### Outfit lists
+
+Each outfit is a GUID list of the costume pieces and a plan descriptor.
+
+### Joint settings
+
+`RJoint`, `gamedata/joints/….joint`: what a kind of joint does — expand, contract, elasticity and
+plasticity of length and angle, two `FCurve`s (three 4-vectors and a type), break resistance, its
+drawn material, width, two event names and a mesh. No revision gates; all nine files are `0x336`.
+
+### Pins
+
+`gamedata/data/pins.pin`: one record per pin — id, progress type, category, LAMS title and
+description keys, an icon descriptor, the initial and target values, a trophy byte, a 16-bit
+behaviour field, and from `0x3f7` an LBP1 trophy byte.
+
+### The costume index
+
+`gamedata/data/cached_costume_data.ccd`: 4,161 rows of plan GUID, LAMS title and description keys,
+type, subtype, colour, icon GUID and value — and then, ⚠️ **not in cwlib**, an array of 485 strings
+of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPDLCSONYCO0046` …) that read like PSN
+entitlement names; 2 bytes of count and 485 × 17 bytes are the 8,247 the file had left. What they
+key is not known.
 
 ## The game's textures — `GTF ` and `TEX `
 

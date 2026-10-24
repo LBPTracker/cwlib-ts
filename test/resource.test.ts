@@ -81,6 +81,27 @@ test('an uncompressed resource is its payload, with no chunk table', async () =>
   assert.equal(new TextDecoder().decode(resource.data), 'the island geometry goes here');
 });
 
+test('a compressed resource with zero chunks stores its payload as it is', async () => {
+  // ❗ 71 of the game's palettes and 51 of its outfit lists are written so: the
+  // table says zero chunks and the payload follows it to the dependency table.
+  // This read them as "chunk data ends at 0x16" until it knew.
+  const payload = new TextEncoder().encode('a palette too small to shrink');
+  const bytes = new Uint8Array(0x16 + payload.length + 4);
+  bytes.set(new TextEncoder().encode('PALb'), 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 0x01a903f9, false);
+  view.setUint32(8, 0x16 + payload.length, false); // the dependency table
+  bytes[0x10] = 7; // compressionFlags
+  bytes[0x11] = 1; // isCompressed
+  view.setUint16(0x12, 1, false); // the 0x0001
+  view.setUint16(0x14, 0, false); // zero chunks
+  bytes.set(payload, 0x16);
+  const resource = await loadResource(bytes, nodeInflate);
+  assert.equal(resource.isCompressed, true);
+  assert.equal(resource.chunks.length, 0);
+  assert.equal(new TextDecoder().decode(resource.data), 'a palette too small to shrink');
+});
+
 test('every level in the corpus parses, and chunk data ends on the dependency table', async (t) => {
   const levels = await findLevels(CORPUS);
   if (levels.length === 0) {
