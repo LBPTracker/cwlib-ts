@@ -6,7 +6,7 @@ levels. Addresses are **vaddrs** in the eboot; [lbptracker's eboot-re.md](../../
 the delta trap. What the engine *does* with this data — the sampler, the 27 `Params`, the clock,
 the voice pool — is in [lbptracker's synth-engine.md](../../lbptracker/steering/synth-engine.md); the containers it arrives in are in
 [level-files.md](level-files.md). The sampler patch's layout is here (*`RInstrument`*, read by
-`src/resources/rinstrument.ts`); what the engine makes of it — the zone a note lands in, the unison stack,
+`src/resources/instrument.ts`); what the engine makes of it — the zone a note lands in, the unison stack,
 the playback formula — and the clip the eboot builds per placement, `Key` and `Scale`, the
 board's size limit and the thermometer are lbptracker's, in
 [sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md).
@@ -158,7 +158,7 @@ the multiplier is the element size, not a coincidence.
 ## `RInstrument` — serialiser at `v0xc68a70`
 
 The resource `PInstrument.Instrument` names: type 48, magic `INSb`, a `.rinst` in the FileDB.
-`src/resources/rinstrument.ts` reads it. The serialiser builds field names with `sprintf("%s_%d", base, i)`,
+`src/resources/instrument.ts` reads it. The serialiser builds field names with `sprintf("%s_%d", base, i)`,
 so the save format has flat numbered fields rather than nested arrays; each array is preceded by an
 explicit count, and the integers are varints.
 
@@ -173,7 +173,7 @@ explicit count, and the integers are varints.
 | `Arpeggiate` | 1 | bool | arpeggiator on/off |
 
 ✔ **Measured across the game's 68 `.rinst` files** (lbptracker's `tools/ExtractGuid.java` pulls
-them out): every one parses to its payload's last byte (`test/rinstrument.test.ts`), at revisions
+them out): every one parses to its payload's last byte (`test/instrument.test.ts`), at revisions
 `0x3ba`, `0x3d5` and `0x3f9` (subVersions `0x1a3`, `0x1a6`). What the values mean to the engine —
 `Splitnotes` descending with each bound owning the zone above it, `Numstack` **not** the count of
 slots in use (test `SampleGuids[i] != 0` for that), `basenote` a MIDI note — is

@@ -16,7 +16,7 @@ Rules for this repository's steering, the same as lbptracker's:
   lives here. A fact about what the game *does* with them — the sampler, the clock, the mix, the
   editor's limits — lives in lbptracker's `steering/`.
 - **The code splits the same way.** Every resource's reader, writer and the types that hold its
-  data live here, whichever project needs them — `RInstrument` included (`src/resources/rinstrument.ts`).
+  data live here, whichever project needs them — `RInstrument` included (`src/resources/instrument.ts`).
   What a project does with that data — lbptracker's sampler model and zone walk, lbprender's
   scene — stays in that project. Pointers go both ways, as plain relative links to the sibling
   checkout (`../../lbptracker/steering/…` from a file here); prefer pointing down, from
@@ -40,7 +40,7 @@ Steering files (read on demand, per the hints):
   streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB, its GUID remap and FARCs, its meshes (`RMesh`,
   `PRenderMesh`), decorations and stickers, textures (`GTF `, `TEX `), materials (`RGfxMaterial`), bevels (`RBevel`), physics materials (`RMaterial`), backdrops (`RStaticMesh`), level settings, palettes, outfit lists, joint settings, pins and the costume index, the corpora, the version bound, and the technique for finding a reader bug.
 - [steering/sequencer-data-model.md](steering/sequencer-data-model.md) — **read before touching
-  `project.ts`, `notes.ts`, `chips.ts` or `rinstrument.ts`**: the `PSequencer` and `PInstrument`
+  `project.ts`, `notes.ts`, `chips.ts` or `resources/instrument.ts`**: the `PSequencer` and `PInstrument`
   schemas with field names and struct offsets, `Colour`, the `RInstrument` and sample-slot
   layouts, the stream conventions (endianness, stream order, varints,
   revision gates), the 4-byte note record and how it was confirmed, and the circuit board

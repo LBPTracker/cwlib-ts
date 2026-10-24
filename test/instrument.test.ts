@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { loadResourceFile } from '../src/platform/node.ts';
-import { readInstrument, usedSlots } from '../src/resources/rinstrument.ts';
+import { readInstrument, usedSlots } from '../src/resources/instrument.ts';
 import { ByteReader } from '../src/io/stream.ts';
 
 /**

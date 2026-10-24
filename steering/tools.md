@@ -72,10 +72,10 @@ files.
 
 | variable | read by | meaning |
 |---|---|---|
-| `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts`, `test/texture.test.ts` (`textures/`), `test/rinstrument.test.ts` (`rinst/`) | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
+| `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts`, `test/texture.test.ts` (`textures/`), `test/instrument.test.ts` (`rinst/`) | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
 | `LBP_LEVELS` | `test/resource.test.ts`, `test/project.test.ts`, `test/plan.test.ts`, `test/archive.test.ts`, `dev/verify-levels.ts`, `dev/walk-levels.ts`, `dev/board-probe.ts` | a toolkit checkout's `tools/sequencerdump`, the folder holding `data*`; the PS3 levels are its `data`. **No default**: the corpus tests skip without it, and the scripts stop unless given a directory |
 | `LBP_PLANS` | `test/write.test.ts` | the gallery plans, overriding `$LBP_FIXTURES/plans` |
-| `LBP_RINST` | `test/rinstrument.test.ts` | the game's 68 `.rinst` files, overriding `$LBP_FIXTURES/rinst` (lbptracker's `tools/ExtractGuid.java` writes them) |
+| `LBP_RINST` | `test/instrument.test.ts` | the game's 68 `.rinst` files, overriding `$LBP_FIXTURES/rinst` (lbptracker's `tools/ExtractGuid.java` writes them) |
 | `LBP_GAME` | `test/archive.test.ts`, `test/physics-material.test.ts`, `test/resources.test.ts`, `test/mesh.test.ts`, `test/texture.test.ts`, `test/material.test.ts`, `test/staticmesh.test.ts`, `test/story.test.ts`, and every census of the game through `dev/game.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`. **No default**: the FileDB and FARC tests skip without it, and every census of the game stops (`dev/game.ts`) |
 | `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, required; and the interpreter that queries it, `python` on the PATH unless this names another |
 | `DRY_DB` | `dev/dry-search.ts` | the same index, required |
