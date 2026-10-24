@@ -464,11 +464,16 @@ const STREAMING_PLAN = 0xcc;
  * byte  data[length]         /
  * ...   inventoryData        head >= 0x197 and not streaming -- never read here
  * ```
+ *
+ * ⚠️ **`readers` is written to**: a `WORLD` reader is installed on it, because
+ * the part readers close over this very map (`partReaders`), and a copy would
+ * be a map nothing looks at. Hence a `Map` and not a `ReadonlyMap`, and a fresh
+ * `partReaders()` when none is given -- share one across files only knowingly.
  */
 export async function readPlan(
   bytes: Uint8Array,
   inflate: Inflate,
-  readers: ReadonlyMap<string, PartReader>,
+  readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, flags, s } = await open(bytes, inflate);
   if (revision.subVersion >= STREAMING_PLAN) s.bool();
@@ -478,8 +483,7 @@ export async function readPlan(
   // and its WORLD part is read like an inner world of a level: its Things are
   // the part's value, not the plan's. Installed on the map the readers close
   // over, as `readLevel` does, and only where nothing installed one already.
-  const map = readers as Map<string, PartReader>;
-  if (!map.has('WORLD')) map.set('WORLD', (self) => readWorld(self, map));
+  if (!readers.has('WORLD')) readers.set('WORLD', (self) => readWorld(self, readers));
   const count = inner.i32();
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(inner, readers));
@@ -581,11 +585,16 @@ export async function readChunkIslands(
  * are all in ordinary plans beside them. This exists so that an adventure that
  * *does* put a sequencer in an island is not invisible, and because a `CHKb`
  * counted as "not a level" is a file nobody can look inside.
+ *
+ * ⚠️ **`readers` is written to**: a `WORLD` reader is installed on it, because
+ * the part readers close over this very map (`partReaders`), and a copy would
+ * be a map nothing looks at. Hence a `Map` and not a `ReadonlyMap`, and a fresh
+ * `partReaders()` when none is given -- share one across files only knowingly.
  */
 export async function readChunk(
   bytes: Uint8Array,
   inflate: Inflate,
-  readers: ReadonlyMap<string, PartReader>,
+  readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, plans } = await readChunkIslands(bytes, inflate);
   const things: (Thing | undefined)[] = [];
@@ -611,11 +620,16 @@ export async function readChunk(
  * `readers` is the part table; a Thing carrying a part that is not in it throws
  * `UnimplementedPartError` naming that part, which is how the reader gets built
  * out — run it over the corpus, implement whatever it names, run it again.
+ *
+ * ⚠️ **`readers` is written to**: a `WORLD` reader is installed on it, because
+ * the part readers close over this very map (`partReaders`), and a copy would
+ * be a map nothing looks at. Hence a `Map` and not a `ReadonlyMap`, and a fresh
+ * `partReaders()` when none is given -- share one across files only knowingly.
  */
 export async function readLevel(
   bytes: Uint8Array,
   inflate: Inflate,
-  readers: ReadonlyMap<string, PartReader>,
+  readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, s } = await open(bytes, inflate);
 
@@ -633,16 +647,15 @@ export async function readLevel(
   // That is one of the 43 archive levels, `5576f758`, and it is why this line
   // does not say `new Map(readers)`.
   let outermost = true;
-  const worldReaders = readers as Map<string, PartReader>;
-  worldReaders.set('WORLD', (self) => {
-    if (!outermost) return readWorld(self, worldReaders);
-    const things = readWorld(self, worldReaders, false);
+  readers.set('WORLD', (self) => {
+    if (!outermost) return readWorld(self, readers);
+    const things = readWorld(self, readers, false);
     outermost = false;
     throw new StopParse(things);
   });
 
   try {
-    readThingRef(s, worldReaders);
+    readThingRef(s, readers);
   } catch (error) {
     if (error instanceof StopParse) return { revision, things: error.things, chunks: chunkFiles.get(s) ?? [] };
     throw error;
