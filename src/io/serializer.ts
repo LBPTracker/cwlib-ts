@@ -456,6 +456,26 @@ export class Serializer {
     return out;
   }
 
+  /**
+   * `intVector` for 64-bit values, exact: the same byte planes, up to eight,
+   * and without `COMPRESSED_VECTORS` a plain array of `u64`s (cwlib's
+   * `Serializer.longvector`). A script's integer constants are one.
+   */
+  longVector(): bigint[] {
+    if ((this.compressionFlags & COMPRESSED_VECTORS) === 0) {
+      return this.array((self) => self.u64Big());
+    }
+    const count = this.count();
+    if (count === 0) return [];
+    const width = this.u8();
+    if (width > 8) throw new SerializerError(`a 64-bit vector ${width} bytes wide`);
+    const out = new Array<bigint>(count).fill(0n);
+    for (let plane = 0; plane < width; plane += 1) {
+      for (let i = 0; i < count; i += 1) out[i]! |= BigInt(this.u8()) << BigInt(plane * 8);
+    }
+    return out;
+  }
+
   /** Step over `n` bytes nothing keeps. */
   skip(n: number): void {
     this.need(n);

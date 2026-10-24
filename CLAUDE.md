@@ -71,7 +71,7 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 
 ## Working here
 
-- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 105
+- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 106
   tests on 2026-10-25, the corpus ones skipping without `fixtures/` beside them or without
   `LBP_GAME` and `LBP_LEVELS` (`steering/tools.md`).
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package

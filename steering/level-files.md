@@ -915,6 +915,47 @@ block     per bone 8 bytes (i32 animHash, i8 parent, firstChild, nextSibling, pa
 - `posOffset` and `posScale` are read and not applied, as cwlib does; `locatorKeys`' bytes are
   skipped.
 
+## Scripts — `RScript`
+
+`readScript` in `src/resources/script.ts`: magic `FSHb`, dependency type 11, FileDB paths
+`gamedata/scripts/….ff` — one compiled Fish class, the code a Thing's `SCRIPT` part names. The
+walk is cwlib's `resources/RScript.java` and `structs/script/*` (ennuo/toolkit `d6a2ef8`) without
+a change, and it holds: ✔ **534 of 534 in the four FARCs read to the last byte of their payload,
+over 60 head words** (`dev/script-census.ts`, `test/script.test.ts`, 2026-10-25).
+
+```
+(<= 0x360) resource upToDateScript
+string className, resource superClassScript, modifiers
+typeReferences[]     u8 machineType, u8 fishType, i8 dimensionCount, u8 arrayBaseMachineType,
+                     resource script, i32 typeName
+fieldReferences[], functionReferences[]          i32 type, i32 name
+fieldDefinitions[]   modifiers, i32 type, i32 name
+propertyDefinitions[] … then i32 getFunction, i32 setFunction
+functionDefinitions[] … then four ranges into the shared tables (>= 0x3d9 u16 begin, u16
+                     length; before, two i32 bounds), i32 stackSize
+sharedArguments[]    i32 type, i32 offset
+i32 n, n × u64 instructions      i32 n, n × i16 line numbers
+localVariables[]     modifiers, i32 type, i32 name, i32 offset
+intVector ASCII starts, i32 n, n bytes      intVector UTF-16 starts, i32 n, 2n bytes
+(>= 0x30c) longVector s64 constants, i32 n, n × f32 constants, (>= 0x1ec) GUID[] depending
+modifiers: i16 from 0x3d9, i32 before
+```
+
+- ⚠️ **Only LBP3's scripts are measured**: every one of the 534 is at `0x3ef`, `0x3f8` or
+  `0x3f9` (subVersions `0x10d`–`0x1ae`), so the gates at `0x1ec`, `0x30c`, `0x360` and
+  `0x3d9` are cwlib's, uncrossed by a real file. Below `0x1ec` the reader refuses, as cwlib does
+  ("Inline script format not supported").
+- The tables hold together: every function's four ranges tile their shared tables in order, from
+  0 to the table's end; every member's name is inside the ASCII pool and its type inside the type
+  table; every property's accessors are -1 or a function. 0–422 functions, 0–13,099
+  instructions (270,057 in all, 168 distinct low bytes), 1–686 ASCII and 1–41 wide strings, 0–87
+  depending GUIDs; 526 have a superclass.
+- A type reference's `typeName` is **-1 on the 2,556 with no script** — the built-in types, which
+  the pool does not name. The ASCII pool's first string is empty in all 534.
+- Six scripts have no line numbers, their functions' line ranges all empty; six have `s64`
+  constants. An instruction is kept as its 64 bits (`bytecode`, a `BigUint64Array`): its
+  opcode is the low byte, and cwlib's per-class decoding of the rest is not ported.
+
 ## Slots — `RSlotList` and `RPacks`
 
 `readSlotList` (`src/resources/slot-list.ts`, magic `SLTb`) and `readPacks`

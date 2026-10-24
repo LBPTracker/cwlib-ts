@@ -38,6 +38,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `slot-list.ts`, `packs.ts` | `RSlotList` (`SLTb`) and `RPacks` (`PCKb`): slots — a level's id, root, name, author, labels — and the DLC packs that hold them |
 | `joint-settings.ts`, `pins.ts`, `cached-costume-data.ts` | `RJoint` (`JNTb`), what a kind of joint does; `RPins` (`PINb`), the pin definitions; `RCachedCostumeData` (`CCDb`), the costume index |
 | `animation.ts` | `RAnimation` (`ANMb`): a skeletal animation — the bones, then per frame the rotations, positions, scales and morph weights of the bones that move, unpacked to floats |
+| `script.ts` | `RScript` (`FSHb`): a compiled Fish class — its type, field, property and function tables, the 64-bit instructions, the string and constant pools |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |
 | `slot.ts`, `network.ts` | the structs more than one resource or part reads: a slot, a PSN identity |
