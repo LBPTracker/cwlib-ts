@@ -64,8 +64,8 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 
 ## Working here
 
-- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 92
-  tests on 2026-10-19, the corpus ones skipping when `fixtures/` is not beside them.
+- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 96
+  tests on 2026-10-24, the corpus ones skipping when `fixtures/` is not beside them.
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package
   gets. ❗ **Consumers run `dist/*.js`, never `src/`**: Node 24 refuses to strip types under
   `node_modules`. The README has why and how the `exports` map keeps the specifiers `.ts`.
