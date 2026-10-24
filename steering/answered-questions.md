@@ -358,7 +358,7 @@ every gate as code, including the ones no corpus file exercises yet.
   running 10335..17233 and the same Thing's `POS` starting there and reading a Thing 8 bytes later.
   `readWorld` stopped after `PWorld.things`, which is all `readLevel` ever needs — its outermost
   world ends the parse — and so never read `maxVel` and the ~100 fields cwlib's `PWorld.serialize`
-  has after it. With the rest of `PWorld` read (`readWorldTail` in `src/level.ts`), all three
+  has after it. With the rest of `PWorld` read (`readWorldTail` in `src/things/level.ts`), all three
   islands read and each plan's Thing array ends on its last byte, the check `readPlan` makes.
 
 ⚠️ **The trap to keep**: a reader that stops early because its caller stops there is a reader of a

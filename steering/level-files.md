@@ -5,7 +5,7 @@ Read before writing a parser for any LBP resource, save or archive. Everything b
 Thing graph is open is in [sequencer-data-model.md](sequencer-data-model.md); the implementation
 is this repository's `src/`, and lbptracker's `tools/lbpres.py` is the Python reference for the container.
 
-Everything here is read by `src/resource.ts` and written back by
+Everything here is read by `src/io/resource.ts` and written back by
 `writer.ts` — the container, the chunk table and the dependency table have a write side since
 2026-09-09, and [export-to-game.md](export-to-game.md) is where that lives.
 
@@ -66,7 +66,7 @@ The offsets are a header with every field, which every level and plan the reader
   took "96 chunks" out of the payload's own first bytes.
 - ❗ **A resource is told from everything else by its first four bytes, never by its name.** A
   backup is full of `ICON0.PNG`, `PARAM.SFO`, costumes and photographs, and every resource is
-  named after its SHA-1. `looksLikeLevel` in `src/backup.ts` accepts `LVLb`,
+  named after its SHA-1. `looksLikeLevel` in `src/sequencer/backup.ts` accepts `LVLb`,
   `PLNb` and `CHKb`.
 
 ### The dependency table
@@ -75,7 +75,7 @@ Measured 2026-09-05. It sits **after** the payload, at `depsOffset`: `u32 count`
 `u8 kind` — 1 for a 20-byte SHA-1, 2 for a `u32` GUID — followed by a `u32` resource type. ✔ On
 "Music Gallery #3" the walk of 160 variable-length entries ended at exactly the last byte of the
 file (`0x52d02` of `0x52d02`), which is the check that the reading is right. `readDependencies` in
-`src/resource.ts`.
+`src/io/resource.ts`.
 
 ❗ **A hashed dependency is a USER resource and a GUID one is a GAME asset.** The hashed ones are in
 the public archive under the same URL scheme as the level; the GUIDs are in the game's FileDB and
@@ -123,7 +123,7 @@ The `R*` resource-type ids themselves come from the eboot's ordered name list (`
 `RLevel` → `PWorld.things`; `RPlan` → its Thing array. **The stream is strictly sequential**:
 references are inline ids that expand at their first mention, parts carry no lengths, and
 `PWorld.things` is an array of them, so reaching the 443rd Thing means having fully read the 442
-before it. That is why `partReaders()` in `src/parts.ts` has **50** readers rather
+before it. That is why `partReaders()` in `src/things/parts.ts` has **53** readers rather
 than the nine part types that ever share a Thing with a sequencer — count it, do not quote it.
 
 Per Thing, in stream order — every gate below was taken from cwlib's `Thing.java` and then
@@ -159,7 +159,7 @@ Three traps that were each found on the first file of a new kind:
   the outermost may throw `StopParse`; `WORLD` was once installed on a *copy* of the reader map.
 - ⚠️ **Nine of the fifteen LBP1 divergences were a version gate that existed in the reader's own
   comment and not in its code.** Parts were ported with their gates documented and then written
-  for the LBP3 branch only; a grep for "at or below", "above 0x" and "regenerated" in `parts.ts`
+  for the LBP3 branch only; a grep for "at or below", "above 0x" and "regenerated" in `src/things/parts/`
   is a work list for anything still unported. And `connectorPos` is a `vectorarray`, whose cwlib
   return type is `Vector4f[]`: **a helper's name does not say its element width.**
 
@@ -185,7 +185,7 @@ anything that touches a field width against them before believing the ten-level 
 ## Plans — `PLNb`
 
 A plan is a saved Thing rather than a world — a costume, a vehicle, or a music sequencer copied into
-somebody's popit. `readPlan` in `src/level.ts` opens one and `readLevelProject`
+somebody's popit. `readPlan` in `src/things/level.ts` opens one and `readLevelProject`
 dispatches on the magic. `RPlan` is four fields and only the third matters:
 
 ```
@@ -330,7 +330,7 @@ len-0x1c sha1     hashinate      HMAC-SHA1 over the archive, rev > 2 (Vita: len-
 `fatOffset = len - 8 - entryCount*0x1c - 0x14` (rev > 2), minus 4 more on rev 5. The save key is
 skippable; the FAT alone gets every resource out. The archive is cut into **0x240000-byte chunks**,
 one file each, and each chunk is XXTEA'd on its own. ⚠️ **Only single-chunk saves are measured**;
-`src/savearchive.ts` verifies every resource against the SHA-1 in the table,
+`src/archives/savearchive.ts` verifies every resource against the SHA-1 in the table,
 which turns that unmeasured boundary into a loud failure rather than a corrupt level.
 
 ✔ Measured 2026-09-04 on `BCES00850LEVEL01EE7CEE/0` (472,960 bytes): 28 resources, **28 of 28
@@ -341,7 +341,7 @@ table — ennuo's `cwlib/util/Crypto.java` + `SaveArchive.java`, and Zaprit's
 a site can serve the same level as a backup zip and as loose resources because it holds the
 plaintext and *builds* the save on the way out. The encryption is something a download acquires.
 
-- ❗ `PARAM.SFO` is not encrypted either: `src/psf.ts` reads `SUB_TITLE`, which is
+- ❗ `PARAM.SFO` is not encrypted either: `src/archives/psf.ts` reads `SUB_TITLE`, which is
   how the pages title a drop "FJ's Music Hub by Festerd_Jester" rather than `32406766.zip`.
 - ❗ **`FAR4` is not `FARC`.** The game's own `base_001.farc` is a different archive family, with
   no save key and no hashinate: *The game's archives* below.
@@ -355,7 +355,7 @@ plaintext and *builds* the save on the way out. The encryption is something a do
 
 Not a game format: a `.mod` is Craftworld Toolkit's own package, defined by nothing but cwlib's
 `types/mods/Mod.java`, and the game never sees one — the toolkit installs its rows into a FileDB
-and a FARC. `src/mod.ts` reads and writes it; the page opens one like a zip and
+and a FARC. `src/archives/mod.ts` reads and writes it; the page opens one like a zip and
 the Import/Export view writes one around the `.plan` ([export-to-game.md](export-to-game.md)).
 
 | entry | what |
@@ -389,7 +389,7 @@ here. Both were cwlib's reading first (`types/databases/FileDB.java` and
 `types/archives/FileArchive.java`, toolkit checkout at `fee22399`) and are measured on LBP3 PS4
 1.28's own `output/orbisguids.map` and its four FARCs, 2026-10-19.
 
-### The FileDB — `readFileDB` in `src/filedb.ts`
+### The FileDB — `readFileDB` in `src/archives/filedb.ts`
 
 ```
 u32  revision           (revision >> 16) >= 0x148 picks the LBP3 row
@@ -415,7 +415,7 @@ this disk**; the LBP2 row is cwlib's and pinned only by a synthetic test.
 - cwlib rewrites a path starting with `.` (some Vita databases store only the extension) to a
   hash-named one. Not ported: no such database was on this disk.
 
-### FARC — `openFarc` in `src/farc.ts`
+### FARC — `openFarc` in `src/archives/farc.ts`
 
 ```
 0              byte[]   the resources, back to back from offset 0
@@ -446,7 +446,7 @@ tile `[0, fatOffset)` exactly — no gap, no overlap, no padding — and the tab
   PNG, JPEG, `GTF ` textures, and several hundred headerless blobs. 51 `INSb` instruments sit in
   `base_001.farc` alone.
 
-### The GUID remap — `readGuidRemap` in `src/filedb.ts`
+### The GUID remap — `readGuidRemap` in `src/archives/filedb.ts`
 
 `output/orbisguids.remap` sits beside the FileDB, and a resolver that skips it loses most of the
 game's materials and textures: **the PS4 build re-exported its render assets under new GUIDs, and
@@ -498,7 +498,7 @@ with anything in the span below the bound: *28* in [open-questions.md](open-ques
 
 ## The game's meshes — `RMesh`
 
-`readMesh` in `src/mesh.ts`: magic `MSHb`, dependency type 2, FileDB paths ending `.mol`. The field
+`readMesh` in `src/resources/mesh.ts`: magic `MSHb`, dependency type 2, FileDB paths ending `.mol`. The field
 list is cwlib's `resources/RMesh.java` and `structs/mesh/` (toolkit `fee22399`) and was a hypothesis
 until measured on **every `MSHb` in LBP3 PS4 1.28's four FARCs, 5,941 of them**, revisions `0x237`
 to `0x3f9` and subVersions up to `0x16b`, 4,896,968 vertices — `dev/mesh-census.ts`, 2026-10-19.
@@ -553,7 +553,7 @@ What each convention rests on, every one a count over the same 5,941:
 
 ### `PRenderMesh` — what draws a Thing
 
-`readRenderMesh` in `src/parts.ts` returns `RenderMeshPart`: the mesh reference, the bone Things,
+`readRenderMesh` in `src/things/parts/render-mesh.ts` returns `RenderMeshPart`: the mesh reference, the bone Things,
 the animation and where in it, `editorColor`, `castShadows`, `visibilityFlags`,
 `poppetRenderScale`. Over the 93 levels that open from lbptracker's `fixtures/levels`, the toolkit
 checkout and the archive sample — 13,033 render meshes, 2026-10-19:
@@ -758,7 +758,7 @@ What the game does with each value is not measured here.
 
 ## Backdrops — `RStaticMesh`
 
-`readStaticMesh` in `src/staticmesh.ts`: magic `SMHb`, dependency type 44, FileDB paths
+`readStaticMesh` in `src/resources/staticmesh.ts`: magic `SMHb`, dependency type 44, FileDB paths
 `…/palettes/….smh`, named by `PLevelSettings.backdropMesh`. cwlib's `SerializedResource`,
 `RStaticMesh.java` and `structs/staticmesh/` (toolkit `fee22399`), measured on **all 47 in the four
 FARCs, revisions `0x335`–`0x3f9`: 47 of 47 read** (`dev/staticmesh-census.ts`, 2026-10-20).
@@ -799,7 +799,7 @@ what they hold is not measured.
 
 ## Bevels — `RBevel`
 
-`readBevel` in `src/bevel.ts`: magic `BEVb`, dependency type 24, FileDB paths
+`readBevel` in `src/resources/bevel.ts`: magic `BEVb`, dependency type 24, FileDB paths
 `gamedata/bevels/….bev`, named by `PGeneratedMesh.bevel`. The field list is cwlib's
 `resources/RBevel.java` and `BevelVertex.java` (toolkit `fee22399`), which have no revision gates,
 and it holds: **256 of 256 bevels in the four FARCs read to the last byte of their payload**, revisions
@@ -829,7 +829,7 @@ f32 fixedBevelSize, bool spongy, resource softPhysicsSettings, f32 textureRepeat
 
 ## The game's textures — `GTF ` and `TEX `
 
-`readTexture` in `src/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is
+`readTexture` in `src/resources/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is
 `TEX `, and so are 2,944 of the game's own (UI icons, stickers from LBP2's levels). Neither is a
 resource: no revision, no header flags, no dependency table — the magic, then for `GTF ` a 24-byte
 big-endian `CellGcmTexture`, then the same chunk table a resource has. The layouts were cwlib's
@@ -899,7 +899,7 @@ and refuses the others.
 
 ## The game's materials — `RGfxMaterial`
 
-`readMaterial` in `src/material.ts`: magic `GMTb`, dependency type 7, FileDB paths
+`readMaterial` in `src/resources/material.ts`: magic `GMTb`, dependency type 7, FileDB paths
 `gamedata_orbis/gmat/….gmat`, named by 12,344 of the game's 12,403 mesh primitives — **by an old
 GUID, through the remap, on 11,667 of them**. The field list is cwlib's
 `resources/RGfxMaterial.java` and `structs/gmat/` (toolkit `fee22399`), measured on **every `GMTb`
@@ -998,7 +998,7 @@ absent, so the suite passes on a machine without the game.
 
 ## The reader's version bound — `LBP3_MIN_VERSION = 0x3b7`
 
-`src/serializer.ts` refuses anything older. Two measurements put it at `0x3b7`
+`src/io/serializer.ts` refuses anything older. Two measurements put it at `0x3b7`
 rather than the corpus's own `0x3b8`: cwlib has exactly one gate at `0x3b8` in its whole tree
 (`PPhysicsTweak`'s `version > 0x3b8 && configuration == 0xd`, which `readPhysicsTweak` has), and
 all four `0x3b7` levels in the archive sample parse the moment the bound allows them.

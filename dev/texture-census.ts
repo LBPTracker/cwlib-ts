@@ -1,6 +1,6 @@
 /**
  * Every `GTF ` and `TEX ` in an installed game's FARCs through `readTexture`,
- * and the checks behind each layout convention in `src/texture.ts`:
+ * and the checks behind each layout convention in `src/resources/texture.ts`:
  *
  *   node dev/texture-census.ts [png-dir]     LBP_GAME required
  *

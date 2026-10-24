@@ -4,7 +4,7 @@
  *
  * ⚠️ **Below subVersion `0x107` a mask bit is not a part index.** `PCreatorAnim`
  * has bit `0x29` and every part above `0x28` sits one bit higher (`partBit` in
- * `src/thing.ts`, and the game's Thing loader at `v0xd49d92`). Read with the live
+ * `src/things/thing.ts`, and the game's Thing loader at `v0xd49d92`). Read with the live
  * bits, an LBP2 level's `PWormhole` came out as a `PQuest` of type 2 and the level
  * would not open. The Things below are built byte by byte; the part bodies are
  * real ones, copied out of two levels on Bonsai (#24 and #14163).

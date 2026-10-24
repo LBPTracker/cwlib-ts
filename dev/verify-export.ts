@@ -8,7 +8,7 @@
  *    out as a plan, read back and compared -- settings field by field and note
  *    records byte for byte.
  * 2. **Chassis diff.** The parts a sequencer carries that hold no music are
- *    written from constants (`src/write-plan.ts`); this dumps the byte span of
+ *    written from constants (`src/sequencer/write-plan.ts`); this dumps the byte span of
  *    each one from our output and from the real plan beside it and reports the
  *    first difference.
  *

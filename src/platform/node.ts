@@ -26,7 +26,7 @@ export const nodeInflateRaw: Inflate = (deflated) =>
  * header, so a chunk written here starts `0x68` exactly as the game's do, and
  * a hex dump of our output lines up with a hex dump of theirs. The default 15
  * would write `0x78` -- valid, inflatable, and visibly not what LBP writes.
- * See steering/level-files.md and the header of `src/writer.ts`.
+ * See steering/level-files.md and the header of `src/io/writer.ts`.
  */
 export const nodeDeflate: Deflate = (raw) =>
   new Uint8Array(deflateSync(raw, { windowBits: 14, level: 9 }));

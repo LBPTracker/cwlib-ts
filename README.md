@@ -4,34 +4,41 @@ Reading LittleBigPlanet's serialised resources, in TypeScript, with no dependenc
 checked against rather than ported from.
 
 ```ts
-import { loadResource } from '@lbptracker/cwlib/resource.ts';
-import { readLevel, musicSequencers } from '@lbptracker/cwlib/level.ts';
+import { readThings, musicSequencers } from '@lbptracker/cwlib/things/level.ts';
 import { nodeInflate } from '@lbptracker/cwlib/platform/node.ts';
 
-const level = readLevel(loadResource(bytes, nodeInflate));
-console.log(level.things.length, musicSequencers(level).length);
+const level = await readThings(bytes, nodeInflate);
+console.log(level.things.length, musicSequencers(level.things).length);
 ```
 
 ## What it reads
 
+Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<module>.ts`.
+
 | | |
 |---|---|
-| `resource.ts` | the `LVLb` / `PLNb` container: revision, branch, the zlib chunk table |
-| `stream.ts` | the big-endian reader, and `Revision` with the version and branch gates |
-| `thing.ts`, `parts.ts` | the Thing graph and its part readers — `partReaders().size` is the number (50 as of 2026-09-06) |
-| `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
-| `project.ts`, `notes.ts` | the music sequencer as data — note records, chaining, automation |
+| **`io/`** | |
+| `resource.ts` | the `LVLb` / `PLNb` / … container: revision, branch, the zlib chunk table, the dependency table |
+| `stream.ts`, `serializer.ts` | the big-endian readers: the fixed-width header one, and the payload's with its revision gates and compressed integers |
+| `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
+| **`archives/`** | |
+| `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily), its FileDB (GUID → path, SHA-1) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
-| `mod.ts` | Craftworld Toolkit `.mod` packages, read and written |
-| `filedb.ts`, `farc.ts` | the game's FileDB (GUID → path, SHA-1), its GUID remap (old GUID → new) and its FARC archives (SHA-1 → bytes, read lazily) |
-| `mesh.ts` | the game's `RMesh` (`MSHb`): positions, normals, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
+| `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages, a stored/deflated ZIP reader and writer, `PARAM.SFO` |
+| **`things/`** | |
+| `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
+| `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
+| **`resources/`** | |
+| `mesh.ts` | `RMesh` (`MSHb`): positions, normals, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
-| `staticmesh.ts` | the game's `RStaticMesh` (`SMHb`): a level's backdrop — positions, normals, two UV channels, a triangle list and a material per primitive |
-| `bevel.ts` | the game's `RBevel` (`BEVb`): the profile a shape's edge is swept with, its material slots and settings |
-| `material.ts` | the game's `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
-| `psf.ts`, `zip.ts` | `PARAM.SFO`, and a stored/deflated ZIP reader and writer |
-| `backup.ts` | the pile: a folder, a zip of one, or a save, in and resources out |
-| `platform/` | the inflate adapters and the FARC's file access, Node and browser |
+| `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
+| `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
+| `rinstrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
+| **`sequencer/`** | |
+| `project.ts`, `notes.ts`, `chips.ts` | the music sequencer as data — note records, chaining, automation, the chips' plans and colours |
+| `write-plan.ts` | a sequencer written back out as a `.plan` |
+| `backup.ts` | the pile: a folder, a zip of one, or a save, in and sequencers out |
+| **`platform/`** | the inflate adapters and the FARC's file access, Node and browser |
 
 ## Two things to know before using it
 

@@ -3,7 +3,7 @@
  *
  *   node ../cwlib-ts/dev/board-probe.ts [dir]
  *
- * `boardCell` in `src/level.ts` exists because an **open** circuit board
+ * `boardCell` in `src/things/level.ts` exists because an **open** circuit board
  * stores no `CompactComponent.x/y` at all: the components are Things in the
  * world and the cell has to come back out of the matrices. This script is the
  * evidence for the formula it uses, and it is here so the next session can

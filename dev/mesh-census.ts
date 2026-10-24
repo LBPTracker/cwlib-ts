@@ -1,6 +1,6 @@
 /**
  * Every `MSHb` in an installed game's FARCs through `readMesh`, and the checks
- * behind each convention in `src/mesh.ts`:
+ * behind each convention in `src/resources/mesh.ts`:
  *
  *   node dev/mesh-census.ts            LBP_GAME required
  *

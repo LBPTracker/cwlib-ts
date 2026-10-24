@@ -257,7 +257,7 @@ export class Writer {
    *
    * ⚠️ **The editor XML-escapes creator text and `decodeEntities` undoes it on
    * read, so a name written back has to be escaped again** or every round trip
-   * strips a layer. `escapeEntities` in `parts.ts` is the pair; this method
+   * strips a layer. `escapeEntities` in `things/parts/entities.ts` is the pair; this method
    * writes exactly the characters it is given and does not guess.
    */
   wstr(value: string): void {

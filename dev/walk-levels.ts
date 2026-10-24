@@ -3,7 +3,7 @@
  *
  *   node ../cwlib-ts/dev/walk-levels.ts [dir]
  *
- * This is the loop that builds `src/thing.ts`'s part table out: a Thing
+ * This is the loop that builds `src/things/thing.ts`'s part table out: a Thing
  * carrying a part with no reader throws `UnimplementedPartError` naming it, so
  * the output is a work list rather than a stack trace. It reports the revision
  * of every file too, because the part list and half the field gates hang off it.

@@ -17,7 +17,7 @@
  * readers on 2026-09-06; see question 28 in `steering/open-questions.md`.
  *
  * ⚠️ **To reach an LBP1 file at all, lower `LBP3_MIN_VERSION` in
- * `src/serializer.ts` by hand** -- the walk refuses `0x272` long before any
+ * `src/io/serializer.ts` by hand** -- the walk refuses `0x272` long before any
  * of this runs, and that bound is deliberate. Put it back afterwards; the golden
  * fixture (`dev/verify-levels.ts`) is what says you did.
  *

@@ -6,7 +6,7 @@ levels. Addresses are **vaddrs** in the eboot; [lbptracker's eboot-re.md](../../
 the delta trap. What the engine *does* with this data — the sampler, the 27 `Params`, the clock,
 the voice pool — is in [lbptracker's synth-engine.md](../../lbptracker/steering/synth-engine.md); the containers it arrives in are in
 [level-files.md](level-files.md). The sampler patch's layout is here (*`RInstrument`*, read by
-`src/rinstrument.ts`); what the engine makes of it — the zone a note lands in, the unison stack,
+`src/resources/rinstrument.ts`); what the engine makes of it — the zone a note lands in, the unison stack,
 the playback formula — and the clip the eboot builds per placement, `Key` and `Scale`, the
 board's size limit and the thermometer are lbptracker's, in
 [sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md).
@@ -45,7 +45,7 @@ ennuo's `ResourceType.java` agrees (`INSTRUMENT = 48`, `SAMPLE = 49`).
 placement carries the popit plan it came from (the Thing's `planGuid`), the icon drawn on it
 (`PInstrument.Icon`) and the tint it wears (`Colour`, below). None of the three reaches playback
 and all are properties of the instrument rather than of the music, except where a creator has
-re-tinted; `src/chips.ts` is the measured
+re-tinted; `src/sequencer/chips.ts` is the measured
 `RInstrument → (plan, icon, colour)` table for **all 68** of the game's instruments, read out of
 their own popit plans.
 
@@ -121,7 +121,7 @@ in the game's own data, and the answer is one colour per **instrument family**: 
 `0x00bfffff` (23 instruments), percussion `0x40ff0100` (15), plucked and the Move pack
 `0xff0000ff` (13), tuned percussion `0x0000ffff` (7), wind and voice `0xff00ffff` (5), SFX
 `0xffffffff` (3), keys `0xffff00ff` (2). The table lives in
-`src/chips.ts` beside the plan GUID and the icon, which the same run re-measured
+`src/sequencer/chips.ts` beside the plan GUID and the icon, which the same run re-measured
 and which agreed with the corpus tally on 50 of 50 rows.
 
 ⚠️ **`0xffffffff` is the neutral tint, and the game draws it as a WHITE chip.** It appears in
@@ -158,7 +158,7 @@ the multiplier is the element size, not a coincidence.
 ## `RInstrument` — serialiser at `v0xc68a70`
 
 The resource `PInstrument.Instrument` names: type 48, magic `INSb`, a `.rinst` in the FileDB.
-`src/rinstrument.ts` reads it. The serialiser builds field names with `sprintf("%s_%d", base, i)`,
+`src/resources/rinstrument.ts` reads it. The serialiser builds field names with `sprintf("%s_%d", base, i)`,
 so the save format has flat numbered fields rather than nested arrays; each array is preceded by an
 explicit count, and the integers are varints.
 
@@ -226,7 +226,7 @@ the engine's, in [lbptracker's sequencer-engine-inputs.md](../../lbptracker/stee
    c8 be 07      varint → 122696   = piano_c5.smp
    ```
 
-   `src/stream.ts` (`varint`) and `serializer.ts` (`COMPRESSED_INTEGERS`) handle
+   `src/io/stream.ts` (`varint`) and `serializer.ts` (`COMPRESSED_INTEGERS`) handle
    it; ⚠️ a compressed corpus hides field-width bugs, [level-files.md](level-files.md).
 4. **Fields are gated on the file's revision** — the gates in the tables above are from the toolkit,
    confirmed by the corpus parsing, and `PMicrochip`'s `Name`, `Components`, `CircuitBoardSizeX/Y`
@@ -394,7 +394,7 @@ is a real divergence ([lbp-modding-toolchain.md](lbp-modding-toolchain.md)).
 components to real Things parented to the board and leaves `Components` empty; the only layout left
 is a 4×4 per Thing. The cell is the world-space translation delta **expressed in the board's own
 basis** — three dot products against the board matrix's columns, each divided by that column's
-squared length, no quaternion — `boardCell` in `src/level.ts`. Measured over the
+squared length, no quaternion — `boardCell` in `src/things/level.ts`. Measured over the
 corpus's 1,030 open-board placements: the bare delta puts 78.93% on a cell (one board is attached
 to something rotated), the board's basis **100.00%**, worst fractional part 0.0004 of a cell, and
 all 1,030 carry the odd-multiple fingerprint. `dev/verify-levels.ts` asserts the stronger property
@@ -436,7 +436,7 @@ divisor = max(rows / NumChannels, 1)              integer division
 channel = clamp(row / divisor, 0, NumChannels-1)
 ```
 
-`channelVolume` in `src/project.ts` bands, carrying `circuitBoardSizeY` out as
+`channelVolume` in `src/sequencer/project.ts` bands, carrying `circuitBoardSizeY` out as
 `Sequencer.boardRows`; in all 51 corpus sequencers with tracks the highest placement sits strictly
 inside its board. ⚠️ The plugin's `mod 8` is a bounds guard on an already-clamped value, not the
 mapping, and a modulo shipped for two months: it re-routes 667 of 1,821 tracks on the ten

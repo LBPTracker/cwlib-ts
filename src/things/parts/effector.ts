@@ -20,7 +20,7 @@ import { Serializer } from '../../io/serializer.ts';
  *
  * ⚠️ **Adding it is also not what unblocked those levels.** They were failing on
  * the *declaration*, in the walk, before the reference was read — see the note
- * beside `UnimplementedPartError` in `src/thing.ts`.
+ * beside `UnimplementedPartError` in `src/things/thing.ts`.
  */
 export function readEffector(s: Serializer): void {
   s.skipVector3(); // posVel

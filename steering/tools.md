@@ -27,7 +27,7 @@ files.
 | `dev/board-probe.ts` | the measurement behind `boardCell` — why the cell of a component on an open board is the delta in the board's basis and not the bare delta |
 | `dev/fetch-plan.ts` | a root level's **plan dependencies**, out of the public archive: `node dev/fetch-plan.ts <root hash or local file>` drops every type-38 dependency into `fixtures/plans/`. How the 17 real sequencer plans behind [export-to-game.md](export-to-game.md) were gathered |
 | `dev/dump-fields.ts` | **every primitive read the parse makes, with its offset and its VALUE** — the technique [level-files.md](level-files.md) calls for, since widths align at any offset and values do not. `dump-fields.ts <file> [PART,PART] [start..end]`, on any level, plan or chunk; a parse that throws still prints what it read. This is how the parts the reader discards were read back out for the writer |
-| `dev/chip-table.ts` | **the check on `src/chips.ts`**, which `tools/InstrumentColours.java` now writes: `(RInstrument GUID) → (planGuid, icon)` tallied over every sequencer in the directories given, reporting any GUID that answers twice. It also tallies `PInstrument.Colour`, which the table cannot get from a corpus at all — a creator re-tints a chip and the corpus then holds the choice, not the default |
+| `dev/chip-table.ts` | **the check on `src/sequencer/chips.ts`**, which `tools/InstrumentColours.java` now writes: `(RInstrument GUID) → (planGuid, icon)` tallied over every sequencer in the directories given, reporting any GUID that answers twice. It also tallies `PInstrument.Colour`, which the table cannot get from a corpus at all — a creator re-tints a chip and the corpus then holds the choice, not the default |
 | `dev/verify-export.ts` | **what proves the plan writer**: every sequencer in the files given written out, read back and compared — settings field by field, note records byte for byte — plus a span-by-span diff of the non-musical parts against the game's own bytes |
 | `dev/mesh-census.ts` | **what proves `readMesh`**: every `MSHb` in the four FARCs read, per revision, then each convention's count — winding against the normals, joints against the bones, weighted vertices against their bone's box, UV edges, the bind poses. The table in [level-files.md](level-files.md), *The game's meshes*, is its output. ⚠️ A convention read off cwlib is a hypothesis until it has a row here: two of its vertex packs failed |
 | `dev/story-census.ts` | **the story levels' chunks**: every `FAR4` under the install's `gamedata/` through `readFar`, every `CHKb` in them through `readThings`, by subVersion, with the islands that do not open grouped — then every shape in them, the counts behind *Shapes* in [level-files.md](level-files.md). ❗ The story chunks are only there, not in the four FARCs |
@@ -54,11 +54,11 @@ files.
   (2026-10-24, 0.2.74), and `readLevel`/`readPlan` add `WORLD`. Count it, do not quote it.
 - ⚠️ **Reach for `archive-sample.mjs` before arguing about reader coverage from the ten-level
   corpus**, which is one creator on one console generation. The 103-level sweep behind
-  `LBP3_MIN_VERSION` took one command, and every real `parts.ts` bug found on 2026-09-05 came out of
+  `LBP3_MIN_VERSION` took one command, and every real part-reader bug found on 2026-09-05 came out of
   a file no PS3 save here contains. It needs the index (`LBP_DRY_DB`) and a Python to query it with
   (`LBP_PYTHON`), because no Node this repo targets ships SQLite.
 - ⚠️ **`tools/RawDump.java` is gone**, deleted 2026-09-02. It walked a level's Thing graph through
-  the toolkit jar and dumped every music sequencer's note records; `src/level.ts`
+  the toolkit jar and dumped every music sequencer's note records; `src/things/level.ts`
   does that now and nothing in the pipeline needs Java. What it leaves behind is
   `fixtures/levels/sequencers.jsonl` — 129,696 rows over **19 files** (⚠️ its `level` field is a
   float, not a name; the source file is `file`), which `verify-levels.ts` still checks the walk

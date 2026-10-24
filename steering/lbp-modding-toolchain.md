@@ -94,7 +94,7 @@ rule — that a capture of "the game" is a capture of shadPS4 — is in
 
 ### The `RawDump` duplication — kept for the rule at the end
 
-`tools/RawDump.java`, deleted 2026-09-02 once `src/level.ts` replaced it, walked
+`tools/RawDump.java`, deleted 2026-09-02 once `src/things/level.ts` replaced it, walked
 `world.things` and dumped every Thing carrying a music `PSequencer`. ⚠️ **A world's Thing list can
 carry the same sequencer twice**, and when it does every component was written again with the same
 `seqUID` **and the same `instIdx`**, byte for byte. **60 of the corpus's 338 sequencers came out

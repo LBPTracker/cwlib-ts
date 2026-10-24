@@ -15,7 +15,7 @@
  * ## Scope: LBP3 only, and the bound is now measured
  *
  * ⚠️ **This used to say the older branches had been stripped in the port. They
- * were not.** `src/parts.ts` carries **238 distinct version gates spanning
+ * were not.** the part readers (`src/things/parts/`) carry **238 distinct version gates spanning
  * `0x137`–`0x3f0`** and 163 subVersion gates — cwlib's own, ported with the
  * branches intact. What the bound below protects is therefore not a reader that
  * only knows LBP3; it is a reader whose *older* branches have never been run

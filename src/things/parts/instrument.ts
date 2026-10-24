@@ -42,7 +42,7 @@ export interface InstrumentPart {
  * `PInstrument`: one instrument placed on a music sequencer's board.
  *
  * The note list comes back as raw bytes rather than decoded notes, because
- * `src/notes.ts` already decodes that record and is the measured reader for
+ * `src/sequencer/notes.ts` already decodes that record and is the measured reader for
  * it. Four bytes each: `x | triplet<<7`, `y | end<<7`, volume, timbre.
  */
 export function readInstrumentPart(s: Serializer): InstrumentPart {

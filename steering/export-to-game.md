@@ -1,6 +1,6 @@
 # Export to the game — writing a `.plan` LBP3 can load
 
-Read before touching `src/writer.ts`, `write-plan.ts` or `chips.ts`, or before
+Read before touching `src/io/writer.ts`, `write-plan.ts` or `chips.ts`, or before
 changing anything a `Sequencer` carries. This is the return leg of
 [level-files.md](level-files.md) and [sequencer-data-model.md](sequencer-data-model.md): those two
 say what the game's files hold, and this says how one is built.
@@ -59,7 +59,7 @@ Each is something the real plans carry that is a person's history rather than th
 ## The chassis — the parts that hold no music
 
 `RENDER_MESH`, `POS`, `TRIGGER`, the two `SWITCH`es and `GROUP` carry nothing musical, and the
-reader in `parts.ts` steps over their values. `write-plan.ts` writes them from constants taken out
+reader in `src/things/parts/` steps over their values. `write-plan.ts` writes them from constants taken out
 of the same 17 plans with `dev/dump-fields.ts`, and `dev/verify-export.ts` diffs our bytes against
 the game's span by span. **Result: identical except the reference id and three floats**, and the
 three are the same deviation stated three times.
@@ -150,7 +150,7 @@ The board is sized to fit: `rows = max(boardRows, lowest row + 2, 3)` and
 the slack a creator leaves by hand. The spare row gives way at 33 rows, the tallest board the game plays (*The board's
 size limit* in [lbptracker's sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md)).
 
-## The instrument chip table — `src/chips.ts`
+## The instrument chip table — `src/sequencer/chips.ts`
 
 A `Track` carries two things about its instrument: the `RInstrument` GUID, and the tint the chip
 wears. The **chip** carries two more, both properties of the instrument rather than of the music —
@@ -280,9 +280,9 @@ the channel banding.
 
 | file | what |
 |---|---|
-| `src/writer.ts` | the write-side primitives, method for method against `serializer.ts`, and the container |
-| `src/write-plan.ts` | the Thing graph, the part writers, `RPlan`, and `writeSequencerPlan` |
-| `src/chips.ts` | the instrument chip table |
+| `src/io/writer.ts` | the write-side primitives, method for method against `serializer.ts`, and the container |
+| `src/sequencer/write-plan.ts` | the Thing graph, the part writers, `RPlan`, and `writeSequencerPlan` |
+| `src/sequencer/chips.ts` | the instrument chip table |
 | `src/platform/{node,web}.ts` | `nodeDeflate` / `webDeflate`, injected as `inflate` is |
 | lbptracker's `packages/lbp-tracker-lib/dev/export-plan.ts` | the command line: a level, a plan or a song file in, a `.plan` and its dependency table out |
 | lbptracker's `packages/lbp-tracker-web/src/daw/plan-export.ts` | the Import/Export view's second section |

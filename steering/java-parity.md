@@ -38,12 +38,12 @@ So any file in range walks to its end. What differs is what a reader returns:
 materials), `RJoint`, `RGuidSubst`, `RScript`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
 `RAdventureCreateProfile`, `BigSave`, `RSlotList`, `RPacks`, `RPins`, `RQuest`, `RPalette`, `RDLC`,
 `RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk` and `RInstrument`
-have readers here: `readChunk` and `readChunkIslands`, and `readInstrument` in `src/rinstrument.ts`.)
+have readers here: `readChunk` and `readChunkIslands`, and `readInstrument` in `src/resources/rinstrument.ts`.)
 
 ## Writing
 
 Java's one serializer reads and writes every resource. This library writes a sequencer `.plan` and
-the container around it (`src/write-plan.ts`, `src/writer.ts`), a `FAR4` in the clear with a zeroed
+the container around it (`src/sequencer/write-plan.ts`, `src/io/writer.ts`), a `FAR4` in the clear with a zeroed
 hashinate (`writeFar`), a toolkit `.mod` (`writeMod`) and a ZIP — and nothing else: no level or
 other resource, no `FARC` rebuild (`FileArchive.save`), no FileDB (`FileDB.build`), no mod patches
 (`TranslationPatch`).
@@ -61,5 +61,5 @@ RGBA8 (`decodeLevel`) and keeps the shaders as blobs.
 
 This library refuses anything outside `0x3b7`–`0x3ff` (`requireLbp3`); Java reads LBP1, LBP2, the
 Vita and the toolkit branches. The older gates are ported here but unproved: with the bound lowered
-by hand, 2 of 19 LBP1 levels at `0x272` opened (`src/serializer.ts`, header). The Vita branch's one
+by hand, 2 of 19 LBP1 levels at `0x272` opened (`src/io/serializer.ts`, header). The Vita branch's one
 mesh gate is in `readMesh` and has never met a file.

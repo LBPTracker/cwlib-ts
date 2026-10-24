@@ -16,7 +16,7 @@ Rules for this repository's steering, the same as lbptracker's:
   lives here. A fact about what the game *does* with them — the sampler, the clock, the mix, the
   editor's limits — lives in lbptracker's `steering/`.
 - **The code splits the same way.** Every resource's reader, writer and the types that hold its
-  data live here, whichever project needs them — `RInstrument` included (`src/rinstrument.ts`).
+  data live here, whichever project needs them — `RInstrument` included (`src/resources/rinstrument.ts`).
   What a project does with that data — lbptracker's sampler model and zone walk, lbprender's
   scene — stays in that project. Pointers go both ways, as plain relative links to the sibling
   checkout (`../../lbptracker/steering/…` from a file here); prefer pointing down, from
@@ -30,7 +30,7 @@ Rules for this repository's steering, the same as lbptracker's:
   `open-questions.md`. Question numbers are one sequence shared with lbptracker; a number not
   found here is there.
 
-Paths in steering are this repository's (`src/level.ts`, `dev/verify-export.ts`), except
+Paths in steering are this repository's (`src/things/level.ts`, `dev/verify-export.ts`), except
 `tools/…` and `fixtures/…`, which are lbptracker's: the Java oracles and the Python reference live
 in its `tools/`, and the corpora — other people's levels, never committed — in its `fixtures/`.
 
@@ -77,6 +77,12 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package
   gets. ❗ **Consumers run `dist/*.js`, never `src/`**: Node 24 refuses to strip types under
   `node_modules`. The README has why and how the `exports` map keeps the specifiers `.ts`.
+- **`src/` is in folders by role**, and a module's public specifier is its path under `src/`
+  (`@lbptracker/cwlib/resources/mesh.ts`): `io/` the readers, writer and container; `archives/`
+  FARC, FileDB, saves, ZIP, `.mod`, `PARAM.SFO`; `things/` the Thing walk, with one file per part
+  under `things/parts/` and `parts.ts` binding them; `resources/` one file per resource type, where
+  a new resource reader goes; `sequencer/` the music sequencer as data and the `.plan` writer;
+  `platform/` the Node and browser adapters. Moving a file is a breaking change for every consumer.
 - ⚠️ **Strip-only TypeScript**: no `enum`, `namespace`, parameter properties or decorators —
   `erasableSyntaxOnly` enforces it. `src/` imports itself only by relative path, which is what lets
   the build keep `rewriteRelativeImportExtensions` on.

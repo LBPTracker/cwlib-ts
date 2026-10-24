@@ -44,7 +44,7 @@
  * ## What is not modelled, and is written as measured
  *
  * `RENDER_MESH`, `POS`, `TRIGGER`, `SWITCH` and `GROUP` hold nothing musical
- * and the reader in `parts.ts` steps over their values. They are written here
+ * and the reader in `things/parts/` steps over their values. They are written here
  * from constants measured out of those same 17 plans -- and
  * `dev/verify-export.ts` diffs what this writes against what the game wrote,
  * span by span, so the constants are checked rather than remembered.
@@ -335,7 +335,7 @@ const TRIGGER: PartOut = {
   },
 };
 
-/** `SWITCH_MICROCHIP` and the board's own type, from `parts.ts`. */
+/** `SWITCH_MICROCHIP` and the board's own type, from `things/parts/switch.ts`. */
 const SWITCH_MICROCHIP = 36;
 const SWITCH_CIRCUIT_BOARD = 37;
 

@@ -7,7 +7,7 @@
  * The reader's coverage used to be argued from ten levels that all came from one
  * creator and one console generation; the sweep behind `LBP3_MIN_VERSION` runs
  * over 103 levels spread across LBP1, LBP2 and LBP3 slots, and it took one
- * command. Every real bug in `src/parts.ts` found since 2026-09-05 came out
+ * command. Every real bug in the part readers (`src/things/parts/`) found since 2026-09-05 came out
  * of a file no PS3 save on this machine contains.
  *
  * ## What it needs
