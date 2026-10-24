@@ -1,0 +1,48 @@
+/** `GENERATED_MESH`: its part reader. The conventions every part follows are in `../parts.ts`. */
+
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+
+/** `PGeneratedMesh`: how a shape is drawn. */
+export interface GeneratedMeshPart {
+  /** The `RGfxMaterial` (`GMTb`, type 7) the extruded shape is drawn with. */
+  readonly gfxMaterial?: ResourceRef;
+  /** The `RBevel` (`BEVb`, type 24). */
+  readonly bevel?: ResourceRef;
+  readonly uvOffset: readonly [number, number, number, number];
+  readonly planGUID: number;
+  /** cwlib's bit 0 play mode, bit 1 edit mode; -1 when the revision has no field. */
+  readonly visibilityFlags: number;
+  readonly noBevel: boolean;
+  readonly includeSides: boolean;
+}
+
+/**
+ * `PGeneratedMesh`: the extruded mesh a shape gets its look from.
+ *
+ * ⚠️ The visibility flag is a `bool` while `subVersion < 0xfb` and an `i8` at or
+ * above it — the same byte either way, but the *gate* differs, so a file with a
+ * subVersion in between would read neither. Both branches are here.
+ */
+export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
+  const { version, subVersion } = s.revision;
+  const gfxMaterial = s.resource();
+  const bevel = s.resource();
+  const uvOffset = s.vector4();
+  const planGUID = version >= 0x258 ? s.guid() : 0;
+  let visibilityFlags = -1;
+  if (version >= 0x27c && subVersion < 0xfb) visibilityFlags = s.bool() ? 3 : 0;
+  if (subVersion >= 0xfb) visibilityFlags = s.u8();
+  if (version >= 0x305) {
+    s.f32(); // textureAnimationSpeed
+    s.f32(); // textureAnimationSpeedOff
+  }
+  const noBevel = subVersion >= 0x34 ? s.bool() : false;
+  if (subVersion >= 0x97) s.bool(); // sharded
+  const includeSides = subVersion >= 0x13d ? s.bool() : true;
+  if (subVersion >= 0x155) s.u8(); // slideImpactDamping
+  if (subVersion >= 0x13d) {
+    s.u8(); // slideSteer
+    s.u8(); // slideSpeed
+  }
+  return { gfxMaterial, bevel, uvOffset, planGUID, visibilityFlags, noBevel, includeSides };
+}
