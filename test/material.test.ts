@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { openFarc, type Farc } from '../src/farc.ts';
-import { readFileDB, readGuidRemap } from '../src/filedb.ts';
-import { BOX_TEXTURE_SAMPLE, materialSummary, readMaterial, type GfxMaterial } from '../src/material.ts';
-import { readMesh } from '../src/mesh.ts';
+import { openFarc, type Farc } from '../src/archives/farc.ts';
+import { readFileDB, readGuidRemap } from '../src/archives/filedb.ts';
+import { BOX_TEXTURE_SAMPLE, materialSummary, readMaterial, type GfxMaterial } from '../src/resources/material.ts';
+import { readMesh } from '../src/resources/mesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**

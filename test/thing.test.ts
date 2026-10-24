@@ -19,10 +19,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { readBackup, sequencersOf } from '../src/backup.ts';
-import { partReaders } from '../src/parts.ts';
-import { COMPRESSED_INTEGERS, Serializer, type RevisionInfo } from '../src/serializer.ts';
-import { partBit, readThing, UnimplementedPartError } from '../src/thing.ts';
+import { readBackup, sequencersOf } from '../src/sequencer/backup.ts';
+import { partReaders } from '../src/things/parts.ts';
+import { COMPRESSED_INTEGERS, Serializer, type RevisionInfo } from '../src/io/serializer.ts';
+import { partBit, readThing, UnimplementedPartError } from '../src/things/thing.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 
 const LBP2 = { version: 0x3f8, subVersion: 0, branchId: 0, branchRevision: 0 };

@@ -3,10 +3,10 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 
-import { looksLikeLevel, readBackup, readBackupZip, sequencersOf } from '../src/backup.ts';
-import { psfName, readPsf } from '../src/psf.ts';
-import { readSaveArchive, saveArchiveRevision } from '../src/savearchive.ts';
-import { crc32, readZip, writeZip } from '../src/zip.ts';
+import { looksLikeLevel, readBackup, readBackupZip, sequencersOf } from '../src/sequencer/backup.ts';
+import { psfName, readPsf } from '../src/archives/psf.ts';
+import { readSaveArchive, saveArchiveRevision } from '../src/archives/savearchive.ts';
+import { crc32, readZip, writeZip } from '../src/archives/zip.ts';
 import { nodeInflate, nodeInflateRaw } from '../src/platform/node.ts';
 
 /* ------------------------------------------------------------------- zip */

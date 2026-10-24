@@ -15,8 +15,8 @@
  * measured and which is a reading of the graph is said on each field.
  */
 
-import { openSerializer, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { openSerializer, type Inflate } from '../io/resource.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 
 /** cwlib's `BoxType`; the ids the game's materials use are tallied in steering. */
 export const BOX_OUTPUT = 0;

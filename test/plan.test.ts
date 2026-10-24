@@ -4,11 +4,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { deflateSync } from 'node:zlib';
 
-import { musicSequencers, readChunk, readPlan } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
-import { readSaveArchive, saveArchiveRevision } from '../src/savearchive.ts';
+import { musicSequencers, readChunk, readPlan } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
+import { readSaveArchive, saveArchiveRevision } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 
 /**
  * The corpus is other people's creative work and is never committed -- see

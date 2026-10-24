@@ -16,10 +16,10 @@
 
 import path from 'node:path';
 
-import { openFarc } from '../src/farc.ts';
-import { readStaticMesh, type StaticMesh } from '../src/staticmesh.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { readStaticMesh, type StaticMesh } from '../src/resources/staticmesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 const { pathOf } = await gameFileDB();

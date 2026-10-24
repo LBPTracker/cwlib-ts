@@ -5,13 +5,13 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { DEFAULT_CHIP_COLOUR, UNTINTED } from '../src/chips.ts';
-import { readPlan } from '../src/level.ts';
-import { decodeEntities, escapeEntities, partReaders } from '../src/parts.ts';
+import { DEFAULT_CHIP_COLOUR, UNTINTED } from '../src/sequencer/chips.ts';
+import { readPlan } from '../src/things/level.ts';
+import { decodeEntities, escapeEntities, partReaders } from '../src/things/parts.ts';
 import { nodeDeflate, nodeInflate } from '../src/platform/node.ts';
-import { importLevel, type Sequencer, type Track } from '../src/project.ts';
-import { loadResource, magicOf, readDependencies } from '../src/resource.ts';
-import { Serializer } from '../src/serializer.ts';
+import { importLevel, type Sequencer, type Track } from '../src/sequencer/project.ts';
+import { loadResource, magicOf, readDependencies } from '../src/io/resource.ts';
+import { Serializer } from '../src/io/serializer.ts';
 import {
   DEFAULT_PLAN_ICON,
   GADGET_SCALE,
@@ -20,9 +20,9 @@ import {
   MUSIC_SEQUENCER_MESH,
   sequencerThings,
   writeSequencerPlan,
-} from '../src/write-plan.ts';
-import { Writer, dependencyKey, writeResource } from '../src/writer.ts';
-import { toHex } from '../src/hex.ts';
+} from '../src/sequencer/write-plan.ts';
+import { Writer, dependencyKey, writeResource } from '../src/io/writer.ts';
+import { toHex } from '../src/io/hex.ts';
 
 /**
  * The plans fetched by `dev/fetch-plan.ts`. Other people's levels are never

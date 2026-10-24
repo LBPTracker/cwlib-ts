@@ -14,10 +14,10 @@
 
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { readLevel } from '../src/level.ts';
-import { loadResource } from '../src/resource.ts';
-import { partReaders } from '../src/parts.ts';
-import { UnimplementedPartError } from '../src/thing.ts';
+import { readLevel } from '../src/things/level.ts';
+import { loadResource } from '../src/io/resource.ts';
+import { partReaders } from '../src/things/parts.ts';
+import { UnimplementedPartError } from '../src/things/thing.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { required } from './env.ts';
 

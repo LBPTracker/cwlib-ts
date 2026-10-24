@@ -19,13 +19,13 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { factoryColour } from '../src/chips.ts';
-import { readChunk, readLevel, readPlan } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
+import { factoryColour } from '../src/sequencer/chips.ts';
+import { readChunk, readLevel, readPlan } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import type { Thing } from '../src/thing.ts';
-import type { InstrumentPart } from '../src/parts.ts';
-import { magicOf } from '../src/resource.ts';
+import type { Thing } from '../src/things/thing.ts';
+import type { InstrumentPart } from '../src/things/parts.ts';
+import { magicOf } from '../src/io/resource.ts';
 
 const rows = new Map<number, Map<string, number>>();
 const tints = new Map<number, number>();

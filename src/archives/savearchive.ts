@@ -35,7 +35,7 @@
  * is guarding.
  */
 
-import { toHex } from './hex.ts';
+import { toHex } from '../io/hex.ts';
 
 /**
  * XXTEA key, used for save archives and profile backups.

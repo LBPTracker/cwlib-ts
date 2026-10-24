@@ -18,13 +18,13 @@
  * about `File`, directories or archives. The page hands it names and bytes.
  */
 
-import type { Inflate } from './resource.ts';
+import type { Inflate } from '../io/resource.ts';
 import { readLevelProject, type LevelProject } from './project.ts';
-import { looksLikeMod, readMod } from './mod.ts';
-import { psfName } from './psf.ts';
-import { readSaveArchive, saveArchiveRevision } from './savearchive.ts';
-import { readZip, type InflateRaw, type ZipEntry } from './zip.ts';
-import { thingsKind } from './level.ts';
+import { looksLikeMod, readMod } from '../archives/mod.ts';
+import { psfName } from '../archives/psf.ts';
+import { readSaveArchive, saveArchiveRevision } from '../archives/savearchive.ts';
+import { readZip, type InflateRaw, type ZipEntry } from '../archives/zip.ts';
+import { thingsKind } from '../things/level.ts';
 
 /**
  * One file out of a folder or an archive: the `{ name, bytes }` a ZIP entry is.

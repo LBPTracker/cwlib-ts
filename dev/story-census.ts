@@ -17,12 +17,12 @@ import path from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
-import { readThings } from '../src/level.ts';
-import type { GeneratedMeshPart, ShapePart } from '../src/parts.ts';
-import type { Thing } from '../src/thing.ts';
-import { readFar } from '../src/savearchive.ts';
+import { readThings } from '../src/things/level.ts';
+import type { GeneratedMeshPart, ShapePart } from '../src/things/parts.ts';
+import type { Thing } from '../src/things/thing.ts';
+import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { GAME } from './game.ts';
 
 const ROOT = path.join(GAME, 'gamedata');

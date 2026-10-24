@@ -23,8 +23,8 @@
  *   on a cube map (6 of 6) -- and every `GTF ` payload is exactly that long.
  */
 
-import { inflateChunkTable, magicOf, type Inflate } from './resource.ts';
-import { latin1 } from './serializer.ts';
+import { inflateChunkTable, magicOf, type Inflate } from '../io/resource.ts';
+import { latin1 } from '../io/serializer.ts';
 
 /** `CellGcmEnumForGtf`, the low five bits and the `UN` bit of `CellGcmTexture.format`. */
 export const GCM_B8 = 0x81;

@@ -11,10 +11,10 @@
 
 import path from 'node:path';
 
-import { readBevel, type Bevel } from '../src/bevel.ts';
-import { openFarc } from '../src/farc.ts';
+import { readBevel, type Bevel } from '../src/resources/bevel.ts';
+import { openFarc } from '../src/archives/farc.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 

@@ -43,7 +43,7 @@
  * `TRANSITION` on bit `0x2a` instead of `0x29`, every later part following.
  */
 
-import { Serializer, SerializerError } from './serializer.ts';
+import { Serializer, SerializerError } from '../io/serializer.ts';
 
 /**
  * cwlib `Branch.LEERDAMMER` and the two of its revisions this reader needs.

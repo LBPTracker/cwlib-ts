@@ -21,15 +21,15 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import { drawnColour } from '../src/chips.ts';
-import { readPlan } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
+import { drawnColour } from '../src/sequencer/chips.ts';
+import { readPlan } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
 import { nodeDeflate, nodeInflate } from '../src/platform/node.ts';
-import { importLevel, type Sequencer } from '../src/project.ts';
-import { loadResource, magicOf, readDependencies } from '../src/resource.ts';
-import { setTrace } from '../src/thing.ts';
-import { LBP3_PS4, writeSequencerPlan } from '../src/write-plan.ts';
-import { toHex } from '../src/hex.ts';
+import { importLevel, type Sequencer } from '../src/sequencer/project.ts';
+import { loadResource, magicOf, readDependencies } from '../src/io/resource.ts';
+import { setTrace } from '../src/things/thing.ts';
+import { LBP3_PS4, writeSequencerPlan } from '../src/sequencer/write-plan.ts';
+import { toHex } from '../src/io/hex.ts';
 
 
 /** The part spans of a plan's root Thing, by part name. */

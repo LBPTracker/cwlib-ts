@@ -4,12 +4,12 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { openFarc, type Farc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
-import { readThings } from '../src/level.ts';
-import { PRIMITIVE_TRIANGLE_STRIP, readMesh, type Mesh } from '../src/mesh.ts';
-import type { RenderMeshPart } from '../src/parts.ts';
-import { loadResource } from '../src/resource.ts';
+import { openFarc, type Farc } from '../src/archives/farc.ts';
+import { readFileDB } from '../src/archives/filedb.ts';
+import { readThings } from '../src/things/level.ts';
+import { PRIMITIVE_TRIANGLE_STRIP, readMesh, type Mesh } from '../src/resources/mesh.ts';
+import type { RenderMeshPart } from '../src/things/parts.ts';
+import { loadResource } from '../src/io/resource.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**

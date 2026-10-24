@@ -13,10 +13,10 @@
 
 import path from 'node:path';
 
-import { openFarc } from '../src/farc.ts';
-import { readMesh, type Mesh } from '../src/mesh.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { readMesh, type Mesh } from '../src/resources/mesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 

@@ -23,8 +23,8 @@
  * - UV channels are interleaved per vertex.
  */
 
-import { openSerializer, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { openSerializer, type Inflate } from '../io/resource.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 
 /** `CellGcmPrimitive`: the two values `RMesh.primitiveType` takes in the game's meshes. */
 export const PRIMITIVE_TRIANGLES = 5;

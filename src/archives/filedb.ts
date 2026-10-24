@@ -24,7 +24,7 @@
  * ⚠️ The LBP2 row is cwlib's reading only: no LBP2 FileDB was on this disk.
  */
 
-import { toHex } from './hex.ts';
+import { toHex } from '../io/hex.ts';
 
 /** One FileDB row. */
 export interface FileDBEntry {

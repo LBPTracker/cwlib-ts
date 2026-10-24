@@ -6,9 +6,9 @@
  * everything here works on a File the user picked, with no network.
  */
 
-import type { RandomAccess } from '../farc.ts';
-import type { Inflate, Resource } from '../resource.ts';
-import { loadResource } from '../resource.ts';
+import type { RandomAccess } from '../archives/farc.ts';
+import type { Inflate, Resource } from '../io/resource.ts';
+import { loadResource } from '../io/resource.ts';
 
 /**
  * Inflate with the platform's own DecompressionStream. Note LBP's zlib streams

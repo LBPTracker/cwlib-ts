@@ -5,8 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { loadResourceFile } from '../src/platform/node.ts';
-import { readInstrument, usedSlots } from '../src/rinstrument.ts';
-import { ByteReader } from '../src/stream.ts';
+import { readInstrument, usedSlots } from '../src/resources/rinstrument.ts';
+import { ByteReader } from '../src/io/stream.ts';
 
 /**
  * The .rinst files are extracted from the user's own game with lbptracker's

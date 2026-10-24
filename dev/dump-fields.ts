@@ -12,11 +12,11 @@
  */
 import { readFile } from 'node:fs/promises';
 
-import { readThings } from '../src/level.ts';
+import { readThings } from '../src/things/level.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import { Serializer } from '../src/serializer.ts';
-import { setTrace } from '../src/thing.ts';
-import { toHex } from '../src/hex.ts';
+import { Serializer } from '../src/io/serializer.ts';
+import { setTrace } from '../src/things/thing.ts';
+import { toHex } from '../src/io/hex.ts';
 
 const FILE = process.argv[2];
 const WANT = (process.argv[3] ?? '').split(',').filter(Boolean);

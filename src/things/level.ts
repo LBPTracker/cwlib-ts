@@ -22,11 +22,11 @@
  * readers" figure in steering was wrong.
  */
 
-import { magicOf, openSerializer, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from './serializer.ts';
+import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
+import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
-import { toHex } from './hex.ts';
+import { toHex } from '../io/hex.ts';
 
 /** Thrown once `PWorld.things` is in hand, to stop reading the rest. */
 class StopParse extends Error {

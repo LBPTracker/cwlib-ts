@@ -4,9 +4,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { openFarc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
-import { readStaticMesh } from '../src/staticmesh.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { readFileDB } from '../src/archives/filedb.ts';
+import { readStaticMesh } from '../src/resources/staticmesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**

@@ -6,7 +6,7 @@ import test from 'node:test';
 import {
   DEPENDENCY_CHUNK, DEPENDENCY_LEVEL, DEPENDENCY_PLAN, DEPENDENCY_TEXTURE, loadResource,
   OPENABLE_DEPENDENCIES, readDependencies, ResourceFormatError,
-} from '../src/resource.ts';
+} from '../src/io/resource.ts';
 import { nodeInflate, loadResourceFile } from '../src/platform/node.ts';
 
 /**

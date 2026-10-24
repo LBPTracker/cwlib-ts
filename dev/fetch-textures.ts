@@ -17,7 +17,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { readDependencies } from '../src/resource.ts';
+import { readDependencies } from '../src/io/resource.ts';
 
 const DIR = process.argv[2] ?? 'fixtures/archive';
 const OUT = process.argv[3] ?? 'fixtures/textures';

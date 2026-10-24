@@ -10,8 +10,8 @@
  * throws when the walk does not end on the payload's last byte.
  */
 
-import { openSerializer, type Inflate } from './resource.ts';
-import { SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { openSerializer, type Inflate } from '../io/resource.ts';
+import { SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 
 /** cwlib's `BevelMappingMode`: how a bevel band's texture is laid. */
 export const BEVEL_HIDDEN = 0;

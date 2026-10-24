@@ -7,10 +7,10 @@
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
 import { open, readFile } from 'node:fs/promises';
 
-import type { RandomAccess } from '../farc.ts';
-import type { Inflate, Resource } from '../resource.ts';
-import { loadResource } from '../resource.ts';
-import type { Deflate } from '../writer.ts';
+import type { RandomAccess } from '../archives/farc.ts';
+import type { Inflate, Resource } from '../io/resource.ts';
+import { loadResource } from '../io/resource.ts';
+import type { Deflate } from '../io/writer.ts';
 
 export const nodeInflate: Inflate = (deflated) =>
   new Uint8Array(inflateSync(deflated));

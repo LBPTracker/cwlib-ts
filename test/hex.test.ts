@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
-import { toHex } from '../src/hex.ts';
+import { toHex } from '../src/io/hex.ts';
 
 test('toHex spells every byte as two lower-case digits', () => {
   assert.equal(toHex(new Uint8Array([0, 1, 0x0f, 0x10, 0xab, 0xff])), '00010f10abff');

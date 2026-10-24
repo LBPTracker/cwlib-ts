@@ -4,11 +4,11 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { readThings } from '../src/level.ts';
-import type { ShapePart } from '../src/parts.ts';
-import { readFar } from '../src/savearchive.ts';
+import { readThings } from '../src/things/level.ts';
+import type { ShapePart } from '../src/things/parts.ts';
+import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 
 /**
  * The game's own story levels, which `LBP_GAME` holds and nothing commits. A

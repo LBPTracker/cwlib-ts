@@ -26,10 +26,10 @@ import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { crc32, deflateSync } from 'node:zlib';
 
-import { openFarc } from '../src/farc.ts';
-import { decodeLevel, readTexture, type Texture, type TextureLevel } from '../src/texture.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { decodeLevel, readTexture, type Texture, type TextureLevel } from '../src/resources/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 const PNG_DIR = process.argv[2];

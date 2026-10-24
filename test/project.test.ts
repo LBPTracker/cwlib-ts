@@ -12,11 +12,11 @@ import {
   schedule,
   trackFrom,
   type LevelProject,
-} from '../src/project.ts';
-import { DEFAULT_CHIP_COLOUR } from '../src/chips.ts';
-import { sequencerAuthor } from '../src/level.ts';
-import type { InstrumentPart, SequencerPart } from '../src/parts.ts';
-import type { Thing } from '../src/thing.ts';
+} from '../src/sequencer/project.ts';
+import { DEFAULT_CHIP_COLOUR } from '../src/sequencer/chips.ts';
+import { sequencerAuthor } from '../src/things/level.ts';
+import type { InstrumentPart, SequencerPart } from '../src/things/parts.ts';
+import type { Thing } from '../src/things/thing.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 
 /**
@@ -353,9 +353,9 @@ test('the corpus’s sub-steps are the two balanced thirds, not a flag', async (
   // ⚠️ The *records*, not the grouped notes: `subStep` is a field of the
   // four-byte record and grouping consumes it into a fractional start. Reading
   // it back off a `Note` would be measuring this module rather than the corpus.
-  const { decodeRecords } = await import('../src/notes.ts');
-  const { readLevel, musicSequencers } = await import('../src/level.ts');
-  const { partReaders } = await import('../src/parts.ts');
+  const { decodeRecords } = await import('../src/sequencer/notes.ts');
+  const { readLevel, musicSequencers } = await import('../src/things/level.ts');
+  const { partReaders } = await import('../src/things/parts.ts');
   const counts = [0, 0, 0];
   let total = 0;
   for (const entry of await readdir(LEVELS, { withFileTypes: true })) {
@@ -399,7 +399,7 @@ test('the corpus’s sub-steps are the two balanced thirds, not a flag', async (
 // past `NumChannels` but under eight: `at(6)` was 0.75 under the old law and is
 // `volumes[2]` under this one.
 test('a track’s channel is its board row modulo NumChannels', async () => {
-  const { channelVolume, CHANNEL_HEADROOM } = await import('../src/project.ts');
+  const { channelVolume, CHANNEL_HEADROOM } = await import('../src/sequencer/project.ts');
   const seq = {
     numChannels: 4,
     volumes: [1, 0.7, 0.5, 0.2, 1, 1],

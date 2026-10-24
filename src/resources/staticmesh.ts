@@ -15,8 +15,8 @@
  * as big-endian `u16`s to the end.
  */
 
-import { inflateChunkTable, magicOf, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { inflateChunkTable, magicOf, type Inflate } from '../io/resource.ts';
+import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { PRIMITIVE_TRIANGLES, PRIMITIVE_TRIANGLE_STRIP } from './mesh.ts';
 
 export interface StaticPrimitive {

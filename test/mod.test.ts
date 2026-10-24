@@ -1,14 +1,14 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
-import { readBackup, readBackupZip } from '../src/backup.ts';
-import { DEFAULT_CHIP_COLOUR } from '../src/chips.ts';
-import { MIN_SAFE_GUID, looksLikeMod, readMod, writeMod } from '../src/mod.ts';
+import { readBackup, readBackupZip } from '../src/sequencer/backup.ts';
+import { DEFAULT_CHIP_COLOUR } from '../src/sequencer/chips.ts';
+import { MIN_SAFE_GUID, looksLikeMod, readMod, writeMod } from '../src/archives/mod.ts';
 import { nodeDeflate, nodeInflate, nodeInflateRaw } from '../src/platform/node.ts';
-import type { Sequencer } from '../src/project.ts';
-import { readFar, saveArchiveRevision, writeFar } from '../src/savearchive.ts';
-import { writeSequencerPlan } from '../src/write-plan.ts';
-import { readZip } from '../src/zip.ts';
+import type { Sequencer } from '../src/sequencer/project.ts';
+import { readFar, saveArchiveRevision, writeFar } from '../src/archives/savearchive.ts';
+import { writeSequencerPlan } from '../src/sequencer/write-plan.ts';
+import { readZip } from '../src/archives/zip.ts';
 
 const song: Sequencer = {
   uid: 1,

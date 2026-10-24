@@ -26,8 +26,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { boardCell, readLevel } from '../src/level.ts';
-import { partReaders, type Microchip } from '../src/parts.ts';
+import { boardCell, readLevel } from '../src/things/level.ts';
+import { partReaders, type Microchip } from '../src/things/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { required } from './env.ts';
 

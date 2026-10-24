@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
 
-import { boardCell } from '../src/level.ts';
-import { boardToGrid } from '../src/project.ts';
+import { boardCell } from '../src/things/level.ts';
+import { boardToGrid } from '../src/sequencer/project.ts';
 
 /** Column-major, as `Serializer.matrix()` returns: column `i` is `4i..4i+2`. */
 function transform(basis: number[][], translation: number[]): Float32Array {

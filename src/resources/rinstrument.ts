@@ -16,7 +16,7 @@
  * (steering/sequencer-engine-inputs.md, steering/synth-engine.md there).
  */
 
-import { ByteReader } from './stream.ts';
+import { ByteReader } from '../io/stream.ts';
 
 export const MAX_SLOTS = 8;
 /** 8 zones; `[0]` is a constant, `[1..8]` are the bounds. */

@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { readFileDB, readGuidRemap, type FileDBEntry } from '../src/filedb.ts';
+import { readFileDB, readGuidRemap, type FileDBEntry } from '../src/archives/filedb.ts';
 import { required } from './env.ts';
 
 export const GAME = required('LBP_GAME', 'an installed LBP3 PS4 build, the folder holding base_001.farc and output/');

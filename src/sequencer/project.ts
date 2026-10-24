@@ -26,9 +26,9 @@
  * files.
  */
 
-import { musicSequencers, readThings, type Placement } from './level.ts';
-import type { Inflate } from './resource.ts';
-import type { Thing } from './thing.ts';
+import { musicSequencers, readThings, type Placement } from '../things/level.ts';
+import type { Inflate } from '../io/resource.ts';
+import type { Thing } from '../things/thing.ts';
 import { groupNotes, decodeRecords, type Note } from './notes.ts';
 
 /** Cell geometry, measured at `v0x1c4ad0`-`v0x1c4b23`. */

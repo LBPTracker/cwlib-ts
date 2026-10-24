@@ -19,7 +19,7 @@
  * wraps a `Blob`.
  */
 
-import { toHex } from './hex.ts';
+import { toHex } from '../io/hex.ts';
 
 /** Positioned reads on something too big to hold: a file handle, a `Blob`. */
 export interface RandomAccess {

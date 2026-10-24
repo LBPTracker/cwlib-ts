@@ -29,9 +29,9 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { readLevel } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
-import { setTrace } from '../src/thing.ts';
+import { readLevel } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
+import { setTrace } from '../src/things/thing.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 
 const arg = process.argv[2];

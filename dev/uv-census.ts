@@ -24,12 +24,12 @@
 
 import path from 'node:path';
 
-import { openFarc, type Farc } from '../src/farc.ts';
-import { materialSummary, readMaterial, type GfxMaterial } from '../src/material.ts';
-import { readMesh } from '../src/mesh.ts';
-import { decodeLevel, readTexture } from '../src/texture.ts';
+import { openFarc, type Farc } from '../src/archives/farc.ts';
+import { materialSummary, readMaterial, type GfxMaterial } from '../src/resources/material.ts';
+import { readMesh } from '../src/resources/mesh.ts';
+import { decodeLevel, readTexture } from '../src/resources/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB, gameRemap } from './game.ts';
 
 /** `transform`: on the samples whose transform is not the identity, cwlib's reading against none. */

@@ -5,10 +5,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { openFarc, type RandomAccess } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
-import { readLevel, readThings } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
+import { openFarc, type RandomAccess } from '../src/archives/farc.ts';
+import { readFileDB } from '../src/archives/filedb.ts';
+import { readLevel, readThings } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**

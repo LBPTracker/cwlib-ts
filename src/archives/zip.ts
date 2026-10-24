@@ -16,7 +16,7 @@
  * whose local header disagrees opens in some tools and not others.
  */
 
-import type { Inflate } from './resource.ts';
+import type { Inflate } from '../io/resource.ts';
 
 export interface ZipEntry {
   /** Stored as UTF-8. Forward slashes only; a backslash is a path on Windows. */

@@ -26,10 +26,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { musicSequencers, readLevel } from '../src/level.ts';
-import { partReaders } from '../src/parts.ts';
+import { musicSequencers, readLevel } from '../src/things/level.ts';
+import { partReaders } from '../src/things/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
-import { toHex } from '../src/hex.ts';
+import { toHex } from '../src/io/hex.ts';
 import { required } from './env.ts';
 
 const DIR = process.argv[2] ?? path.join(required('LBP_LEVELS', "the toolkit checkout's tools/sequencerdump folder, the one holding data*"), 'data');

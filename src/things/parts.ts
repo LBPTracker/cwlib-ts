@@ -27,7 +27,7 @@
  * was a part read under the wrong mask bit (`partBit` in `thing.ts`).
  */
 
-import { Serializer, SerializerError, latin1, type ResourceRef } from './serializer.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef } from '../io/serializer.ts';
 import {
   LD_ANY,
   LD_SUBMERGED,

@@ -4,9 +4,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-import { openFarc, type Farc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
-import { decodeLevel, readTexture, TextureFormatError, type TextureLevel } from '../src/texture.ts';
+import { openFarc, type Farc } from '../src/archives/farc.ts';
+import { readFileDB } from '../src/archives/filedb.ts';
+import { decodeLevel, readTexture, TextureFormatError, type TextureLevel } from '../src/resources/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**

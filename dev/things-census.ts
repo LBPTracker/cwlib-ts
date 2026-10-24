@@ -13,10 +13,10 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 
-import { openFarc } from '../src/farc.ts';
-import { readThings } from '../src/level.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { readThings } from '../src/things/level.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { magicOf } from '../src/resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 const LIST = process.argv[2];

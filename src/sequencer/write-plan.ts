@@ -51,11 +51,11 @@
  */
 
 import { chipFor, drawnColour } from './chips.ts';
-import { escapeEntities } from './parts.ts';
+import { escapeEntities } from '../things/parts.ts';
 import { CELL_HEIGHT, CELL_WIDTH, authorHandle, type Sequencer, type Track } from './project.ts';
-import type { RevisionInfo } from './serializer.ts';
-import { PARTS, partBit } from './thing.ts';
-import { Writer, dependencyKey, writeResource, type Deflate, type DependencyOut } from './writer.ts';
+import type { RevisionInfo } from '../io/serializer.ts';
+import { PARTS, partBit } from '../things/thing.ts';
+import { Writer, dependencyKey, writeResource, type Deflate, type DependencyOut } from '../io/writer.ts';
 
 /* ------------------------------------------------------------ the gadget */
 
