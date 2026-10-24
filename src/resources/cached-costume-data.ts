@@ -31,12 +31,11 @@ export interface CachedCostumeData {
   readonly costumes: readonly CachedCostume[];
   /**
    * ⚠️ **Not in cwlib, which stops after `costumes`**: a second array follows,
-   * 485 strings of 16 characters in the game's file (`PLITTLEBIGDEMO01`,
-   * `IGCLBP2KADCO0003`, `LBPDLCSONYCO0046` …) that read like PSN entitlement
-   * names. What they key is not known; without them the payload ends 8,247
-   * bytes early.
+   * 485 distinct strings of 16 characters in the game's file -- DLC content
+   * ids: 478 of them are the `contentId` of a pack in the game's `PCKb`s
+   * (`packs.ts`). Without them the payload ends 8,247 bytes early.
    */
-  readonly keys: readonly string[];
+  readonly contentIds: readonly string[];
 }
 
 function readCostume(s: Serializer): CachedCostume {
@@ -57,9 +56,9 @@ export async function readCachedCostumeData(bytes: Uint8Array, inflate: Inflate)
   const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'CCDb') throw new SerializerError(`not cached costume data: "${resource.magic}"`);
   const costumes = s.array(readCostume);
-  const keys = s.array((x) => x.str());
+  const contentIds = s.array((x) => x.str());
   if (s.remaining !== 0) {
     throw new SerializerError(`CCDb read ended ${s.remaining} bytes before the end of its payload`);
   }
-  return { revision, costumes, keys };
+  return { revision, costumes, contentIds };
 }

@@ -11,8 +11,10 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readCachedCostumeData } from '../src/resources/cached-costume-data.ts';
 import { readJointSettings } from '../src/resources/joint-settings.ts';
 import { readOutfitList } from '../src/resources/outfit-list.ts';
+import { readPacks, type Packs } from '../src/resources/packs.ts';
 import { readPalette, type Palette } from '../src/resources/palette.ts';
 import { readPins } from '../src/resources/pins.ts';
+import { readSlotList, type SlotList } from '../src/resources/slot-list.ts';
 
 /**
  * The smaller resource types, every file of each in the game's FARCs; skips
@@ -30,9 +32,11 @@ const READERS = {
   JNTb: readJointSettings,
   PINb: readPins,
   CCDb: readCachedCostumeData,
+  SLTb: readSlotList,
+  PCKb: readPacks,
 } as const;
 
-test('palettes, outfit lists, joints, pins and the costume index all read to their last byte', async (t) => {
+test('palettes, outfit lists, joints, pins, the costume index, slot lists and packs all read to their last byte', async (t) => {
   if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   const pathOf = new Map([...db.values()].map((r) => [r.sha1, r.path]));
@@ -53,7 +57,7 @@ test('palettes, outfit lists, joints, pins and the costume index all read to the
   }
   assert.deepEqual(
     Object.fromEntries([...read].map(([m, files]) => [m, files.size])),
-    { PALb: 178, OUTb: 59, JNTb: 9, PINb: 1, CCDb: 1 },
+    { PALb: 178, OUTb: 59, JNTb: 9, PINb: 1, CCDb: 1, SLTb: 7, PCKb: 8 },
   );
 
   // The one palette with converted plans: six pairs, a hash then a GUID.
@@ -67,6 +71,17 @@ test('palettes, outfit lists, joints, pins and the costume index all read to the
 
   const costumes = [...read.get('CCDb')!.values()][0] as Awaited<ReturnType<typeof readCachedCostumeData>>;
   assert.equal(costumes.costumes.length, 4161);
-  assert.equal(costumes.keys.length, 485);
-  assert.equal(costumes.keys[0], 'PLITTLEBIGDEMO01');
+  assert.equal(costumes.contentIds.length, 485);
+  assert.equal(costumes.contentIds[0], 'PLITTLEBIGDEMO01');
+
+  // The costume index's strings are DLC content ids: 478 of them are packs' own.
+  const packs = [...read.get('PCKb')!.values()] as Packs[];
+  const ids = new Set(packs.flatMap((p) => p.packs.map((pack) => pack.contentId)));
+  assert.equal(costumes.contentIds.filter((id) => ids.has(id)).length, 478);
+
+  // A developer slot list: names come from LAMS tags, the slots' own names are empty.
+  const lists = [...read.get('SLTb')!] as [string, SlotList][];
+  const developer = lists.find(([sha1]) => pathOf.get(sha1)?.endsWith('/developer_slots.slt'))![1];
+  assert.equal(developer.slots.length, 63);
+  assert.equal(developer.slots[0].translationTag, 'ENGLAND_GARDEN_MAIN_TUTORIAL_1');
 });

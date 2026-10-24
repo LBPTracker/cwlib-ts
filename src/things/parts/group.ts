@@ -2,7 +2,7 @@
 
 import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
-import { readNetworkPlayerId } from './common.ts';
+import { readNetworkPlayerId } from '../../structs/network.ts';
 
 /**
  * `PGroup`: the sticker-panel grouping, its creator and the plan it came from.

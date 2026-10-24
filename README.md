@@ -35,8 +35,11 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
 | `physics-material.ts` | `RMaterial` (`MATb`): a shape's physics — density, friction, bounce, its sound family, what it collides with, whether it breaks |
 | `palette.ts`, `outfit-list.ts` | `RPalette` (`PALb`), a page of the popit; `ROutfitList` (`OUTb`), costumes as their pieces |
+| `slot-list.ts`, `packs.ts` | `RSlotList` (`SLTb`) and `RPacks` (`PCKb`): slots — a level's id, root, name, author, labels — and the DLC packs that hold them |
 | `joint-settings.ts`, `pins.ts`, `cached-costume-data.ts` | `RJoint` (`JNTb`), what a kind of joint does; `RPins` (`PINb`), the pin definitions; `RCachedCostumeData` (`CCDb`), the costume index |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
+| **`structs/`** | |
+| `slot.ts`, `network.ts` | the structs more than one resource or part reads: a slot, a PSN identity |
 | **`sequencer/`** | |
 | `project.ts`, `notes.ts`, `chips.ts` | the music sequencer as data — note records, chaining, automation, the chips' plans and colours |
 | `write-plan.ts` | a sequencer written back out as a `.plan` |

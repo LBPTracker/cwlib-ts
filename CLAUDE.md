@@ -38,7 +38,7 @@ Steering files (read on demand, per the hints):
 - [steering/level-files.md](steering/level-files.md) — **read before writing a parser for any LBP
   resource, save or archive**: the container and its dependency table, the Thing stream, plans,
   streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB, its GUID remap and FARCs, its meshes (`RMesh`,
-  `PRenderMesh`), decorations and stickers, textures (`GTF `, `TEX `), materials (`RGfxMaterial`), bevels (`RBevel`), physics materials (`RMaterial`), backdrops (`RStaticMesh`), level settings, palettes, outfit lists, joint settings, pins and the costume index, the corpora, the version bound, and the technique for finding a reader bug.
+  `PRenderMesh`), decorations and stickers, textures (`GTF `, `TEX `), materials (`RGfxMaterial`), bevels (`RBevel`), physics materials (`RMaterial`), backdrops (`RStaticMesh`), level settings, palettes, outfit lists, joint settings, pins, the costume index, slots and packs, the corpora, the version bound, and the technique for finding a reader bug.
 - [steering/sequencer-data-model.md](steering/sequencer-data-model.md) — **read before touching
   `project.ts`, `notes.ts`, `chips.ts` or `resources/instrument.ts`**: the `PSequencer` and `PInstrument`
   schemas with field names and struct offsets, `Colour`, the `RInstrument` and sample-slot
@@ -81,7 +81,8 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
   (`@lbptracker/cwlib/resources/mesh.ts`): `io/` the readers, writer and container; `archives/`
   FARC, FileDB, saves, ZIP, `.mod`, `PARAM.SFO`; `things/` the Thing walk, with one file per part
   under `things/parts/` and `parts.ts` binding them; `resources/` one file per resource type, where
-  a new resource reader goes; `sequencer/` the music sequencer as data and the `.plan` writer;
+  a new resource reader goes; `structs/` the structs more than one resource or part reads (a slot, a
+  PSN identity); `sequencer/` the music sequencer as data and the `.plan` writer;
   `platform/` the Node and browser adapters. Moving a file is a breaking change for every consumer.
 - ⚠️ **Strip-only TypeScript**: no `enum`, `namespace`, parameter properties or decorators —
   `erasableSyntaxOnly` enforces it. `src/` imports itself only by relative path, which is what lets

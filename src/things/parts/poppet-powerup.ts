@@ -1,7 +1,7 @@
 /** `POPPET_POWERUP`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, SerializerError } from '../../io/serializer.ts';
-import { readNetworkPlayerId } from './common.ts';
+import { readNetworkPlayerId } from '../../structs/network.ts';
 import { readEyetoyData } from './stickers.ts';
 
 /**

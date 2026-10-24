@@ -870,6 +870,28 @@ bool dissolvable, bool explodable, bool cuttableByExplosion
 - The Alear branch's `explosionType`, which cwlib reads from a resource's extra data, is a custom
   server's and not in the game.
 
+## Slots — `RSlotList` and `RPacks`
+
+`readSlotList` (`src/resources/slot-list.ts`, magic `SLTb`) and `readPacks`
+(`src/resources/packs.ts`, `PCKb`) are both arrays over the slot in `src/structs/slot.ts` — cwlib's
+`Slot`, `SlotID`, `Label`, `Collectabubble` and `Pack` at ennuo/toolkit `d6a2ef8`, with the
+author's `NetworkOnlineID` from `src/structs/network.ts`. ✔ **All 7 slot lists and all 8 pack
+files in the four FARCs read to their last byte** (`dev/resources-census.ts`,
+`test/resources.test.ts`, 2026-10-24): slot lists at `0x26e`, `0x37a`, `0x3af`, `0x3d5` and `0x3e2`
+— the first ending its slots at the `0x2c3` return, the rest crossing the `0x2ea`, `0x2f4`,
+`0x33c`, `0x352` and `0x3d0` gates — and packs at `0x3df`–`0x3f9`, two of them LBP3 (subVersions
+`0x199`, `0x1a9`), whose slots walk the LBP3-only tail.
+
+- A slot's `name` is empty in the game's own lists and its `translationTag` is the LAMS tag
+  (`MAIN_01_ROOKIE_TEST`, `MOVE_MAIN_0`); `developer_slots.slt` has 63, `lbp2story_slots.slt` 82.
+- A pack's `timestamp` is Unix seconds (1388534400 is 2014-01-01; −1 and 0 also occur) and its
+  `contentId` a 16-character DLC id (`LBPDLCEADACK0001`); `lbp2_packs.pck` holds 345 packs.
+- ⚠️ `lbp2_hub_story_themes.pck` gives every pack `contentsType` **4**, which cwlib's
+  `ContentsType` (0 group, 1 plans, 2 level, 3 costume, 5 adventure) has no name for. The value is
+  kept as the number.
+- The Vita's slot fields (`DOUBLE11` at `0x3c1`–`0x3e2`) are in no file here; `readSlot` refuses
+  that branch rather than guess them.
+
 ## Smaller resources — palettes, outfit lists, joints, pins, the costume index
 
 Five readers in `src/resources/` whose proof is that every file of their type in the four FARCs
@@ -912,10 +934,11 @@ behaviour field, and from `0x3f7` an LBP1 trophy byte.
 ### The costume index
 
 `gamedata/data/cached_costume_data.ccd`: 4,161 rows of plan GUID, LAMS title and description keys,
-type, subtype, colour, icon GUID and value — and then, ⚠️ **not in cwlib**, an array of 485 strings
-of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPDLCSONYCO0046` …) that read like PSN
-entitlement names; 2 bytes of count and 485 × 17 bytes are the 8,247 the file had left. What they
-key is not known.
+type, subtype, colour, icon GUID and value — and then, ⚠️ **not in cwlib**, an array of 485
+distinct strings of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPDLCSONYCO0046` …);
+2 bytes of count and 485 × 17 bytes are the 8,247 the file had left. ✔ **They are DLC content
+ids: 478 of the 485 are the `contentId` of a pack in the game's eight `PCKb`s** (*Slots* below);
+the other seven name no pack there.
 
 ## The game's textures — `GTF ` and `TEX `
 

@@ -17,8 +17,10 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readCachedCostumeData } from '../src/resources/cached-costume-data.ts';
 import { readJointSettings } from '../src/resources/joint-settings.ts';
 import { readOutfitList } from '../src/resources/outfit-list.ts';
+import { readPacks } from '../src/resources/packs.ts';
 import { readPalette } from '../src/resources/palette.ts';
 import { readPins } from '../src/resources/pins.ts';
+import { readSlotList } from '../src/resources/slot-list.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
 const READERS: Record<string, (bytes: Uint8Array, inflate: Inflate) => Promise<unknown>> = {
@@ -26,7 +28,9 @@ const READERS: Record<string, (bytes: Uint8Array, inflate: Inflate) => Promise<u
   JNTb: readJointSettings,
   OUTb: readOutfitList,
   PALb: readPalette,
+  PCKb: readPacks,
   PINb: readPins,
+  SLTb: readSlotList,
 };
 const only = process.argv[2]?.split(',');
 const wanted = new Set(Object.keys(READERS).filter((m) => !only || only.includes(m)));

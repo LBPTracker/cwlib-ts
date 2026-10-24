@@ -27,6 +27,7 @@ import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from '../
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
 import { toHex } from '../io/hex.ts';
+import { readSlotId } from '../structs/slot.ts';
 
 /** Thrown once `PWorld.things` is in hand, to stop reading the rest. */
 class StopParse extends Error {
@@ -52,12 +53,6 @@ function emptyOnly(s: Serializer, what: string): void {
         `corpus this was built against, so its layout has never been tested`,
     );
   }
-}
-
-/** `SlotID`: an enum32 and a u32. */
-function readSlotId(s: Serializer): void {
-  s.i32();
-  s.u32();
 }
 
 /** `StreamingID`: a wide string and a type. */

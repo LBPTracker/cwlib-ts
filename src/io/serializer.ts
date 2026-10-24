@@ -280,6 +280,17 @@ export class Serializer {
     throw new SerializerError('LEB128 value longer than 64 bits');
   }
 
+  /**
+   * A **signed** 64-bit integer, exact: zigzagged when the flags compress
+   * integers, as `s32` is, and two's complement in eight bytes when they do not
+   * (cwlib's `MemoryInputStream.s64`). A `Pack`'s timestamp is one.
+   */
+  s64Big(): bigint {
+    if (!this.compressedIntegers) return BigInt.asIntN(64, this.u64Big(true));
+    const raw = this.u64Big();
+    return (raw >> 1n) ^ -(raw & 1n);
+  }
+
   /** Length-prefixed ASCII. The length is an `s32`, so it is a varint too. */
   str(): string {
     const length = this.s32();
