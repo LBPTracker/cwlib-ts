@@ -15,7 +15,7 @@
  * as big-endian `u16`s to the end.
  */
 
-import { magicOf, type Inflate } from './resource.ts';
+import { inflateChunkTable, magicOf, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
 import { PRIMITIVE_TRIANGLES, PRIMITIVE_TRIANGLE_STRIP } from './mesh.ts';
 
@@ -139,26 +139,9 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
   if (marker !== 0x48454c50) throw new StaticMeshFormatError(`the header ends in 0x${marker.toString(16)}, not "HELP"`);
 
   // The chunk table, straight after: always compressed.
-  let at = 0x0c + s.position;
-  const count = view.getUint16(at + 2, false);
-  const sizes: [number, number][] = [];
-  for (let i = 0; i < count; i += 1) sizes.push([view.getUint16(at + 4 + i * 4, false), view.getUint16(at + 6 + i * 4, false)]);
-  at += 4 + count * 4;
-  const parts: Uint8Array[] = [];
-  for (const [packed, size] of sizes) {
-    const chunk = bytes.subarray(at, at + packed);
-    at += packed;
-    parts.push(packed === size ? chunk : await inflate(chunk, size));
-  }
-  if (at !== dependencyTableOffset) {
-    throw new StaticMeshFormatError(`chunk data ends at 0x${at.toString(16)}, the dependency table is at 0x${dependencyTableOffset.toString(16)}`);
-  }
-  const total = parts.reduce((n, p) => n + p.length, 0);
-  const data = new Uint8Array(total);
-  let written = 0;
-  for (const p of parts) {
-    data.set(p, written);
-    written += p.length;
+  const { data, end } = await inflateChunkTable(bytes, 0x0c + s.position, inflate, { error: StaticMeshFormatError });
+  if (end !== dependencyTableOffset) {
+    throw new StaticMeshFormatError(`chunk data ends at 0x${end.toString(16)}, the dependency table is at 0x${dependencyTableOffset.toString(16)}`);
   }
 
   // The vertex stream, 32 bytes a vertex, then the indices to the end.

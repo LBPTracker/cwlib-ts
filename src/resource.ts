@@ -133,38 +133,83 @@ export async function loadResource(
     };
   }
 
-  // A flag that is always 0x0001; the chunk count follows it.
-  reader.position = tableAt + 2;
-  const chunkCount = reader.u16();
+  // ❗ **Name the revision.** A chunk that will not inflate is almost never a
+  // broken file: it is a header this reader laid out wrongly, and the usual
+  // reason is a revision older than the range it implements. Four LBP1 levels
+  // out of the public archive (0x23d, 0x26e) said only "chunk 0/26 failed to
+  // inflate", which sends you looking at zlib.
+  const { chunks, data, end } = await inflateChunkTable(bytes, tableAt, inflate, {
+    inflateHint: `revision 0x${revision.version.toString(16)} sub 0x${revision.subVersion.toString(16)}` +
+      ', whose header layout may not be the one this reader implements',
+  });
 
-  const chunks: ResourceChunk[] = [];
-  let totalRaw = 0;
-  for (let i = 0; i < chunkCount; i += 1) {
-    const compressedSize = reader.u16();
-    const rawSize = reader.u16();
-    chunks.push({ compressedSize, rawSize });
-    totalRaw += rawSize;
+  // The header never tells the parser where chunk data ends -- it works that
+  // out by summing the table. Landing exactly on the dependency table is
+  // therefore an independent check that the whole header was read correctly.
+  if (end !== dependencyTableOffset) {
+    throw new ResourceFormatError(
+      `chunk data ends at 0x${end.toString(16)} but the dependency ` +
+        `table is at 0x${dependencyTableOffset.toString(16)}`,
+    );
   }
 
-  const out = new Uint8Array(totalRaw);
+  return {
+    magic, revision, branchId, branchRevision, revisionInfo, compressionFlags, isCompressed,
+    dependencyTableOffset, chunks, data,
+  };
+}
+
+/**
+ * A chunk table at `at` and the chunks behind it, inflated into one buffer.
+ *
+ * The table is a `u16` that is always `0x0001`, a `u16` count, then a
+ * `(u16 compressed, u16 raw)` pair per chunk; the chunks follow it, each a
+ * zlib stream. A resource's payload is one, and so are a static mesh's after
+ * its `StaticMeshInfo` and a texture's after its `GTF `/`TEX ` header -- which
+ * is why this is the one reader of it. Where the chunks have to end is the
+ * caller's check: `end` is the byte after the last one.
+ *
+ * `error` makes the exception, so each format throws its own class.
+ */
+export async function inflateChunkTable(
+  bytes: Uint8Array,
+  at: number,
+  inflate: Inflate,
+  options: {
+    readonly error?: new (message: string, options?: ErrorOptions) => Error;
+    /** Appended to "failed to inflate", for the caller to say what it suspects. */
+    readonly inflateHint?: string;
+  } = {},
+): Promise<{ chunks: ResourceChunk[]; data: Uint8Array; end: number }> {
+  const Fail = options.error ?? ResourceFormatError;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (at + 4 > bytes.length) throw new Fail('no chunk table: the file ends first');
+  const count = view.getUint16(at + 2, false);
+  if (at + 4 + count * 4 > bytes.length) throw new Fail(`a table of ${count} chunks runs past the end of the file`);
+
+  const chunks: ResourceChunk[] = [];
+  let total = 0;
+  for (let i = 0; i < count; i += 1) {
+    const compressedSize = view.getUint16(at + 4 + i * 4, false);
+    const rawSize = view.getUint16(at + 6 + i * 4, false);
+    chunks.push({ compressedSize, rawSize });
+    total += rawSize;
+  }
+
+  const data = new Uint8Array(total);
   let written = 0;
-  for (let i = 0; i < chunks.length; i += 1) {
+  let p = at + 4 + count * 4;
+  for (let i = 0; i < count; i += 1) {
     const { compressedSize, rawSize } = chunks[i];
-    let deflated: Uint8Array;
-    try {
-      deflated = reader.slice(compressedSize);
-    } catch (cause) {
-      throw new ResourceFormatError(
-        `chunk ${i}/${chunkCount} runs past the end of the file`,
-        { cause },
-      );
-    }
+    if (p + compressedSize > bytes.length) throw new Fail(`chunk ${i}/${count} runs past the end of the file`);
+    const deflated = bytes.subarray(p, p + compressedSize);
+    p += compressedSize;
     // ⚠️ **A chunk that would not shrink is stored as it is**, both sizes
     // equal and no zlib header. cwlib's `Compressor.decompressData`; 8 chunks
     // of the game's meshes are stored so, one of them the fourth of
     // `spawn_point_start_chrome.mol`, which otherwise "fails to inflate".
     if (compressedSize === rawSize) {
-      out.set(deflated, written);
+      data.set(deflated, written);
       written += rawSize;
       continue;
     }
@@ -172,41 +217,16 @@ export async function loadResource(
     try {
       inflated = await inflate(deflated, rawSize);
     } catch (cause) {
-      // ❗ **Name the revision.** A chunk that will not inflate is almost never
-      // a broken file: it is a header this reader laid out wrongly, and the
-      // usual reason is a revision older than the range it implements. Four
-      // LBP1 levels out of the public archive (0x23d, 0x26e) said only "chunk
-      // 0/26 failed to inflate", which sends you looking at zlib.
-      throw new ResourceFormatError(
-        `chunk ${i}/${chunkCount} failed to inflate — revision 0x${
-          revision.version.toString(16)} sub 0x${revision.subVersion.toString(16)}` +
-          ', whose header layout may not be the one this reader implements',
-        { cause },
-      );
+      const hint = options.inflateHint ? ` — ${options.inflateHint}` : '';
+      throw new Fail(`chunk ${i}/${count} failed to inflate${hint}`, { cause });
     }
     if (inflated.length !== rawSize) {
-      throw new ResourceFormatError(
-        `chunk ${i}/${chunkCount} inflated to ${inflated.length}, header says ${rawSize}`,
-      );
+      throw new Fail(`chunk ${i}/${count} inflated to ${inflated.length}, header says ${rawSize}`);
     }
-    out.set(inflated, written);
+    data.set(inflated, written);
     written += rawSize;
   }
-
-  // The header never tells the parser where chunk data ends -- it works that
-  // out by summing the table. Landing exactly on the dependency table is
-  // therefore an independent check that the whole header was read correctly.
-  if (reader.position !== dependencyTableOffset) {
-    throw new ResourceFormatError(
-      `chunk data ends at 0x${reader.position.toString(16)} but the dependency ` +
-        `table is at 0x${dependencyTableOffset.toString(16)}`,
-    );
-  }
-
-  return {
-    magic, revision, branchId, branchRevision, revisionInfo, compressionFlags, isCompressed,
-    dependencyTableOffset, chunks, data: out,
-  };
+  return { chunks, data, end: p };
 }
 
 /**

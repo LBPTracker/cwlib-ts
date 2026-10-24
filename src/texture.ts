@@ -23,7 +23,7 @@
  *   on a cube map (6 of 6) -- and every `GTF ` payload is exactly that long.
  */
 
-import { magicOf, type Inflate } from './resource.ts';
+import { inflateChunkTable, magicOf, type Inflate } from './resource.ts';
 import { latin1 } from './serializer.ts';
 
 /** `CellGcmEnumForGtf`, the low five bits and the `UN` bit of `CellGcmTexture.format`. */
@@ -124,31 +124,19 @@ const GTF_HEADER = 0x1c;
 const DDS_HEADER = 0x80;
 const CHAIN_ALIGN = 0x80;
 
-/** The `0x0001`, a chunk count and the `u16` pairs: the same table a resource carries. */
+/**
+ * The chunk table a resource carries, after the texture's own header, and
+ * the chunks to the file's last byte. With no chunks the rest of the file is
+ * the payload as it is.
+ */
 async function inflateChunks(bytes: Uint8Array, at: number, inflate: Inflate): Promise<Uint8Array> {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (at + 4 > bytes.length) throw new TextureFormatError('no chunk table');
-  const count = view.getUint16(at + 2, false);
-  if (count === 0) return bytes.subarray(at + 4);
-  let p = at + 4 + count * 4;
-  let total = 0;
-  for (let i = 0; i < count; i += 1) total += view.getUint16(at + 6 + i * 4, false);
-  const out = new Uint8Array(total);
-  let written = 0;
-  for (let i = 0; i < count; i += 1) {
-    const packed = view.getUint16(at + 4 + i * 4, false);
-    const raw = view.getUint16(at + 6 + i * 4, false);
-    if (p + packed > bytes.length) throw new TextureFormatError(`chunk ${i}/${count} runs past the end`);
-    const chunk = bytes.subarray(p, p + packed);
-    p += packed;
-    // A chunk that would not shrink is stored, as in a resource.
-    const data = packed === raw ? chunk : await inflate(chunk, raw);
-    if (data.length !== raw) throw new TextureFormatError(`chunk ${i}/${count} inflated to ${data.length}, not ${raw}`);
-    out.set(data, written);
-    written += raw;
+  if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(at + 2, false) === 0) {
+    return bytes.subarray(at + 4);
   }
-  if (p !== bytes.length) throw new TextureFormatError(`chunks end at ${p} of ${bytes.length}`);
-  return out;
+  const { data, end } = await inflateChunkTable(bytes, at, inflate, { error: TextureFormatError });
+  if (end !== bytes.length) throw new TextureFormatError(`chunks end at ${end} of ${bytes.length}`);
+  return data;
 }
 
 const blocksOf = (n: number): number => Math.max(1, Math.ceil(n / 4));
