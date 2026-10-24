@@ -44,6 +44,25 @@
  * none of them is a part this reader is merely missing.
  */
 
+/**
+ * Bytes as a string, one character per byte: the format's ASCII, and the
+ * four-character tags inside a payload. `untilNul` stops at the first zero,
+ * for the fixed-width fields padded with NULs.
+ *
+ * ⚠️ **In slices, not `String.fromCharCode(...bytes)`.** Spreading passes
+ * every byte as an argument, and a length read out of the file is enough to
+ * exhaust the stack with a `RangeError` instead of a `SerializerError`.
+ */
+export function latin1(bytes: Uint8Array, untilNul = false): string {
+  let end = untilNul ? bytes.indexOf(0) : -1;
+  if (end < 0) end = bytes.length;
+  let out = '';
+  for (let at = 0; at < end; at += 0x2000) {
+    out += String.fromCharCode.apply(null, bytes.subarray(at, Math.min(end, at + 0x2000)) as unknown as number[]);
+  }
+  return out;
+}
+
 export const COMPRESSED_INTEGERS = 1;
 export const COMPRESSED_VECTORS = 2;
 export const COMPRESSED_MATRICES = 4;
@@ -265,7 +284,7 @@ export class Serializer {
   str(): string {
     const length = this.s32();
     if (length < 0) throw new SerializerError(`negative string length ${length}`);
-    return String.fromCharCode(...this.bytes(length));
+    return latin1(this.bytes(length));
   }
 
   /**

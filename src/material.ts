@@ -16,7 +16,7 @@
  */
 
 import { loadResource, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
 
 /** cwlib's `BoxType`; the ids the game's materials use are tallied in steering. */
 export const BOX_OUTPUT = 0;
@@ -156,7 +156,7 @@ function readAnimation(s: Serializer): MaterialParameterAnimation {
   const baseValue = s.vector4();
   const components = s.array((x) => x.f32());
   // ⚠️ The name's length is a plain i32, not the zigzagged s32 `str` reads.
-  const name = String.fromCharCode(...s.bytes(s.i32()));
+  const name = latin1(s.bytes(s.i32()));
   const componentsAnimated = s.u8();
   const animated = [0, 1, 2, 3].filter((c) => componentsAnimated & (1 << c));
   const keys: [number, number, number, number][] = [];
@@ -191,9 +191,7 @@ function readWire(s: Serializer): MaterialWire {
   const boxTo = s.s32();
   const portFrom = s.u8();
   const portTo = s.u8();
-  const raw = s.bytes(5);
-  const end = raw.indexOf(0);
-  const swizzle = String.fromCharCode(...raw.subarray(0, end < 0 ? 5 : end));
+  const swizzle = latin1(s.bytes(5), true);
   return { boxFrom, boxTo, portFrom, portTo, swizzle };
 }
 

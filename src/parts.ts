@@ -27,7 +27,7 @@
  * was a part read under the wrong mask bit (`partBit` in `thing.ts`).
  */
 
-import { Serializer, SerializerError, type ResourceRef } from './serializer.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef } from './serializer.ts';
 import {
   LD_ANY,
   LD_SUBMERGED,
@@ -364,9 +364,7 @@ function readNetworkPlayerId(s: Serializer): string {
   s.bytes(8); // opt
   s.bytes(8); // reserved
   // A PSN online ID: up to 16 ASCII characters, NUL-padded.
-  let end = data.indexOf(0);
-  if (end < 0) end = data.length;
-  return String.fromCharCode(...data.subarray(0, end));
+  return latin1(data, true);
 }
 
 /**

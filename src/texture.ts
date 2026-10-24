@@ -24,6 +24,7 @@
  */
 
 import type { Inflate } from './resource.ts';
+import { latin1 } from './serializer.ts';
 
 /** `CellGcmEnumForGtf`, the low five bits and the `UN` bit of `CellGcmTexture.format`. */
 export const GCM_B8 = 0x81;
@@ -296,7 +297,7 @@ async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
   const width = le(16);
   const mipCount = flags & DDSD_MIPMAPCOUNT ? Math.max(1, le(28)) : 1;
   const pf = le(80);
-  const fourcc = String.fromCharCode(...dds.subarray(84, 88));
+  const fourcc = latin1(dds.subarray(84, 88));
   if (le(112) & (DDSCAPS2_CUBEMAP | DDSCAPS2_VOLUME)) {
     throw new TextureFormatError('a cube or volume DDS: none is in the game to measure');
   }
@@ -340,7 +341,7 @@ async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
   // ❗ The DDS is used up exactly -- or but for the `BUMP` footer cwlib names
   // (2,937 and 7 of the game's 2,944).
   const tail = dds.length - at;
-  const bump = tail === 4 && String.fromCharCode(...dds.subarray(at)) === 'BUMP';
+  const bump = tail === 4 && latin1(dds.subarray(at)) === 'BUMP';
   if (tail !== 0 && !bump) throw new TextureFormatError(`${tail} bytes after the DDS's last mip`);
   return { magic: 'TEX ', format, width, height, depth: 1, mipCount, faces: 1, levels: [chain], bump };
 }

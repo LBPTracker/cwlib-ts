@@ -24,7 +24,7 @@
  */
 
 import { loadResource, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
 
 /** `CellGcmPrimitive`: the two values `RMesh.primitiveType` takes in the game's meshes. */
 export const PRIMITIVE_TRIANGLES = 5;
@@ -110,12 +110,6 @@ const VERTEX = 0x10;
 const DOUBLE11 = 0x4431;
 const DOUBLE11_HEAD = 0x3e2;
 
-function fixedString(s: Serializer, size: number): string {
-  const raw = s.bytes(size);
-  const end = raw.indexOf(0);
-  return String.fromCharCode(...raw.subarray(0, end < 0 ? size : end));
-}
-
 /**
  * cwlib's `Bytes.unpackNormal24`: x in 11 bits and y in 10, each two's
  * complement, z rebuilt from them with its sign in bit 23.
@@ -184,7 +178,7 @@ function readPrimitive(s: Serializer): Run {
 
 /** `Bone`, which is `AnimBone`'s four fields and then its own. */
 function readBone(s: Serializer): MeshBone {
-  const name = fixedString(s, 32);
+  const name = latin1(s.bytes(32), true);
   const flags = s.i32();
   const animHash = s.i32();
   const parent = s.s32();
@@ -311,7 +305,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   const attributeCount = s.i32();
   const morphCount = s.i32();
   const morphNames: string[] = [];
-  for (let i = 0; i < MAX_MORPHS; i += 1) morphNames.push(fixedString(s, 0x10));
+  for (let i = 0; i < MAX_MORPHS; i += 1) morphNames.push(latin1(s.bytes(0x10), true));
   morphNames.length = Math.min(morphCount, MAX_MORPHS);
   if (version >= 0x239) {
     // ⚠️ Not the bounds of any UV channel: values below `minUV` are common.
