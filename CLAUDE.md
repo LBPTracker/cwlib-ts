@@ -49,6 +49,9 @@ Steering files (read on demand, per the hints):
 - [steering/lbp-modding-toolchain.md](steering/lbp-modding-toolchain.md) — read before trusting or
   porting anything from ennuo's toolkit: what it covers, the provenance rule, its known
   approximations, and the table of places we deliberately differ from it.
+- [steering/java-parity.md](steering/java-parity.md) — read before porting a reader, writer or tool
+  from Java cwlib, or saying what this library covers: the parts walked but not kept, the resources
+  with no reader, the writing and the tools Java has and this does not, and the revision range.
 - [steering/tools.md](steering/tools.md) — read before reaching for anything in `dev/`: what each
   harness is for, the trap it exists because of, and the environment variables.
 - [steering/open-questions.md](steering/open-questions.md) — read before planning a session: the
