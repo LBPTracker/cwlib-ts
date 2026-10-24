@@ -45,7 +45,7 @@ function things(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
 
 /** `PBody`: velocities, a frozen flag and whoever is dragging it about. */
 export function readBody(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  s.vector3(); // posVel
+  s.skipVector3(); // posVel
   s.f32(); // angVel
   s.i32(); // frozen
   // `(version >= 0x22c && subVersion < 0x84) || subVersion >= 0x8b` — true either
@@ -73,7 +73,7 @@ export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   // "localPosition is regenerated above 0x341", which is true and was written as
   // if it were true everywhere -- so every pre-0x341 Thing was read 64 bytes
   // short. cwlib `PPos.serialize`.
-  if (s.revision.version < 0x341) s.matrix(); // localPosition
+  if (s.revision.version < 0x341) s.skipMatrix(); // localPosition
   return s.matrix(); // worldPosition
 }
 
@@ -110,11 +110,11 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   s.bool(); // invertAngle
   const settings = s.resource();
   s.array((self) => self.i32()); // boneIdx
-  s.vector4(); // boneLengths
+  s.skipVector4(); // boneLengths
   const type = s.i32();
   s.f32(); // strength
   s.bool(); // stiff
-  s.vector3(); // slideDir
+  s.skipVector3(); // slideDir
   s.i32(); // animationPattern
   s.f32(); // animationRange
   s.f32(); // animationTime
@@ -150,7 +150,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   if (jv > 0x2c3) s.i32(); // behaviour
   if (s.revision.subVersion >= 0xed) {
     const count = s.count();
-    for (let i = 0; i < count; i += 1) s.vector3(); // railKnotVector
+    for (let i = 0; i < count; i += 1) s.skipVector3(); // railKnotVector
   }
   if (s.revision.subVersion >= 0x197) s.u8(); // railInteractions
   if (s.revision.subVersion >= 0x19f) {
@@ -281,14 +281,14 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
   } else color = s.i32() >>> 0;
   const brightness = version >= 0x301 ? s.f32() : 1;
   const bevelSize = s.f32();
-  if (version <= 0x340 || version >= 0x38e) s.matrix(); // COM
+  if (version <= 0x340 || version >= 0x38e) s.skipMatrix(); // COM
   if (version <= 0x306) {
     s.u8(); // interactPlayMode
     s.u8(); // interactEditMode
   }
   if (version >= 0x303) {
     s.i32(); // behavior
-    if (version < 0x38a) s.vector4();
+    if (version < 0x38a) s.skipVector4();
     else s.i32(); // colorOff
     s.f32(); // brightnessOff
   }
@@ -360,9 +360,9 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
 function readNetworkPlayerId(s: Serializer): string {
   const data = s.bytes(16); // handle.data
   s.u8(); // handle.term
-  s.bytes(3); // handle.dummy
-  s.bytes(8); // opt
-  s.bytes(8); // reserved
+  s.skip(3); // handle.dummy
+  s.skip(8); // opt
+  s.skip(8); // reserved
   // A PSN online ID: up to 16 ASCII characters, NUL-padded.
   return latin1(data, true);
 }
@@ -746,7 +746,7 @@ export function readStickers(s: Serializer): StickersPart {
   // ⚠️ `paintControl` exists only up to 0x3ba, and the corpus starts at 0x3b8.
   if (version >= 0x158 && version <= 0x3ba) {
     const n = s.count();
-    for (let i = 0; i < n; i += 1) s.bytes(4); // x, y, startRadius, endRadius
+    for (let i = 0; i < n; i += 1) s.skip(4); // x, y, startRadius, endRadius
   }
   if (version >= 0x15d) {
     const n = s.count();
@@ -806,9 +806,9 @@ export function readPhysicsTweak(s: Serializer): void {
   const { version, subVersion } = s.revision;
   s.f32(); // tweakGravity
   if (version > 0x2ff) s.f32(); // tweakBuoyancy
-  if (version > 0x280) s.vector3(); // tweakDampening
-  s.vector3(); // input
-  s.vector3(); // middleVel
+  if (version > 0x280) s.skipVector3(); // tweakDampening
+  s.skipVector3(); // input
+  s.skipVector3(); // middleVel
   if (version > 0x280) s.f32(); // velRange
   if (version > 0x280) {
     s.f32(); // accelStrength
@@ -861,9 +861,9 @@ export function readPhysicsTweak(s: Serializer): void {
     if (version < 0x3c4) s.u8();
     s.u8(); // type
     s.u8(); // dir
-    s.vector3(); // prevDesiredPos
+    s.skipVector3(); // prevDesiredPos
     s.u8(); // prevDesiredPosSet
-    s.matrix(); // startOrientation
+    s.skipMatrix(); // startOrientation
     s.f32(); // speed
     if (version > 0x3c4) s.u8(); // pathIsAbsolute
   }
@@ -885,7 +885,7 @@ export function readPhysicsTweak(s: Serializer): void {
     s.i16(); // gridStrength
   }
   if (subVersion > 0x99) s.f32(); // gridGoalW
-  if (subVersion > 0x98) s.vector3(); // gridGoal
+  if (subVersion > 0x98) s.skipVector3(); // gridGoal
 }
 
 /** `SwitchType` values this reader has to branch on. */
@@ -1008,12 +1008,12 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x1fa && version < 0x327) {
     const positions = s.count();
     // ⚠️ cwlib `vectorarray` returns Vector4f[], so these are v4 and not v3.
-    for (let i = 0; i < positions; i += 1) s.vector4(); // connectorPos
+    for (let i = 0; i < positions; i += 1) s.skipVector4(); // connectorPos
     const grabbed = s.count();
     for (let i = 0; i < grabbed; i += 1) s.bool(); // connectorGrabbed
-    s.vector4(); // portPosOffset
-    s.vector4(); // looseConnectorPos
-    s.vector4(); // looseConnectorBaseOffset
+    s.skipVector4(); // portPosOffset
+    s.skipVector4(); // looseConnectorPos
+    s.skipVector4(); // looseConnectorBaseOffset
     s.bool();
   }
 
@@ -1045,8 +1045,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x276 && version < 0x327) readThingRef(s, readers);
   if (version > 0x283) s.bool(); // includeRigidConnectors
   if (version > 0x284 && version < 0x327) {
-    s.vector4(); // customPortOffset
-    s.vector4(); // customConnectorOffset
+    s.skipVector4(); // customPortOffset
+    s.skipVector4(); // customConnectorOffset
   }
   if (version > 0x28c) {
     s.f32(); // timerCount
@@ -1082,9 +1082,9 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   // ⚠️ Data-dependent again, and the block is not small.
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
     s.i32(); // labelIndex
-    s.bytes(16); // creatorID.data
+    s.skip(16); // creatorID.data
     s.u8(); // creatorID.term
-    s.bytes(3); // creatorID.dummy
+    s.skip(3); // creatorID.dummy
     s.wstr(); // labelName
     s.array((self) => self.f32()); // analogue
     s.array((self) => self.u8()); // ternary
@@ -1234,7 +1234,7 @@ export function readMicrochip(
   if (version >= 0x283) s.bool(); // hideInPlayMode
   if (version >= 0x2b8) s.bool(); // wiresVisible
   if (version >= 0x2e4) s.s32(); // lastTouched
-  if (version >= 0x2e9) s.vector4(); // offset
+  if (version >= 0x2e9) s.skipVector4(); // offset
 
   let name = '';
   let sizeX = 0;
@@ -1264,8 +1264,8 @@ export function readMicrochip(
 
 /** `CameraNode`: one framing in a camera zone's list. */
 function readCameraNode(s: Serializer): void {
-  s.vector4(); // targetBox
-  s.vector3(); // pitchAngle
+  s.skipVector4(); // targetBox
+  s.skipVector3(); // pitchAngle
   s.f32(); // zoomDistance
   s.bool(); // localSpaceRoll
 }
@@ -1274,10 +1274,10 @@ function readCameraNode(s: Serializer): void {
 export function readCameraTweak(s: Serializer): void {
   const { version, subVersion } = s.revision;
   if (version < 0x37e) {
-    s.vector3(); // pitchAngle
-    s.vector4(); // targetBox
+    s.skipVector3(); // pitchAngle
+    s.skipVector4(); // targetBox
   }
-  s.vector4(); // triggerBox
+  s.skipVector4(); // triggerBox
   if (subVersion >= 0x1b) {
     s.u8(); // triggerLayerOffset
     s.u8(); // triggerLayerDepth
@@ -1542,19 +1542,19 @@ export function readAudioWorld(s: Serializer): void {
 function readInputRecording(s: Serializer): void {
   const { version } = s.revision;
   if (version > 0x28f) {
-    s.bytes(s.i32()); // inputBuffer
+    s.skip(s.i32()); // inputBuffer
     s.intVector(); // offsetBuffer
   }
   if (version > 0x2a5) s.intVector(); // absoluteExpressionBuffer
   if (version > 0x2dd) {
-    s.matrix(); // startWorldTransform
+    s.skipMatrix(); // startWorldTransform
     const count = s.count();
-    for (let i = 0; i < count; i += 1) s.matrix(); // startLocalSceneGraph
+    for (let i = 0; i < count; i += 1) s.skipMatrix(); // startLocalSceneGraph
   }
-  if (version > 0x2df) s.vector3(); // startFootPos
+  if (version > 0x2df) s.skipVector3(); // startFootPos
   if (version > 0x2e0) {
     const count = s.count();
-    for (let i = 0; i < count; i += 1) s.vector3(); // startVelocities
+    for (let i = 0; i < count; i += 1) s.skipVector3(); // startVelocities
   }
   if (version > 0x3c4) s.bool(); // recordingContainsMoveData
 }
@@ -1599,12 +1599,12 @@ function readNpcBehavior(s: Serializer, readers: ReadonlyMap<string, PartReader>
   if (version > 0x2ac) {
     s.f32(); // awarenessRadius
     s.i32(); // sharedStateTimer
-    s.vector3(); // idleLookAtPos
+    s.skipVector3(); // idleLookAtPos
   }
-  if (version > 0x2d7) s.vector3(); // lastGoodPosition
+  if (version > 0x2d7) s.skipVector3(); // lastGoodPosition
   if (version > 0x2d8) s.bool(); // lastPositionValid
   if (version > 0x2ce) {
-    s.vector3(); // patrolDirection
+    s.skipVector3(); // patrolDirection
     for (let i = 0; i < 8; i += 1) s.s32(); // the patrol grid counters
   }
   if (version > 0x2e6) s.s32(); // animSet
@@ -1674,7 +1674,7 @@ export function readControlinator(s: Serializer, readers: ReadonlyMap<string, Pa
     // an identity matrix whose four 1.0s land exactly on m00, m05, m10 and m15.
     // See question 36 in steering/answered-questions.md.
     s.u8(); // parentBoneIndex
-    s.matrix(); // parentBoneOffset
+    s.skipMatrix(); // parentBoneOffset
   }
   if (version > 0x3ec) s.u8(); // playerMode
   if (subVersion > 0x189) s.u8(); // layerRange
@@ -1707,7 +1707,7 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
     if ((version >= since && subVersion < 0x64) || subVersion > 0x64) s.bool();
   };
 
-  if (version < 0x368) s.vector3(); // posVel
+  if (version < 0x368) s.skipVector3(); // posVel
   s.f32(); // angVel
   s.i32(); // frequency
   s.i32(); // phase
@@ -1722,7 +1722,7 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   if (version < 0x2c4) s.f32(); // lastUpdateFrame
   if (version >= 0x137) {
     if (version < 0x314) {
-      s.vector4(); // worldOffset
+      s.skipVector4(); // worldOffset
       s.f32(); // worldRotation
     }
     if (version >= 0x38e) s.f32(); // worldRotationForEditorEmitters
@@ -1733,7 +1733,7 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   if (version >= 0x13f) s.i32(); // currentEmitted
   doubled(0x144); // emitFlip
   if (version >= 0x1ce) {
-    s.vector4(); // parentRelativeOffset
+    s.skipVector4(); // parentRelativeOffset
     s.f32(); // parentRelativeRotation
     s.f32(); // worldZ
     s.f32(); // zOffset
@@ -1779,7 +1779,7 @@ export interface SpriteLightPart {
 export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, PartReader>): SpriteLightPart {
   const { version, subVersion } = s.revision;
   const color = s.vector4();
-  if (version >= 0x2fd) s.vector4(); // colorOff
+  if (version >= 0x2fd) s.skipVector4(); // colorOff
   const multiplier = s.f32();
   if (version >= 0x30a) s.f32(); // multiplierOff
   const glowRadius = s.f32();
@@ -1814,8 +1814,8 @@ export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, Part
     s.f32(); // trackingSpeed
     s.s32(); // movementInput
     s.s32(); // lightingInput
-    s.vector3(); // beamDir
-    s.vector3(); // azimuth
+    s.skipVector3(); // beamDir
+    s.skipVector3(); // azimuth
   }
   return { color, multiplier, glowRadius, farDist, sourceSize, spotlight };
 }
@@ -1925,10 +1925,10 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
         s.f32();
         break;
       case MACHINE_V4:
-        s.vector4();
+        s.skipVector4();
         break;
       case MACHINE_M44:
-        s.matrix();
+        s.skipMatrix();
         break;
       case MACHINE_SAFE_PTR:
         readThingRef(s, readers);
@@ -1998,7 +1998,7 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
     }
     case OBJ_ARRAY_VECTOR4: {
       const n = s.count();
-      for (let i = 0; i < n; i += 1) s.vector4();
+      for (let i = 0; i < n; i += 1) s.skipVector4();
       break;
     }
     case OBJ_STRINGW:
@@ -2040,7 +2040,7 @@ function readEyetoyData(s: Serializer): void {
   if (version < 0x15e) return;
   s.resource(); // frame
   s.resource(); // alphaMask
-  s.matrix(); // colorCorrection
+  s.skipMatrix(); // colorCorrection
   readColorCorrection(s);
   if (version > 0x39f) s.resource(); // outline
 }
@@ -2090,7 +2090,7 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
   if (version >= 0x16d) s.f32(); // radius
   if (version >= 0x19f) s.i32(); // snapVertex
   if (version >= 0x1a9) {
-    s.vector3(); // centerOffset
+    s.skipVector3(); // centerOffset
     thing(); // animThing
     s.f32(); // animSpeed
   }
@@ -2104,14 +2104,14 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
 function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
   const thing = () => readThingRef(s, readers);
   thing(); // creatureThing
-  s.matrix(); // baseHandleMatrix
-  s.vector3(); // prevDir
-  s.vector3(); // currDir
+  s.skipMatrix(); // baseHandleMatrix
+  s.skipVector3(); // prevDir
+  s.skipVector3(); // currDir
   s.i32(); // stateTimer
   s.i32(); // state
   thing(); // attachedThing
-  s.vector3(); // attachedLocalPos
-  s.vector3(); // attachedLocalNormal
+  s.skipVector3(); // attachedLocalPos
+  s.skipVector3(); // attachedLocalNormal
   s.f32(); // attachedLocalAngle
   s.f32(); // attachedScale
   s.bool(); // playedFailToFireSound
@@ -2133,7 +2133,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   s.resource(); // config
   s.s32(); // jumpFrame
   s.f32(); // groundDistance
-  s.vector3(); // groundNormal
+  s.skipVector3(); // groundNormal
   thing(); // grabJoint
   thing(); // jumpingOff
   s.i32(); // state
@@ -2145,7 +2145,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   s.i32(); // zMode
   s.s32(); // playerAwareness
   s.s32(); // moveDirection
-  s.vector3(); // forceThatSmashedCreature
+  s.skipVector3(); // forceThatSmashedCreature
   s.i32(); // crushFrames
   s.f32(); // awarenessRadius
   if (version >= 0x1df) s.i32(); // airTime
@@ -2172,16 +2172,16 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   }
   if (version >= 0x19c) s.bool(); // reactToLethal
   if (version >= 0x1a9) {
-    s.matrix(); // oldAnimMatrix
+    s.skipMatrix(); // oldAnimMatrix
     s.f32(); // animOffset
   }
-  if (version >= 0x1fc) s.vector3(); // groundNormalRaw
+  if (version >= 0x1fc) s.skipVector3(); // groundNormalRaw
   if (version >= 0x212) {
-    s.vector3(); // groundNormalSmooth
+    s.skipVector3(); // groundNormalSmooth
     s.f32(); // bodyAdjustApplied
   }
   if (version >= 0x240 && version < 0x2c4) s.f32(); // switchScale
-  if (version >= 0x243) s.vector3(); // gunDirAndDashVec
+  if (version >= 0x243) s.skipVector3(); // gunDirAndDashVec
   if (subVersion >= 0x19e) s.f32(); // gunDirAndDashVecW
   if (version >= 0x246) thing(); // resourceThing
   if (version >= 0x247) s.i32(); // gunFireFrame
@@ -2198,7 +2198,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (version >= 0x320) {
     s.i32(); // fireRate
     s.f32(); // gunAccuracy
-    s.vector3(); // bulletEmitOffset
+    s.skipVector3(); // bulletEmitOffset
     s.f32(); // bulletEmitRotation
     thing(); // gunThing
     thing(); // gunTrigger
@@ -2228,16 +2228,16 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     s.f32(); // toolTetherWidth
     thing(); // jetpack
     s.s32(); // wallJumpDir
-    s.vector3(); // wallJumpPos
+    s.skipVector3(); // wallJumpPos
     const contacts = s.count();
-    for (let i = 0; i < contacts; i += 1) s.vector3(); // bootContactForceList
+    for (let i = 0; i < contacts; i += 1) s.skipVector3(); // bootContactForceList
     s.s32(); // gunType
     s.bool(); // wallJumpMat
   }
   if (version >= 0x29e && version < 0x336) thing(); // lastDirectControlPrompt
   if (version > 0x2e4) thing(); // directControlPrompt
   if (version >= 0x29e && version < 0x336) {
-    s.vector3(); // smoothedDirectControlStick
+    s.skipVector3(); // smoothedDirectControlStick
     s.i16(); // directControlAnimFrame
     s.u8(); // directControlAnimState
   }
@@ -2263,7 +2263,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (subVersion >= 0x196) {
     for (let i = 0; i < 7; i += 1) s.i32(); // the flying timers
     s.f32(); // flyingLegScale
-    s.vector4(); // flyingVels
+    s.skipVector4(); // flyingVels
     s.bool(); // flyingFlapLockout
     s.bool(); // flyingFallLockout
     s.bool(); // flyingInWind
@@ -2276,8 +2276,8 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     s.reference((self) => {
       readThingRef(self, readers); // springThing
       self.i32(); // springTimer
-      self.vector3(); // springDirection
-      self.vector3(); // springThingPosition
+      self.skipVector3(); // springDirection
+      self.skipVector3(); // springThingPosition
     });
     s.u8(); // springPower
     s.bool(); // springSeparateForces
@@ -2307,7 +2307,7 @@ function readCostumePiece(s: Serializer): void {
   if (subVersion < 0x105) {
     const n = s.count();
     for (let i = 0; i < n; i += 1) s.i32(); // morphParamRemap, an i32 each
-  } else s.bytes(s.i32());
+  } else s.skip(s.i32());
   const prims = s.count();
   for (let i = 0; i < prims; i += 1) readPrimitive(s);
   if (version >= 0x19a) s.resource(true); // plan
@@ -2337,9 +2337,9 @@ export function readCostume(s: Serializer): void {
 function readNpcJumpSolver(s: Serializer): void {
   if (s.revision.version > 0x2cd) {
     s.bool(); // isCurrentJumpFlipped
-    s.vector3(); // curSource
-    s.vector3(); // curTarget0
-    s.vector3(); // curTarget1
+    s.skipVector3(); // curSource
+    s.skipVector3(); // curTarget0
+    s.skipVector3(); // curTarget1
     s.s32(); // currentJump
     s.i32(); // currentJumpPos
   }
@@ -2350,7 +2350,7 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   const { version, subVersion } = s.revision;
   if (version < 0x273) return;
   readNpcJumpSolver(s);
-  if (subVersion < 0x118) s.bytes(s.i32()); // soundRecording
+  if (subVersion < 0x118) s.skip(s.i32()); // soundRecording
   s.intVector(); // soundRecordingDataNbytes
   s.i32(); // soundRecordingPacket
   s.i32(); // soundRecordingPacketOffset
@@ -2370,9 +2370,9 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
     s.i32();
   }
   if (version > 0x2ac) {
-    s.vector3(); // moveTarget
-    if (version < 0x36e) s.vector3(); // lookAt
-    if (version > 0x2d6 && version < 0x2e6) s.vector3();
+    s.skipVector3(); // moveTarget
+    if (version < 0x36e) s.skipVector3(); // lookAt
+    if (version > 0x2d6 && version < 0x2e6) s.skipVector3();
     if (version < 0x2ce) s.s32();
     s.s32(); // waitTime
     if (version < 0x2ce) s.f32();
@@ -2396,7 +2396,7 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 
 /** `PScriptName`: a length-prefixed blob this reader only has to step over. */
 function readScriptName(s: Serializer): void {
-  s.bytes(s.s32());
+  s.skip(s.s32());
 }
 
 /**
@@ -2521,11 +2521,11 @@ function readQuest(s: Serializer): void {
  * beside `UnimplementedPartError` in `src/thing.ts`.
  */
 function readEffector(s: Serializer): void {
-  s.vector3(); // posVel
+  s.skipVector3(); // posVel
   s.f32(); // angVel
   s.f32(); // viscosity
   s.f32(); // density
-  s.vector3(); // gravity, defaulting to (0, -2.7, 0)
+  s.skipVector3(); // gravity, defaulting to (0, -2.7, 0)
   s.bool(); // pushBack
   s.bool(); // swimmable
   s.f32(); // viscosityCheap
@@ -2558,7 +2558,7 @@ function readRegionOverride(s: Serializer): void {
   s.i32(); // region
   s.resource(true); // materialPlan
   s.resource(); // material
-  s.vector3(); // uvScale
+  s.skipVector3(); // uvScale
   if (s.revision.subVersion >= 0x158) {
     s.i32(); // color
     s.i8(); // brightness
@@ -2589,7 +2589,7 @@ function readConnectorHook(s: Serializer): void {
   s.i32(); // mode
   if (subVersion <= 0xbb) s.i32();
   s.i32(); // inputAction
-  if (subVersion <= 0xbd) s.vector3();
+  if (subVersion <= 0xbd) s.skipVector3();
   s.f32(); // poweredSpeed
   s.f32(); // accel
   s.f32(); // decel
@@ -2601,7 +2601,7 @@ function readConnectorHook(s: Serializer): void {
     s.i32(); // collidable
     s.f32(); // angle
     s.f32(); // friction
-    s.vector4(); // pivot
+    s.skipVector4(); // pivot
   }
   if (subVersion >= 0xff && subVersion < 0x15d) s.i32();
   if (subVersion > 0x103) s.f32(); // spinDamping
@@ -2641,9 +2641,9 @@ function readAtmosphericTweak(s: Serializer): void {
 
 /** `PPowerUp`: a power-up a player is holding, at subVersion >= 0x18d. */
 function readPowerUp(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  s.matrix(); // spawnedRootMatrix
-  s.matrix(); // spawnedChipMatrix
-  s.vector4(); // rootHandle
+  s.skipMatrix(); // spawnedRootMatrix
+  s.skipMatrix(); // spawnedChipMatrix
+  s.skipVector4(); // rootHandle
   s.resource(true); // plan
   readThingRef(s, readers); // powerUpThing
   readThingRef(s, readers); // powerUpHandle
@@ -2651,7 +2651,7 @@ function readPowerUp(s: Serializer, readers: ReadonlyMap<string, PartReader>): v
   s.bool(); // justFlipped
   s.i32(); // fireStartTime
   s.f32(); // initialRotation
-  s.vector3(); // deterministicPosition
+  s.skipVector3(); // deterministicPosition
   s.f32(); // deterministicRotation
   s.f32(); // offsetForEmitters
   s.f32(); // prevAngle
@@ -2662,7 +2662,7 @@ function readPowerUp(s: Serializer, readers: ReadonlyMap<string, PartReader>): v
 function readWindTweak(s: Serializer): void {
   const { subVersion } = s.revision;
   s.f32(); // windStrength
-  s.vector3(); // direction
+  s.skipVector3(); // direction
   s.f32(); // angle
   s.f32(); // decay
   s.f32(); // currentInput
@@ -2701,8 +2701,8 @@ function readStreamingData(s: Serializer): void {
  */
 function readStreamingHint(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
   s.i32(); // type
-  s.vector3(); // offset
-  s.vector3(); // size
+  s.skipVector3(); // offset
+  s.skipVector3(); // size
   readThingRef(s, readers); // relativeToThing
   things(s, readers); // connected
 }
@@ -2715,8 +2715,8 @@ function readPoppetMode(s: Serializer): void {
 
 /** `RaycastResults`: what the popit's cursor is pointing at. */
 function readRaycastResults(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  s.vector4(); // hitpoint
-  s.vector4(); // normal
+  s.skipVector4(); // hitpoint
+  s.skipVector4(); // normal
   s.f32(); // baryU
   s.f32(); // baryV
   s.i32(); // triIndex
@@ -2747,13 +2747,13 @@ function readPoppetShapeOverride(s: Serializer): void {
   // ⚠️ A plain count and that many vectors, not an `array` of structs: cwlib
   // writes the length itself here rather than going through its array helper.
   const count = s.count();
-  for (let i = 0; i < count; i += 1) s.vector3(); // polygon
+  for (let i = 0; i < count; i += 1) s.skipVector3(); // polygon
   s.intVector(); // loops
   s.s32(); // back
   s.s32(); // front
   s.f32(); // scale
   s.f32(); // angle
-  if (s.revision.version > 0x317) s.matrix(); // worldMatrix
+  if (s.revision.version > 0x317) s.skipMatrix(); // worldMatrix
 }
 
 /**
@@ -2972,7 +2972,7 @@ function readInventoryItemDetails(s: Serializer): void {
   s.reference((self) => {
     // creationHistory: fixed 20-byte names above 0x37c
     const count = self.count();
-    for (let i = 0; i < count; i += 1) self.bytes(0x14);
+    for (let i = 0; i < count; i += 1) self.skip(0x14);
   });
   s.resource(true); // icon
   s.reference((self) => {
@@ -3000,9 +3000,9 @@ function readInventoryItemPhotoData(s: Serializer): void {
   s.sha1(); // photoMetadata.levelHash
   s.u64(); // photoMetadata.timestamp, an s64
   s.array((self) => {
-    self.bytes(0x14); // PSID
+    self.skip(0x14); // PSID
     self.wstr(); // user
-    self.vector4(); // bounds
+    self.skipVector4(); // bounds
   });
   if (s.revision.version > 0x3c7) s.resource(true); // painting
 }
@@ -3111,7 +3111,7 @@ function readHudElem(s: Serializer): void {
     s.f32(); // alpha
     s.i32(); // color
   }
-  if (subVersion > 0x36) s.matrix(); // transform
+  if (subVersion > 0x36) s.skipMatrix(); // transform
   if (subVersion >= 0x24) {
     s.s32(); // colorIndex
     s.wstr(); // name
@@ -3121,7 +3121,7 @@ function readHudElem(s: Serializer): void {
       d.resource(); // texture
       d.i32(); // frameNo
       d.i32(); // gpuColor
-      for (let i = 0; i < 4; i += 1) d.vector4(); // corners
+      for (let i = 0; i < 4; i += 1) d.skipVector4(); // corners
     });
   }
   if (subVersion < 0x55) {

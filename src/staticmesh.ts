@@ -128,10 +128,10 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
     type: p.u8(),
   }));
   s.array((u) => {
-    u.vector3(); // min
+    u.skipVector3(); // min
     u.i16(); // structIndexA
     u.i16(); // structIndexB
-    u.vector3(); // max
+    u.skipVector3(); // max
     u.i16(); // firstPrimitive
     u.i16(); // numPrimitives
   });

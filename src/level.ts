@@ -78,7 +78,7 @@ function readStreamingCheckpoint(s: Serializer): void {
   const { subVersion } = s.revision;
   if (subVersion > 0x72) {
     s.i32(); // type
-    s.vector3(); // position
+    s.skipVector3(); // position
   }
   if (subVersion > 0xdc) readStreamingId(s); // startPointName
   if (subVersion >= 0x13b) readSlotId(s); // slotID
@@ -89,7 +89,7 @@ function readStreamingCheckpoint(s: Serializer): void {
 function readQuestTracker(s: Serializer): void {
   const { subVersion } = s.revision;
   if (subVersion > 0xeb) {
-    s.vector3(); // position
+    s.skipVector3(); // position
     readStreamingId(s); // questID
   }
   if (subVersion > 0xf3) readStreamingId(s); // objectiveID
@@ -185,9 +185,9 @@ function readLevelData(s: Serializer): void {
   // the main one and the walk ends right only without the list
   // (steering/level-files.md, *Streaming levels*).
   if (type !== 2) s.references(readChunkFile);
-  s.vector3(); // offset
-  s.vector3(); // min
-  s.vector3(); // max
+  s.skipVector3(); // offset
+  s.skipVector3(); // min
+  s.skipVector3(); // max
   s.reference(readLevelData); // parent
   // ⚠️ The gate was in this comment and not in the code for a month: LBP3's own
   // story levels are subVersion 0x1ab, one below it, and every one of them
@@ -204,7 +204,7 @@ function readStreamingManager(s: Serializer): void {
   s.i32(); // numIslands
   if (subVersion > 0x1ff) s.i32(); // numPendingIslands
   s.resource(true); // fartDesc, a descriptor
-  s.vector3(); // startingPointPosition
+  s.skipVector3(); // startingPointPosition
   s.i32(); // streamingZoneShape
   s.i32(); // streamingZoneSize
   s.i32(); // numInUsePlans
@@ -230,21 +230,21 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   if (version > 0x3c1) s.i32(); // selectionFrame
   readThingRef(s, readers); // switchThing
   readThingRef(s, readers); // selection
-  s.vector4(); // localPosition
+  s.skipVector4(); // localPosition
   s.f32(); // localAngle
   if (version < 0x3c2) {
-    s.vector4();
-    s.vector4();
+    s.skipVector4();
+    s.skipVector4();
   }
-  s.vector4(); // moveAngle
+  s.skipVector4(); // moveAngle
   if (version > 0x3c1) {
-    for (let i = 0; i < 4; i += 1) s.vector4(); // lastRCStart, lastRCDir, currRCStart, currRCDir
+    for (let i = 0; i < 4; i += 1) s.skipVector4(); // lastRCStart, lastRCDir, currRCStart, currRCDir
     s.f32(); // lastRoll
     s.f32(); // currRoll
   }
   s.bool(); // prevMoveGrabbing
   s.bool(); // moveGrabbing
-  if (version < 0x3c2) s.vector4();
+  if (version < 0x3c2) s.skipVector4();
   s.f32(); // zMovePos, or the old layout's trailing float
 }
 
@@ -305,7 +305,7 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   s.array((self) => self.i32()); // globalSettingsThingUIDs
   s.array((self) => self.i32()); // globalSettingsThingPriority
   s.f32(); // waterTint
-  s.vector4(); // fromWaterTintColor
+  s.skipVector4(); // fromWaterTintColor
   s.f32(); // targetWaterTint
   for (let i = 0; i < 6; i += 1) s.f32(); // water murkiness and bits: each current, from, target
   s.bool(); // waterDrainSoundsEnabled

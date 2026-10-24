@@ -186,11 +186,11 @@ function readBone(s: Serializer): MeshBone {
   const nextSibling = s.s32();
   const skinPose = s.matrix();
   const invSkinPose = s.matrix();
-  s.vector4(); // obbMin
-  s.vector4(); // obbMax
+  s.skipVector4(); // obbMin
+  s.skipVector4(); // obbMax
   s.array((x) => { // shapeVerts: MeshShapeVertex
-    x.vector4(); // localPos
-    x.vector4(); // localNormal
+    x.skipVector4(); // localPos
+    x.skipVector4(); // localNormal
     x.i32(); // boneIndex
   });
   s.array((x) => { // shapeInfos: MeshShapeInfo
@@ -222,13 +222,13 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
   // own redundant length in front.
   const clusters = s.count();
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.vector4(); // restCOM
+  for (let i = 0; i < clusters; i += 1) s.skipVector4(); // restCOM
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.matrix(); // restDyadicSum
+  for (let i = 0; i < clusters; i += 1) s.skipMatrix(); // restDyadicSum
   s.i32();
-  for (let i = 0; i < clusters * 81; i += 1) s.f32(); // restQuadraticDyadicSum
+  s.skip(clusters * 81 * 4); // restQuadraticDyadicSum, f32 each
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.bytes(0x20); // names
+  for (let i = 0; i < clusters; i += 1) s.skip(0x20); // names
   s.array((x) => { // softbodySprings
     x.i16();
     x.i16();
@@ -240,7 +240,7 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
   });
   s.array((x) => x.f32()); // mass
   const ellipsoid = (x: Serializer): void => {
-    x.matrix();
+    x.skipMatrix();
     x.i32(); // parentBone
     x.i32(); // affectWorldOnly
   };
@@ -248,8 +248,8 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
   s.array((x) => x.matrix()); // clusterImplicitEllipsoids
   s.array(ellipsoid); // insideImplicitEllipsoids
   s.array((x) => { // implicitPlanes
-    x.vector4();
-    x.vector4();
+    x.skipVector4();
+    x.skipVector4();
     x.i32();
   });
   s.resource(); // softPhysSettings
@@ -258,12 +258,12 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
   s.i32(); // minUnalignedSpringVert
   s.array((x) => x.i16()); // springyTriIndices
   s.i32(); // springTrisStripped, an intbool
-  s.vector4(); // softbodyContainingBoundBoxMin
-  s.vector4(); // softbodyContainingBoundBoxMax
+  s.skipVector4(); // softbodyContainingBoundBoxMin
+  s.skipVector4(); // softbodyContainingBoundBoxMax
   s.array((x) => { // cullBones
-    x.matrix();
-    x.vector4();
-    x.vector4();
+    x.skipMatrix();
+    x.skipVector4();
+    x.skipVector4();
   });
   s.intVector(); // regionIDsToHide
   s.i32(); // costumeCategoriesUsed
@@ -312,10 +312,10 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   if (streamCount < 2) throw new SerializerError(`a mesh with ${streamCount} vertex streams`);
   const position = s.bytes(vertexCount * VERTEX);
   const skin = s.bytes(vertexCount * VERTEX);
-  for (let i = 2; i < streamCount; i += 1) s.bytes(vertexCount * VERTEX); // a morph each
+  for (let i = 2; i < streamCount; i += 1) s.skip(vertexCount * VERTEX); // a morph each
   const attributes = s.bytes(s.i32());
   const indices = s.bytes(s.i32());
-  if (subVersion >= 0x16b) s.bytes(s.i32()); // triangleAdjacencyInfos
+  if (subVersion >= 0x16b) s.skip(s.i32()); // triangleAdjacencyInfos
   const runs = s.array(readPrimitive);
   const bones = s.array(readBone);
   const { primitiveType, skeletonType } = readTail(s);

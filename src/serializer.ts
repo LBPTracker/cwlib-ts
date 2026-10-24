@@ -445,6 +445,30 @@ export class Serializer {
     return out;
   }
 
+  /** Step over `n` bytes nothing keeps. */
+  skip(n: number): void {
+    this.need(n);
+  }
+
+  /** A `vector3()` nothing keeps: twelve bytes, `f32` being fixed-width. */
+  skipVector3(): void {
+    this.need(12);
+  }
+
+  /** A `vector4()` nothing keeps: sixteen bytes. */
+  skipVector4(): void {
+    this.need(16);
+  }
+
+  /** A `matrix()` nothing keeps: its mask when compressed, then four bytes per component it names. */
+  skipMatrix(): void {
+    let mask = 0xffff;
+    if ((this.compressionFlags & COMPRESSED_MATRICES) !== 0) mask = this.u16();
+    let present = 0;
+    for (let m = mask; m !== 0; m &= m - 1) present += 1;
+    this.need(present * 4);
+  }
+
   vector3(): [number, number, number] {
     return [this.f32(), this.f32(), this.f32()];
   }
@@ -461,7 +485,9 @@ export class Serializer {
    * written.
    */
   matrix(): Float32Array {
-    const out = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    // One allocation: a `Float32Array` of a literal built the array twice.
+    const out = new Float32Array(16);
+    out[0] = out[5] = out[10] = out[15] = 1;
     let mask = 0xffff;
     if ((this.compressionFlags & COMPRESSED_MATRICES) !== 0) mask = this.u16();
     for (let i = 0; i < 16; i += 1) {
