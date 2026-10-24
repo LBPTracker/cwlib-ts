@@ -24,17 +24,14 @@
 
 import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { crc32, deflateSync } from 'node:zlib';
 
 import { openFarc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
 import { decodeLevel, readTexture, type Texture, type TextureLevel } from '../src/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { magicOf } from '../src/resource.ts';
+import { FARCS, GAME, gameFileDB } from './game.ts';
 
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
-const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
 const PNG_DIR = process.argv[2];
 
 /** Path fragments of the textures written out as PNG. */
@@ -75,9 +72,7 @@ function writePng(file: string, w: number, h: number, rgba: Uint8Array): void {
   ]));
 }
 
-const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-const pathOf = new Map<string, string>();
-for (const row of db.values()) pathOf.set(row.sha1, row.path);
+const { pathOf } = await gameFileDB();
 
 const tally = new Map<string, number>();
 const bump = (key: string, by = 1): void => void tally.set(key, (tally.get(key) ?? 0) + by);

@@ -7,21 +7,16 @@
  * The numbers in steering/level-files.md, *Level settings*.
  */
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
 
 import { openFarc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
 import { readThings } from '../src/level.ts';
 import type { LevelLighting, LevelSettingsPart } from '../src/parts.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readStaticMesh } from '../src/staticmesh.ts';
 import { magicOf } from '../src/resource.ts';
+import { FARCS, GAME, gameFileDB } from './game.ts';
 
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
-const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
-const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-const pathOf = new Map<string, string>();
-for (const row of db.values()) pathOf.set(row.sha1, row.path);
+const { db, pathOf } = await gameFileDB();
 
 const tally = new Map<string, number>();
 const bump = (k: string): void => void tally.set(k, (tally.get(k) ?? 0) + 1);

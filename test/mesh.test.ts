@@ -20,6 +20,9 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  */
 const GAME = process.env.LBP_GAME ?? 'D:\\PS4Games\\CUSA00063';
 const FIXTURES = process.env.LBP_FIXTURES ?? path.join(import.meta.dirname, '..', '..', 'lbptracker', 'fixtures');
+/** The game's FileDB, 11 MB and 107,673 rows: read once for this file's tests, not once per test. */
+let fileDB: Promise<ReturnType<typeof readFileDB>> | undefined;
+const gameFileDB = () => (fileDB ??= readFile(path.join(GAME, 'output', 'orbisguids.map')).then(readFileDB));
 const ASCETIC = path.join(FIXTURES, 'levels', 'ascetic.lvl');
 
 /** `badge_zip_entrance.mol`: 20 bones, three UV channels, five primitives. */
@@ -115,7 +118,7 @@ test("every mesh in intro_001.farc reads to its last byte, and draws the right w
 
 test('badge_zip_entrance.mol: the bones, the channels and the materials', async (t) => {
   if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
-  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const db = await gameFileDB();
   const row = db.get(BADGE_ZIP_ENTRANCE)!;
   assert.equal(row.path, 'gamedata/mesh_library/common_objects/badge_zip_entrance/badge_zip_entrance.mol');
   const open = (await meshes('intro_001.farc'))!;
@@ -169,7 +172,7 @@ test("ascetic.lvl's render meshes name their mesh and the Things that pose it", 
   assert.equal(nulls, 138);
 
   if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
-  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const db = await gameFileDB();
   const archives = await Promise.all(
     ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'].map((f) => meshes(f)),
   );

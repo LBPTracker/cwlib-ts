@@ -19,24 +19,17 @@
  */
 
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
 
 import { openFarc, type Farc } from '../src/farc.ts';
-import { readFileDB, readGuidRemap } from '../src/filedb.ts';
 import { BOX_OUTPUT, BOX_TEXTURE_SAMPLE, materialSummary, readMaterial, type GfxMaterial } from '../src/material.ts';
 import { readMesh } from '../src/mesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { magicOf } from '../src/resource.ts';
+import { FARCS, GAME, gameFileDB, gameRemap } from './game.ts';
 
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
-const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
 
-const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-const pathOf = new Map<string, string>();
-for (const row of db.values()) pathOf.set(row.sha1, row.path);
-const { remap } = readGuidRemap(await readFile(path.join(GAME, 'output', 'orbisguids.remap')));
-/** The FileDB row for a GUID, through the remap when it has none of its own. */
-const rowOf = (guid: number) => db.get(guid) ?? db.get(remap.get(guid)?.guid ?? -1);
+const { db, pathOf } = await gameFileDB();
+const { remap, rowOf } = await gameRemap(db);
 
 const tally = new Map<string, number>();
 const bump = (key: string, by = 1): void => void tally.set(key, (tally.get(key) ?? 0) + by);

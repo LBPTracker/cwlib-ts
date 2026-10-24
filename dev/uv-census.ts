@@ -23,24 +23,20 @@
  */
 
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
 
 import { openFarc, type Farc } from '../src/farc.ts';
-import { readFileDB, readGuidRemap } from '../src/filedb.ts';
 import { materialSummary, readMaterial, type GfxMaterial } from '../src/material.ts';
 import { readMesh } from '../src/mesh.ts';
 import { decodeLevel, readTexture } from '../src/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { magicOf } from '../src/resource.ts';
+import { FARCS, GAME, gameFileDB, gameRemap } from './game.ts';
 
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 /** `transform`: on the samples whose transform is not the identity, cwlib's reading against none. */
 const TRANSFORM = process.argv[2] === 'transform';
-const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
 
-const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-const { remap } = readGuidRemap(await readFile(path.join(GAME, 'output', 'orbisguids.remap')));
-const rowOf = (guid: number) => db.get(guid) ?? db.get(remap.get(guid)?.guid ?? -1);
+const { db } = await gameFileDB();
+const { rowOf } = await gameRemap(db);
 
 const archives: Farc[] = [];
 const closers: (() => Promise<void>)[] = [];

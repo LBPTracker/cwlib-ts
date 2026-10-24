@@ -17,6 +17,13 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  */
 const GAME = process.env.LBP_GAME ?? 'D:\\PS4Games\\CUSA00063';
 
+/** The game's FileDB, 11 MB and 107,673 rows: read once for this file's tests, not once per test. */
+let fileDB: Promise<ReturnType<typeof readFileDB>> | undefined;
+const gameFileDB = () => (fileDB ??= readFile(path.join(GAME, 'output', 'orbisguids.map')).then(readFileDB));
+/** `orbisguids.remap`, likewise. */
+let guidRemap: Promise<ReturnType<typeof readGuidRemap>['remap']> | undefined;
+const gameRemap = () => (guidRemap ??= readFile(path.join(GAME, 'output', 'orbisguids.remap')).then((b) => readGuidRemap(b).remap));
+
 /* ------------------------------------------------------------- synthetic */
 
 test('the GUID remap: pairs, then the paths, each row naming its pair', () => {
@@ -54,8 +61,8 @@ async function archive(file: string): Promise<{ farc: Farc; close(): Promise<voi
 
 test("orbisguids.remap: 56,271 old GUIDs, none of them a FileDB row", async (t) => {
   if (!existsSync(path.join(GAME, 'output', 'orbisguids.remap'))) return t.skip(`no game under ${GAME}`);
-  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-  const { remap } = readGuidRemap(await readFile(path.join(GAME, 'output', 'orbisguids.remap')));
+  const db = await gameFileDB();
+  const remap = await gameRemap();
   assert.equal(remap.size, 56271);
   assert.ok([...remap.keys()].every((old) => !db.has(old)));
   // badge_zip_entrance.mol's first primitive names 3732, which has no row.
@@ -66,8 +73,8 @@ test("orbisguids.remap: 56,271 old GUIDs, none of them a FileDB row", async (t) 
 test("every material and mesh in intro_001.farc: each primitive's material reads, its UV channels exist", async (t) => {
   const open = await archive('intro_001.farc');
   if (!open || !existsSync(path.join(GAME, 'output', 'orbisguids.remap'))) return t.skip(`no game under ${GAME}`);
-  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-  const { remap } = readGuidRemap(await readFile(path.join(GAME, 'output', 'orbisguids.remap')));
+  const db = await gameFileDB();
+  const remap = await gameRemap();
   try {
     const materials = new Map<string, GfxMaterial>();
     const meshes: Uint8Array[] = [];
@@ -105,7 +112,7 @@ test("every material and mesh in intro_001.farc: each primitive's material reads
 test('badge_zip_entrance_cloth.gmat: the graph and its summary', async (t) => {
   const open = await archive('intro_001.farc');
   if (!open) return t.skip(`no game under ${GAME}`);
-  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const db = await gameFileDB();
   try {
     const m = await readMaterial((await open.farc.get(db.get(347494)!.sha1))!, nodeInflate);
     assert.equal(m.flags, 0x2709);

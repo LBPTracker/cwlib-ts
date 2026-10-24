@@ -11,21 +11,17 @@
  */
 
 import path from 'node:path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 
 import { openFarc } from '../src/farc.ts';
-import { readFileDB } from '../src/filedb.ts';
 import { readThings } from '../src/level.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { magicOf } from '../src/resource.ts';
+import { FARCS, GAME, gameFileDB } from './game.ts';
 
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
-const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
 const LIST = process.argv[2];
 
-const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
-const pathOf = new Map<string, string>();
-for (const row of db.values()) pathOf.set(row.sha1, row.path);
+const { pathOf } = await gameFileDB();
 
 const groups = new Map<string, string[]>();
 const counts: Record<string, number> = {};
