@@ -503,6 +503,33 @@ Before the container's header gates, 567 plans and 116 levels died in the contai
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first
 with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
 
+### The Vita branch — `DOUBLE11`, `0x4431`
+
+The four FARCs hold **173 Things resources on the Vita's branch**: the crossplay levels
+(`gamedata/lbp2/dlc/crossplay/…/*_crossplayvita_*.cpv`, `gamedata/lbp2/e3demo2/…`), 25 `LVLb`
+and 148 `PLNb`, all at version `0x3e2` and subVersion 0, branch revisions `0x54` to `0x87`
+(`0x87` is cwlib's `D1_MAX`). cwlib's `Revision.isVita()` is the branch id **and** a head
+from `0x3c1` to `0x3e2`; `vitaRevision` in `src/io/serializer.ts` is that, and every gate on
+it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (16 bits from
+`0x62`), `PWorld`'s Vita fields and its early return, `GlobalSettings` and `PLevelSettings`'
+`nonLinearFog`, `MoveCursor`, and the parts `PShape`, `PTrigger`, `PSwitch`,
+`PPhysicsTweak`, `PMaterialTweak`, `PGeneratedMesh`, `PEnemy`, `PEmitter`, `PCreature`,
+`PControlinator`, `PCheckpoint`, the decal, the decoration, `NpcBehavior` and
+`InputRecording`.
+
+- ✔ With them **155 of the 173 read** (`dev/things-census.ts`, 2026-10-25): **all 148 plans
+  and 7 of the 25 levels**, where none did before. Nothing off the branch moved: the census's
+  other rows are the same files.
+- ❗ **The other 18 levels hold a part no reader knows**, and cwlib fails on them too (`CwlibTrace`:
+  a `ClassCastException` at the same byte). Their Things have **parts revision `0x31`** and mask
+  bit `0x27` (14 levels) or `0x28` (3); the last one fails in a `PTrigger`'s decorations
+  instead. On LBP3 those bits are `POPPET_POWERUP` and `POCKET_ITEM`, from parts revisions
+  `0x30` and `0x31`; **on the Vita the same two revisions and bits are parts of its own**,
+  which cwlib's `Part` table does not have. One of them, in
+  `level_2b_crossplayvita_33.cpv`, is 31 bytes: `00 00`, the wide string `raise`, `45 03 40`,
+  five zero bytes, two `f32` 1.0 and `00 00`. What the parts are is open: *28* in
+  [open-questions.md](open-questions.md).
+
 ## The game's meshes — `RMesh`
 
 `readMesh` in `src/resources/mesh.ts`: magic `MSHb`, dependency type 2, FileDB paths ending `.mol`. The field

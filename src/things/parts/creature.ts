@@ -1,6 +1,6 @@
 /** `CREATURE`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader } from '../thing.ts';
 import { things } from './common.ts';
 
@@ -156,6 +156,9 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (version >= 0x35a) s.i32(); // behavior
   if (version >= 0x373) s.i32(); // effectDestroy
   if (version >= 0x3c0) s.reference((self) => readWhipSim(self, readers));
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0 && vita < 0x53) s.u8();
+  if (vita >= 0x53) s.i32(); // shootAtTouch
   if (subVersion >= 0x88 && subVersion <= 0xa4) s.resource();
   if (subVersion >= 0xaa) thing(); // alternateFormWorld
   if (subVersion >= 0xd7) s.i32(); // hookHatState

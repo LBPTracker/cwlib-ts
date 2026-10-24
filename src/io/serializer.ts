@@ -99,6 +99,19 @@ export interface RevisionInfo {
   readonly branchRevision: number;
 }
 
+/** cwlib's `Branch.DOUBLE11`: the Vita's branch id. */
+export const DOUBLE11 = 0x4431;
+
+/**
+ * The Vita branch's revision, or -1 off it: cwlib's `Revision.isVita()`, which
+ * is the branch id **and** a head from `0x3c1` to `0x3e2`, so a `has(DOUBLE11, n)`
+ * gate there is `vitaRevision(r) >= n`. The game's crossplay levels are on it
+ * at `0x3e2`, branch revisions `0x54`--`0x87`.
+ */
+export function vitaRevision(r: RevisionInfo): number {
+  return r.branchId === DOUBLE11 && r.version >= 0x3c1 && r.version <= 0x3e2 ? r.branchRevision : -1;
+}
+
 export function requireLbp3(revision: RevisionInfo): void {
   if (revision.version < LBP3_MIN_VERSION || revision.version > LBP3_MAX_VERSION) {
     throw new SerializerError(

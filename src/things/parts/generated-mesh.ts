@@ -1,6 +1,6 @@
 /** `GENERATED_MESH`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
 
 /** `PGeneratedMesh`: how a shape is drawn. */
 export interface GeneratedMeshPart {
@@ -36,6 +36,9 @@ export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
     s.f32(); // textureAnimationSpeed
     s.f32(); // textureAnimationSpeedOff
   }
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x6b) s.i32(); // uvMode
+  if (vita === 0x76) s.f32(); // textureScale, at that one revision
   const noBevel = subVersion >= 0x34 ? s.bool() : false;
   if (subVersion >= 0x97) s.bool(); // sharded
   const includeSides = subVersion >= 0x13d ? s.bool() : true;

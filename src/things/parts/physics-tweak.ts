@@ -1,6 +1,6 @@
 /** `PHYSICS_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 
 /**
  * `PPhysicsTweak`: the movement tweaker.
@@ -75,6 +75,12 @@ export function readPhysicsTweak(s: Serializer): void {
     s.f32(); // speed
     if (version > 0x3c4) s.u8(); // pathIsAbsolute
   }
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x11) s.i32(); // usePanel
+  if (vita >= 0x11 && vita < 0x4b) s.u8();
+  if (vita >= 0x1f) s.i32(); // followType
+  if (vita >= 0x4b) s.f32(); // followerDeceleration
+  if (vita >= 0x55) s.u8(); // playerFilter
   if (configuration === 0xe && version > 0x3e3) {
     s.f32();
     s.i32();

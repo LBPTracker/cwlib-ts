@@ -43,7 +43,7 @@
  * `TRANSITION` on bit `0x2a` instead of `0x29`, every later part following.
  */
 
-import { Serializer, SerializerError } from '../io/serializer.ts';
+import { Serializer, SerializerError, vitaRevision } from '../io/serializer.ts';
 
 /**
  * cwlib `Branch.LEERDAMMER` and the two of its revisions this reader needs.
@@ -294,7 +294,8 @@ function fillThing(
 
   if (version >= 0x341) {
     if (version >= 0x254) thing.planGuid = s.guid();
-    thing.flags = s.u8();
+    // The Vita widened them to 16 bits at its revision 0x62 (cwlib's `Thing`).
+    thing.flags = vitaRevision(s.revision) >= 0x62 ? s.i16() : s.u8();
     if (subVersion >= 0x110) thing.extraFlags = s.u8();
   } else {
     if (version > 0x21a) s.bool(); // isStamping

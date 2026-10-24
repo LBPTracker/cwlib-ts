@@ -1,6 +1,6 @@
 /** `SHAPE`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
 import { type PartReader } from '../thing.ts';
 
 /**
@@ -135,8 +135,14 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
     colorOpacity = s.u8();
     s.u8(); // colorOffOpacity
   }
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x5) s.u8(); // touchability
   if (subVersion >= 0x12c) s.u8(); // colorShininess
   if (version >= 0x3e2) s.bool(); // canCollect
+  if (vita >= 0x26) s.bool(); // invisibleTouch
+  if (vita >= 0x34) s.u8(); // bouncePadBehavior
+  if (vita >= 0x5f) s.f32(); // zBiasVita
+  if (vita >= 0x7a) s.bool(); // touchWhenInvisible
   if (subVersion >= 0x42) {
     if (subVersion < 0xc6) s.u8();
     s.bool(); // ghosty

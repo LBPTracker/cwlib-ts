@@ -1,6 +1,6 @@
 /** `MATERIAL_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
 
 /** `PMaterialTweak`: the per-Thing material overrides. */
@@ -22,6 +22,17 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
   if (subVersion > 0x2) s.bool(); // isProjectile
   if (version >= 0x2df && version < 0x327) readThingRef(s, readers);
   if (version > 0x356) s.bool(); // disablePhysicsAudio
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x5) s.u8(); // touchability
+  if (vita >= 0x7) {
+    s.i32(); // tweakType
+    for (let i = 0; i < 5; i += 1) s.bool(); // highlight, includeRigidConnectors, droppable, requiresTag, requiresNewTouch
+    s.f32(); // maxSpeed
+    s.s32(); // colorIndex
+  }
+  if (vita >= 0x49) s.f32(); // touchRotationalStrength
+  if (vita >= 0x6c) s.bool(); // touchabilityInvisible
+  if (vita >= 0x7) s.wstr(); // name
   if (subVersion > 0x3) s.bool(); // isUsableByPoppetAudio
   if (version > 0x3ec || subVersion > 5) s.bool(); // hasShadow
   if (subVersion > 0x33) s.bool(); // noBevel

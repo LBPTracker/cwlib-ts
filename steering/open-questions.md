@@ -95,15 +95,20 @@ branch, into one that stands between a reader and a song. What is left:
   plausible-nonsense failure the bound exists to prevent. The right change, if one is wanted, is an
   **allowed set** — `0x272` plus `0x3b7..0x3ff`, refusing the untested span between — and it is a
   design decision to take on purpose.
-- **Branch `0x4431`** — LBP Vita: one level in the saves, `f331efa7`, version `0x3e2`, and nothing
-  in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
+- **Branch `0x4431`** — LBP Vita. ✔ cwlib's Vita gates are ported (2026-10-25): 155 of the game's
+  173 crossplay resources on the branch read, all 148 plans and 7 of 25 levels. ⚠️ The other 18
+  hold the Vita's own parts at parts revision `0x30`/`0x31`, bits `0x27`/`0x28` — LBP3's
+  `POPPET_POWERUP` and `POCKET_ITEM` slots — which cwlib has no table for and fails on too
+  (*The Vita branch* in [level-files.md](level-files.md)). Before that: one level in the saves,
+  `f331efa7`, version `0x3e2`, and nothing in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
   Music Sequencer, so this one is in the way of music.
 - **The game's own archives** — *What of the game's own Things opens* in
   [level-files.md](level-files.md). Not refused by the bound and still failing: **186 plans and
-  28 levels** (`dev/things-census.ts` lists them). Levels: 25 "the world Thing carried no WORLD
-  part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above; then
+  28 levels** (`dev/things-census.ts` lists them; on 2026-10-25, with the Vita gates, it fails 31 plans
+  and 18 levels, the 18 all Vita). Levels: 25 "the world Thing carried no WORLD
+  part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above, 18 of them now; then
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
   `sack_town.bin`. In the story chunks, 9 islands (`dev/story-census.ts`): 3 of `titan_2` with a world nested in an island, 6 of `game_outro`. Plans: mostly the same crossplay Vita
   resources, then missed test markers and leftover tails — the shape of one part reader taking the

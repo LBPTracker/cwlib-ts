@@ -23,7 +23,7 @@
  */
 
 import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
-import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from '../io/serializer.ts';
+import { Serializer, SerializerError, requireLbp3, vitaRevision, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
 import { toHex } from '../io/hex.ts';
@@ -214,9 +214,10 @@ function readEggLink(s: Serializer): void {
   if (version > 0x3e0 && s.bool()) s.resource(true); // painting, behind hasPainting
 }
 
-/** `GlobalSettings`: five factors (the Vita's `nonLinearFog` is not an LBP3 branch). */
+/** `GlobalSettings`: five factors, and on the Vita from its revision 0x78 `nonLinearFog`. */
 function readGlobalSettings(s: Serializer): void {
   for (let i = 0; i < 5; i += 1) s.f32();
+  if (vitaRevision(s.revision) >= 0x78) s.bool(); // nonLinearFog
 }
 
 /** `MoveCursor`, in `PWorld` only below subVersion 0x118. */
@@ -241,11 +242,22 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   s.bool(); // moveGrabbing
   if (version < 0x3c2) s.skipVector4();
   s.f32(); // zMovePos, or the old layout's trailing float
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x1b) s.i32(); // globalCursorPlayer
+  if (vita >= 0x42) readThingRef(s, readers); // cursorPlayerThing
+  if (vita >= 0x6d) s.s32(); // globalCursorPanel
+  if (vita >= 0x82) {
+    s.i32(); // thingUnderCursor
+    s.bool(); // thingUnderCursorChangedWhileDown
+    s.i32(); // lastTouchPanel
+    s.s32(); // lastTouchID
+  }
 }
 
 /**
  * `PWorld` after `things`: cwlib's `PWorld.serialize`, with the branches LBP3's
- * range (0x3b7..0x3ff) never takes left out and the Vita's branch ignored.
+ * range (0x3b7..0x3ff) never takes left out. The Vita's branch (`vitaRevision`)
+ * is cwlib's, gate for gate.
  *
  * ❗ **A world Thing inside a plan has parts after its `WORLD`**, and they are
  * read right only if this is. Three of LBP3 PS4's story chunks hold an island
@@ -257,6 +269,7 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
  */
 function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
   const { version, subVersion } = s.revision;
+  const vita = vitaRevision(s.revision);
   const things = (): void => {
     const count = s.count();
     for (let i = 0; i < count; i += 1) readThingRef(s, readers);
@@ -277,12 +290,32 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   s.s32(); // lbp2NightDaySwapped
   s.bool(); // isPaused
   for (let i = 0; i < 5; i += 1) s.f32(); // lighting, colour correction, fog, fog tint, darkness factors
+  if (vita >= 0x78) s.bool(); // nonLinearFog
   s.array(readEggLink); // completeRewards
   s.array(readEggLink); // collectRewards
   s.array(readEggLink); // aceRewards
   s.bool(); // areRewardsShareable
   readSlotId(s); // scoreboardLevelLinkSlot
   for (let i = 0; i < 3; i += 1) s.array(readSlotId); // complete, collect and ace unlocks: `KeyLink`s
+  if (vita >= 0x22 && vita < 0x25) {
+    s.array(readEggLink); // unlocks
+    s.array(readEggLink); // rewards
+    s.s32(); // timeRequired
+  }
+  if (vita >= 0x25) {
+    for (let i = 0; i < 3; i += 1) {
+      s.array(readEggLink); // gold, silver, bronze rewards
+      s.array(readSlotId); // and unlocks
+    }
+    for (let i = 0; i < 3; i += 1) s.i8(); // gold, silver, bronze trophy condition types
+    for (let i = 0; i < 3; i += 1) {
+      s.s32(); // score required
+      s.f32(); // time required
+      s.s32(); // lives lost required
+    }
+  }
+  if (vita >= 0x3d) for (let i = 0; i < 4; i += 1) s.bool(); // enableAcing, gold, silver, bronze trophy
+  if (vita >= 0x4c) s.bool(); // enforceMinMaxPlayers
   s.s32(); // maxNumPlayers
   things(); // dissolvingThings
   things(); // oldDissolvingThings
@@ -299,9 +332,14 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   s.array((self) => self.f32()); // currGlobalSettingsBlendFactors
   s.array((self) => self.i32()); // globalSettingsThingUIDs
   s.array((self) => self.i32()); // globalSettingsThingPriority
-  s.f32(); // waterTint
-  s.skipVector4(); // fromWaterTintColor
-  s.f32(); // targetWaterTint
+  if (vita >= 0x2d) {
+    s.s32(); // waterColor
+    s.f32(); // waterBrightness
+  } else {
+    s.f32(); // waterTint
+    s.skipVector4(); // fromWaterTintColor
+    s.f32(); // targetWaterTint
+  }
   for (let i = 0; i < 6; i += 1) s.f32(); // water murkiness and bits: each current, from, target
   s.bool(); // waterDrainSoundsEnabled
   s.bool(); // currWaterDrainSoundsEnabled
@@ -339,11 +377,25 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   s.s32(); // debugTimeInLevel
   s.bool(); // useEvenNewerCheckpointCode
   if (version >= 0x3bd && subVersion <= 0x117) s.array((self) => readMoveCursor(self, readers)); // moveCursors
+  if (vita >= 0x8) s.i32(); // globalTouchCursor
+  if (vita >= 0xa && vita < 0x28) s.bool(); // sharedScreen
   if (subVersion > 0x215) s.bool(); // singlePlayer
   if (version >= 0x3d0) {
     s.u8(); // minPlayers
     s.u8(); // maxPlayers
     s.bool(); // moveRecommended
+  }
+  if (vita >= 0) {
+    // The Vita's world ends here, with its own flags (cwlib returns).
+    if (vita >= 0x18) s.bool(); // portraitMode
+    if (version >= 0x3dd) s.bool(); // fixInvalidInOutMoverContacts
+    if (vita >= 0x28 && vita < 0x47) s.s32(); // a player count: sharedScreen above 1
+    if (vita >= 0x47) s.bool(); // sharedScreen
+    if (vita >= 0x39) s.bool(); // disableHUD
+    if (vita >= 0x52) s.bool(); // disableShadows
+    if (vita >= 0x3b) s.bool(); // flipBackground
+    if (vita >= 0x4f) s.bool(); // mpSeparateScreen
+    return;
   }
   if (version >= 0x3dd) s.bool(); // fixInvalidInOutMoverContacts
   if (version >= 0x3f1) s.bool(); // continueMusic

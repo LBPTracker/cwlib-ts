@@ -1,6 +1,6 @@
 /** `LEVEL_SETTINGS`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
 
 /**
  * One set of a level's lighting -- cwlib's `LevelSettings`, the superclass
@@ -84,6 +84,7 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
     const count = s.count();
     for (let i = 0; i < count; i += 1) presets.push(readLevelSettings(s));
   }
+  if (vitaRevision(s.revision) >= 0x78) s.bool(); // nonLinearFog
   const backdropAmbience = s.str();
   const backdropMesh = version >= 0x2f3 ? s.resource() : undefined;
   let backgroundRepeatFlags = 0;

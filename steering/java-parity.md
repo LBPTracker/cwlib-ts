@@ -74,5 +74,7 @@ RGBA8 (`decodeLevel`) and keeps the shaders as blobs.
 
 This library refuses anything outside `0x3b7`–`0x3ff` (`requireLbp3`); Java reads LBP1, LBP2, the
 Vita and the toolkit branches. The older gates are ported here but unproved: with the bound lowered
-by hand, 2 of 19 LBP1 levels at `0x272` opened (`src/io/serializer.ts`, header). The Vita branch's one
-mesh gate is in `readMesh` and has never met a file.
+by hand, 2 of 19 LBP1 levels at `0x272` opened (`src/io/serializer.ts`, header). The Vita branch's gates
+in the Thing stream are cwlib's and read all 148 of the game's Vita plans and 7 of its 25 Vita
+levels; the other 18 hold Vita-only parts cwlib has no table for ([level-files.md](level-files.md),
+*The Vita branch*). The mesh gate in `readMesh` has never met a file.

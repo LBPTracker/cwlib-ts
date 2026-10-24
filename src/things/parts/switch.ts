@@ -1,8 +1,9 @@
 /** `SWITCH`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError } from '../../io/serializer.ts';
+import { Serializer, SerializerError, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { things } from './common.ts';
+import { readNetworkOnlineId } from '../../structs/network.ts';
 
 /** `SwitchType` values this reader has to branch on. */
 const SWITCH_STICKER = 5;
@@ -121,6 +122,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x1a4 && version < 0x2a0) s.f32(); // oldActivation
   if (version > 0x1a4) s.s32(); // activationHoldTime
   if (version > 0x1a4) s.bool(); // requireAll
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x2a) s.u8(); // impactSensorMode
   // ❗ **The connector block, gone at 0x327 and about fifty bytes wide.** Nothing
   // above `LBP3_MIN_VERSION` has it; it is ported for the LBP1 files read with
   // the bound lowered by hand, and leaving it out is most of why an LBP1 switch
@@ -197,6 +200,40 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x390) s.bool(); // detectUnspawnedPlayers
   if (subVersion > 0x216) s.u8(); // unspawnedBehavior
   if (version > 0x3a4) s.bool(); // playSwitchAudio
+  if (vita >= 0) {
+    if (vita >= 0x1) s.i32(); // switchTouchType
+    if (vita >= 0x6 && vita < 0x36) s.u8();
+    if (vita >= 0x9 && vita < 0x2c) s.u32(); // cursorScreenArea, wide
+    else if (vita >= 0x2c) s.u8(); // cursorScreenArea
+    if (vita >= 0xb) s.u8(); // cursorInteractionType
+    if (vita >= 0xc) s.u8(); // cursorTouchPanels
+    if (vita >= 0x23) s.u8(); // cursorTouchIndex
+    if (vita < 0x36) {
+      if (vita >= 0x23) s.u8();
+      if (vita >= 0x13) s.u8();
+      if (vita >= 0x7) s.u8();
+      if (vita >= 0x15) s.u8();
+      if (vita >= 0x24) s.u8();
+    }
+    if (vita >= 0x36) s.u8(); // flags
+    if (vita >= 0x2b) s.s32(); // outputAndOr
+    if (vita >= 0x2b && vita < 0x36) s.u8();
+    if (type === 0x2f) {
+      // The Vita's data sampler (cwlib: "although 0x2f shouldn't be the switch type?").
+      if (vita >= 0x45) s.i32(); // labelIndex
+      if (vita >= 0x46) {
+        readNetworkOnlineId(s); // creatorID
+        s.wstr(); // labelName
+      }
+      if (vita >= 0x33) s.array((self) => self.f32()); // analogue
+      else if (vita >= 0x2e) s.f32(); // analogue, one
+      if (vita >= 0x3c) s.array((self) => self.u8()); // ternary
+    }
+    if (vita >= 0x38 && vita < 0x41) s.u8();
+    if (vita >= 0x41) s.u8(); // includeSameChipTags
+    if (vita >= 0x43) for (let i = 0; i < 3; i += 1) s.i32(); // glow front, back, active colours
+    if (vita >= 0x54) s.u8(); // playerFilter
+  }
   if (version > 0x3ec) s.u8(); // playerMode
 
   // ⚠️ Data-dependent again, and the block is not small.

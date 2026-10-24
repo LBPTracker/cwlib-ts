@@ -1,6 +1,6 @@
 /** `NPC`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
 
 /** `InputRecording`: a captured controller performance. */
@@ -22,6 +22,7 @@ function readInputRecording(s: Serializer): void {
     for (let i = 0; i < count; i += 1) s.skipVector3(); // startVelocities
   }
   if (version > 0x3c4) s.bool(); // recordingContainsMoveData
+  if (vitaRevision(s.revision) >= 0x3a) s.bool(); // recordingContainsVitaData
 }
 
 /** `ActingData`: what a sackbot is performing. */
@@ -78,6 +79,7 @@ export function readNpcBehavior(s: Serializer, readers: ReadonlyMap<string, Part
     s.u8(); // expressionLevel
   }
   if (version > 0x375) s.bool(); // willRecordAudio
+  if (vitaRevision(s.revision) >= 0x16) s.u8(); // multiJumpLevel
   if (subVersion > 0xc6) s.i32(); // awarenessRange
   if (subVersion > 0x10e) s.f32(); // lookAtSpeed
   if (subVersion > 0x175) s.bool(); // showAdvancedOptions

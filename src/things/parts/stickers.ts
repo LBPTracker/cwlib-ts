@@ -1,6 +1,6 @@
 /** `STICKERS`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
 
 /**
  * One sticker: a texture laid on a Thing's surface. cwlib's `Decal.java`;
@@ -56,6 +56,9 @@ function readDecal(s: Serializer): Decal {
   let planGUID = 0;
   if (version >= 0x34c) plan = s.resource(true); // a descriptor
   else if (version >= 0x25b) planGUID = s.guid();
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x3f) s.skipVector4(); // localHitPoint
+  if (vita >= 0x7e) s.bool(); // dontWantGammaCorrection
   return { texture, u, v, xvecu, xvecv, yvecu, yvecv, color, type, metadataIndex, playModeFrame, scorchMark, plan, planGUID };
 }
 

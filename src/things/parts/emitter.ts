@@ -1,6 +1,6 @@
 /** `EMITTER`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
 import { things } from './common.ts';
 import { readSwitchSignal } from './switch.ts';
@@ -82,6 +82,9 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   doubled(0x361); // editorEmitter
   doubled(0x38d); // isLimboFlippedForGunEmitter
   if (version >= 0x3ae) s.f32(); // the z offset cwlib names less politely
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0xf) s.u8(); // emitNode
+  if (vita >= 0x2f) s.u8(); // cleanUpOnDestroyed
   if (subVersion >= 0x18e) s.bool();
   if ((subVersion >= 0x31 && subVersion < 0x65) || subVersion >= 0x65) s.bool(); // soundEnabled
   if (subVersion >= 0x41 && subVersion < 0x1a7) s.bool();

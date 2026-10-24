@@ -1,6 +1,6 @@
 /** `CHECKPOINT`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { type PartReader } from '../thing.ts';
 import { things } from './common.ts';
 
@@ -34,7 +34,7 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
     s.i32(); // checkpointType
     s.i32(); // teamFlags
   }
-  if (subVersion >= 0x15a) s.bool(); // enableAudio
+  if (vitaRevision(s.revision) >= 0x50 || subVersion >= 0x15a) s.bool(); // enableAudio
   if (subVersion >= 0x191) s.bool(); // continueMusic
   if (subVersion >= 0x199) {
     s.i32(); // creatureToChangeBackTo

@@ -1,6 +1,6 @@
 /** `DECORATIONS`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { type PartReader } from '../thing.ts';
 import { readRenderMesh, type RenderMeshPart } from './render-mesh.ts';
 
@@ -42,6 +42,7 @@ function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   if (subVersion >= 0x16c) s.bool(); // isQuest
   const playModeFrame = version >= 0x215 ? s.i32() : -1;
   const planGUID = version >= 0x25b ? s.guid() : 0;
+  if (vitaRevision(s.revision) >= 0x7c) s.f32(); // zBias
   return {
     renderMesh, offset, parentBone, parentTriVert, baryU, baryV, decorationAngle, decorationScale,
     reversed, playModeFrame, planGUID,
