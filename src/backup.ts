@@ -23,15 +23,15 @@ import { readLevelProject, type LevelProject } from './project.ts';
 import { looksLikeMod, readMod } from './mod.ts';
 import { psfName } from './psf.ts';
 import { readSaveArchive, saveArchiveRevision } from './savearchive.ts';
-import { readZip, type InflateRaw } from './zip.ts';
+import { readZip, type InflateRaw, type ZipEntry } from './zip.ts';
 import { thingsKind } from './level.ts';
 
-/** One file out of a folder or an archive. */
-export interface BackupFile {
-  /** Whatever the caller calls it: a path, a name, a SHA-1. Shown, never parsed. */
-  readonly name: string;
-  readonly bytes: Uint8Array;
-}
+/**
+ * One file out of a folder or an archive: the `{ name, bytes }` a ZIP entry is.
+ * `name` is whatever the caller calls it -- a path, a name, a SHA-1 -- and is
+ * shown, never parsed.
+ */
+export type BackupFile = ZipEntry;
 
 export interface BackupResult {
   /** Every level in the pile that holds at least one music sequencer. */

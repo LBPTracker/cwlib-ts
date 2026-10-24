@@ -16,6 +16,8 @@
  * whose local header disagrees opens in some tools and not others.
  */
 
+import type { Inflate } from './resource.ts';
+
 export interface ZipEntry {
   /** Stored as UTF-8. Forward slashes only; a backslash is a path on Windows. */
   readonly name: string;
@@ -128,20 +130,16 @@ export function writeZip(entries: readonly ZipEntry[], when = new Date()): Uint8
 /* --------------------------------------------------------------- reading */
 
 /**
- * One entry read out of a ZIP.
- *
- * `bytes` is the file's own content, already inflated.
+ * One entry read out of a ZIP: the same `{ name, bytes }` as one written, with
+ * `bytes` already inflated.
  */
-export interface ZipFile {
-  readonly name: string;
-  readonly bytes: Uint8Array;
-}
+export type ZipFile = ZipEntry;
 
-/** Raw DEFLATE, which is what a ZIP stores -- no zlib header, no checksum. */
-export type InflateRaw = (
-  deflated: Uint8Array,
-  rawSize: number,
-) => Uint8Array | Promise<Uint8Array>;
+/**
+ * Raw DEFLATE, which is what a ZIP stores -- no zlib header, no checksum. The
+ * same signature as `Inflate`; the name says which stream the caller must pass.
+ */
+export type InflateRaw = Inflate;
 
 const EOCD = 0x06054b50;
 const CENTRAL = 0x02014b50;
