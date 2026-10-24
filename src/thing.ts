@@ -198,10 +198,6 @@ export interface Thing {
   readonly parts: Map<string, unknown>;
 }
 
-export function hasPart(thing: Thing, name: string): boolean {
-  return thing.parts.has(name);
-}
-
 /**
  * Optional trace of what the walk is reading, and where.
  *

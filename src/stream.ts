@@ -149,16 +149,6 @@ export class Revision {
     return this.raw >>> 16;
   }
 
-  /** `true` when the field gated on `min` is present. */
-  atLeast(min: number): boolean {
-    return this.version >= min;
-  }
-
-  /** `true` when the field gated on `after` is present (strictly greater). */
-  after(after: number): boolean {
-    return this.version > after;
-  }
-
   toString(): string {
     return this.branch
       ? `0x${this.version.toString(16)} (branch 0x${this.branch.toString(16)})`

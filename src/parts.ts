@@ -32,7 +32,6 @@ import {
   LD_ANY,
   LD_SUBMERGED,
   onLeerdammer,
-  readThing,
   readThingRef,
   type PartReader,
   type Thing,
@@ -666,23 +665,6 @@ export function readDecorations(s: Serializer, readers: ReadonlyMap<string, Part
   const out: Decoration[] = [];
   for (let i = 0; i < count; i += 1) out.push(readDecoration(s, readers));
   return out;
-}
-
-/**
- * A list the corpus never populates.
- *
- * Reading a zero count costs nothing; a non-zero one means this level uses a
- * structure that has never been exercised, and saying so beats inventing a
- * layout that would desynchronise everything after it.
- */
-function emptyList(s: Serializer, what: string): void {
-  const count = s.i32();
-  if (count !== 0) {
-    throw new SerializerError(
-      `${what} has ${count} entries and no reader — it is empty everywhere in the ` +
-        `corpus this was built against`,
-    );
-  }
 }
 
 /**
