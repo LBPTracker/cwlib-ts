@@ -55,6 +55,22 @@ export interface DependencyOut {
   readonly type: number;
 }
 
+/**
+ * What makes two dependencies one table entry: the hash when there is one,
+ * else the GUID.
+ *
+ * ⚠️ **The hash is spelled in hex, two digits a byte.** `Writer.resource` used
+ * to join the bytes' decimal values with no separator, so `[1, 23, …]` and
+ * `[12, 3, …]` made the same key and the second dependency was dropped from the
+ * table -- a plan naming a resource it never declares.
+ */
+export function dependencyKey(dependency: { readonly guid?: number; readonly hash?: Uint8Array }): string {
+  if (!dependency.hash) return `g${dependency.guid ?? 0}`;
+  let key = 'h';
+  for (const byte of dependency.hash) key += byte.toString(16).padStart(2, '0');
+  return key;
+}
+
 /** `ResourceType.PLAN`, the one type a descriptor does not register as a dependency. */
 export const RESOURCE_PLAN = 38;
 
@@ -284,7 +300,7 @@ export class Writer {
     if ((flags & 2) !== 0) this.guid(guid);
     if ((flags & 1) !== 0) this.sha1(hash as Uint8Array);
     if (isDescriptor && type === RESOURCE_PLAN) return;
-    const key = hash ? `h${[...hash].join('')}` : `g${guid}`;
+    const key = dependencyKey({ guid, hash });
     if (!this.deps.has(key)) this.deps.set(key, { guid: guid || undefined, hash, type });
   }
 
@@ -422,7 +438,15 @@ export async function writeResource(
   let size = 0x16 + chunks.length * 4;
   for (const chunk of chunks) size += chunk.deflated.length;
   const depsAt = size;
-  for (const dependency of dependencies) size += dependency.hash ? 25 : 9;
+  for (const dependency of dependencies) {
+    // ⚠️ Kind 1 is a hash and kind 2 a GUID; a row with both would be kind 3,
+    // 29 bytes, which no file read here has and `readDependencies` refuses. It
+    // used to be sized as 25 and fail on the length check at the end.
+    if (dependency.hash && dependency.guid) {
+      throw new WriterError(`dependency ${dependencyKey(dependency)} has both a GUID and a hash`);
+    }
+    size += dependency.hash ? 25 : 9;
+  }
   size += 4;
 
   const out = new Uint8Array(size);

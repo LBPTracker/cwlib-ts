@@ -21,7 +21,7 @@ import {
   sequencerThings,
   writeSequencerPlan,
 } from '../src/write-plan.ts';
-import { Writer } from '../src/writer.ts';
+import { Writer, dependencyKey, writeResource } from '../src/writer.ts';
 
 /**
  * The plans fetched by `dev/fetch-plan.ts`. Other people's levels are never
@@ -445,5 +445,27 @@ test('a revision this writer does not implement is refused, not guessed at', asy
       revision: { version: 0x3f9, subVersion: 0x213, branchId: 0x4c44, branchRevision: 0x17 },
     }),
     /branch 0x4c44/,
+  );
+});
+
+test('two different hashes are two dependencies, and a GUID-and-hash row is refused', async () => {
+  // ⚠️ The key once joined the bytes' decimal values with no separator, so
+  // these two made the same key and the second was dropped from the table.
+  const a = new Uint8Array(20);
+  a.set([1, 23]);
+  const b = new Uint8Array(20);
+  b.set([12, 3]);
+  assert.notEqual(dependencyKey({ hash: a }), dependencyKey({ hash: b }));
+  const w = new Writer(LBP3_PS3, 7);
+  w.resource({ hash: a, type: 1 }, 1);
+  w.resource({ hash: b, type: 1 }, 1);
+  assert.equal(w.dependencies().length, 2);
+
+  await assert.rejects(
+    () => writeResource({
+      magic: 'PLNb', revision: LBP3_PS3, compressionFlags: 7, payload: new Uint8Array(0),
+      dependencies: [{ guid: 5, hash: a, type: 1 }],
+    }, nodeDeflate),
+    /both a GUID and a hash/,
   );
 });

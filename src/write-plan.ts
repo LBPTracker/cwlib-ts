@@ -55,7 +55,7 @@ import { escapeEntities } from './parts.ts';
 import { CELL_HEIGHT, CELL_WIDTH, authorHandle, type Sequencer, type Track } from './project.ts';
 import type { RevisionInfo } from './serializer.ts';
 import { PARTS, partBit } from './thing.ts';
-import { Writer, writeResource, type Deflate, type DependencyOut } from './writer.ts';
+import { Writer, dependencyKey, writeResource, type Deflate, type DependencyOut } from './writer.ts';
 
 /* ------------------------------------------------------------ the gadget */
 
@@ -790,9 +790,6 @@ function writeInventoryDetails(w: Writer, details: PlanDetails): void {
  */
 const CATEGORY_KEY = 3423480070;
 
-/** What makes two dependencies the same entry: a GUID, or a hash. */
-const key = (dependency: DependencyOut): string =>
-  dependency.hash ? `h${[...dependency.hash].join(',')}` : `g${dependency.guid ?? 0}`;
 
 /** Everything a `PLNb` needs, before the container. */
 export interface PlanPayload {
@@ -836,10 +833,10 @@ export function planPayload(
   // A dependency table missing the icon is a plan that names a texture it never
   // declares.
   const dependencies = [...inner.dependencies()];
-  const seen = new Set(dependencies.map(key));
+  const seen = new Set(dependencies.map(dependencyKey));
   for (const dependency of outer.dependencies()) {
-    if (seen.has(key(dependency))) continue;
-    seen.add(key(dependency));
+    if (seen.has(dependencyKey(dependency))) continue;
+    seen.add(dependencyKey(dependency));
     dependencies.push(dependency);
   }
   return { payload: outer.done(), dependencies };
