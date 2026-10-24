@@ -10,7 +10,7 @@ import { readPlan } from '../src/level.ts';
 import { decodeEntities, escapeEntities, partReaders } from '../src/parts.ts';
 import { nodeDeflate, nodeInflate } from '../src/platform/node.ts';
 import { importLevel, type Sequencer, type Track } from '../src/project.ts';
-import { loadResource, readDependencies } from '../src/resource.ts';
+import { loadResource, magicOf, readDependencies } from '../src/resource.ts';
 import { Serializer } from '../src/serializer.ts';
 import {
   DEFAULT_PLAN_ICON,
@@ -173,7 +173,7 @@ test('the entity escape is the decode run backwards', () => {
 
 test('a written plan is a container the reader accepts', async () => {
   const bytes = await writeSequencerPlan(sequencer(), nodeDeflate);
-  assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), 'PLNb');
+  assert.equal(magicOf(bytes), 'PLNb');
   // ❗ `loadResource` checks that the chunk data ends exactly on the dependency
   // table, which is the same independent check it applies to the game's files:
   // a header written wrongly fails here rather than in the payload.
@@ -405,7 +405,7 @@ test('every real sequencer plan survives being written and read again', async (t
   let checked = 0;
   for (const name of await readdir(PLANS)) {
     const bytes = new Uint8Array(await readFile(path.join(PLANS, name)));
-    if (bytes.length < 0x16 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'PLNb') continue;
+    if (bytes.length < 0x16 || magicOf(bytes) !== 'PLNb') continue;
     let project;
     try {
       project = importLevel(name, (await readPlan(bytes, nodeInflate, readers)).things, 'plan');

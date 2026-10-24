@@ -25,6 +25,7 @@ import { partReaders } from '../src/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import type { Thing } from '../src/thing.ts';
 import type { InstrumentPart } from '../src/parts.ts';
+import { magicOf } from '../src/resource.ts';
 
 const rows = new Map<number, Map<string, number>>();
 const tints = new Map<number, number>();
@@ -37,7 +38,7 @@ async function walk(dir: string) {
     if ((await stat(file)).isDirectory()) { await walk(file); continue; }
     const bytes = new Uint8Array(await readFile(file));
     if (bytes.length < 0x16) continue;
-    const magic = String.fromCharCode(...bytes.subarray(0, 4));
+    const magic = magicOf(bytes);
     const read = magic === 'PLNb' ? readPlan : magic === 'LVLb' ? readLevel : magic === 'CHKb' ? readChunk : undefined;
     if (!read) continue;
     let things: (Thing | undefined)[];

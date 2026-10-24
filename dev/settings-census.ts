@@ -15,6 +15,7 @@ import { readThings } from '../src/level.ts';
 import type { LevelLighting, LevelSettingsPart } from '../src/parts.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readStaticMesh } from '../src/staticmesh.ts';
+import { magicOf } from '../src/resource.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
@@ -69,7 +70,7 @@ for (const file of FARCS) {
       if (seen.has(entry.sha1) || entry.size < 8) continue;
       seen.add(entry.sha1);
       const head = await access.read(entry.offset, 4);
-      if (String.fromCharCode(...head) !== 'LVLb') continue;
+      if (magicOf(head) !== 'LVLb') continue;
       let things;
       try { things = (await readThings((await farc.get(entry.sha1))!, nodeInflate)).things; } catch { continue; }
       bump('levels parsed');

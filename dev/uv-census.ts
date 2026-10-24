@@ -31,6 +31,7 @@ import { materialSummary, readMaterial, type GfxMaterial } from '../src/material
 import { readMesh } from '../src/mesh.ts';
 import { decodeLevel, readTexture } from '../src/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 /** `transform`: on the samples whose transform is not the identity, cwlib's reading against none. */
@@ -100,7 +101,7 @@ for (const sha1 of meshes) {
   if (seen.has(sha1)) continue;
   seen.add(sha1);
   const bytes = (await bytesOf(sha1))!;
-  if (bytes.length < 8 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'MSHb') continue;
+  if (bytes.length < 8 || magicOf(bytes) !== 'MSHb') continue;
   const mesh = await readMesh(bytes, nodeInflate);
   for (const p of mesh.primitives) {
     if (!p.material) continue;

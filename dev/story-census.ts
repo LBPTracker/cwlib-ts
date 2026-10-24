@@ -22,6 +22,7 @@ import type { GeneratedMeshPart, ShapePart } from '../src/parts.ts';
 import type { Thing } from '../src/thing.ts';
 import { readFar } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 const ROOT = path.join(process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063', 'gamedata');
 
@@ -75,7 +76,7 @@ for (const file of archives) {
   const resources = await readFar(new Uint8Array(await readFile(file)));
   bump('archives');
   for (const { sha1, bytes } of resources) {
-    const magic = String.fromCharCode(...bytes.subarray(0, 4));
+    const magic = magicOf(bytes);
     bump(`resource ${JSON.stringify(magic)}`);
     if (magic !== 'CHKb') continue;
     bump(`subVersion 0x${new DataView(bytes.buffer, bytes.byteOffset).getUint16(4, false).toString(16)}`);

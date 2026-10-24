@@ -23,7 +23,7 @@
  *   on a cube map (6 of 6) -- and every `GTF ` payload is exactly that long.
  */
 
-import type { Inflate } from './resource.ts';
+import { magicOf, type Inflate } from './resource.ts';
 import { latin1 } from './serializer.ts';
 
 /** `CellGcmEnumForGtf`, the low five bits and the `UN` bit of `CellGcmTexture.format`. */
@@ -288,7 +288,7 @@ const DDSCAPS2_VOLUME = 0x200000;
 async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
   const dds = await inflateChunks(bytes, 4, inflate);
   const view = new DataView(dds.buffer, dds.byteOffset, dds.byteLength);
-  if (dds.length < DDS_HEADER || String.fromCharCode(...dds.subarray(0, 4)) !== 'DDS ') {
+  if (dds.length < DDS_HEADER || magicOf(dds) !== 'DDS ') {
     throw new TextureFormatError('a TEX that does not hold a DDS');
   }
   const le = (o: number): number => view.getUint32(o, true);
@@ -354,7 +354,7 @@ async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
  * the payload exactly.
  */
 export async function readTexture(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
-  const magic = String.fromCharCode(...bytes.subarray(0, 4));
+  const magic = magicOf(bytes);
   if (magic === 'GTF ') return readGtf(bytes, inflate);
   if (magic === 'TEX ') return readTex(bytes, inflate);
   throw new TextureFormatError(`not a texture: magic ${JSON.stringify(magic)}`);

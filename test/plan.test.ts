@@ -8,6 +8,7 @@ import { musicSequencers, readChunk, readPlan } from '../src/level.ts';
 import { partReaders } from '../src/parts.ts';
 import { readSaveArchive, saveArchiveRevision } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 /**
  * The corpus is other people's creative work and is never committed -- see
@@ -123,7 +124,7 @@ test('every plan in the corpus parses, and holds the music the levels do not', a
     if (chunks.length === 0 || saveArchiveRevision(chunks[chunks.length - 1]) === undefined) continue;
     for (const resource of await readSaveArchive(chunks)) {
       const bytes = resource.bytes;
-      if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'PLNb') continue;
+      if (magicOf(bytes) !== 'PLNb') continue;
       plans += 1;
       try {
         const { things } = await readPlan(bytes, nodeInflate, readers);
@@ -179,7 +180,7 @@ test('every streaming chunk in the corpus parses, islands and all', async (t) =>
     if (files.length === 0 || saveArchiveRevision(files[files.length - 1]) === undefined) continue;
     for (const resource of await readSaveArchive(files)) {
       const bytes = resource.bytes;
-      if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== 'CHKb') continue;
+      if (magicOf(bytes) !== 'CHKb') continue;
       chunks += 1;
       const parse = await readChunk(bytes, nodeInflate, readers);
       things += parse.things.length;

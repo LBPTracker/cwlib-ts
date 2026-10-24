@@ -26,6 +26,7 @@ import { readFileDB, readGuidRemap } from '../src/filedb.ts';
 import { BOX_OUTPUT, BOX_TEXTURE_SAMPLE, materialSummary, readMaterial, type GfxMaterial } from '../src/material.ts';
 import { readMesh } from '../src/mesh.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
@@ -68,7 +69,7 @@ for (const { farc } of archives) {
   for (const entry of farc.entries.values()) {
     if (entry.size < 20 || textures.has(entry.sha1) || materials.has(entry.sha1)) continue;
     const head = (await farc.get(entry.sha1))!;
-    const magic = String.fromCharCode(...head.subarray(0, 4));
+    const magic = magicOf(head);
     if (magic === 'GTF ' || magic === 'TEX ') textures.set(entry.sha1, { magic, flags: magic === 'GTF ' ? head[19] : 0 });
     else if (magic === 'MSHb') meshes.push(entry.sha1);
     else if (magic === 'GMTb') {

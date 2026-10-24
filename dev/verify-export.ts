@@ -26,7 +26,7 @@ import { readPlan } from '../src/level.ts';
 import { partReaders } from '../src/parts.ts';
 import { nodeDeflate, nodeInflate } from '../src/platform/node.ts';
 import { importLevel, type Sequencer } from '../src/project.ts';
-import { loadResource, readDependencies } from '../src/resource.ts';
+import { loadResource, magicOf, readDependencies } from '../src/resource.ts';
 import { setTrace } from '../src/thing.ts';
 import { LBP3_PS4, writeSequencerPlan } from '../src/write-plan.ts';
 import { toHex } from '../src/hex.ts';
@@ -111,7 +111,7 @@ let chassisChecked = 0;
 for (const root of process.argv.slice(2)) {
   for await (const file of files(root)) {
     const bytes = new Uint8Array(await readFile(file));
-    if (bytes.length < 0x16 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'PLNb') continue;
+    if (bytes.length < 0x16 || magicOf(bytes) !== 'PLNb') continue;
     let project;
     try { project = importLevel(file, (await readPlan(bytes, nodeInflate, partReaders())).things, 'plan'); }
     catch { continue; }

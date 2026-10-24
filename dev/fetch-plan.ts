@@ -1,7 +1,7 @@
 /** Fetch a root level from the public archive and pull its PLAN dependencies. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-import { readDependencies } from '../src/resource.ts';
+import { magicOf, readDependencies } from '../src/resource.ts';
 
 function url(sha1: string): string {
   const h = sha1.toLowerCase();
@@ -23,7 +23,7 @@ async function main() {
   const local = ROOT.length !== 40;
   const root = local ? new Uint8Array(await readFile(ROOT)) : await get(ROOT);
   if (!root) { console.log('root not found'); return; }
-  const magic = String.fromCharCode(...root.subarray(0, 4));
+  const magic = magicOf(root);
   const deps = readDependencies(root);
   console.log(`root ${magic} ${root.length} bytes, ${deps.length} deps`);
   const plans = deps.filter((d) => d.kind === 'sha1' && d.type === 38);
@@ -34,7 +34,7 @@ async function main() {
     const bytes = await get(dep.sha1);
     if (!bytes) { console.log(`  ${dep.sha1.slice(0, 8)} MISSING`); continue; }
     await writeFile(`${OUT}/${dep.sha1}`, bytes);
-    console.log(`  ${dep.sha1.slice(0, 8)} ${String.fromCharCode(...bytes.subarray(0, 4))} ${bytes.length}`);
+    console.log(`  ${dep.sha1.slice(0, 8)} ${magicOf(bytes)} ${bytes.length}`);
     got += 1;
   }
   console.log(`${got} fetched into ${OUT}`);

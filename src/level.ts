@@ -22,7 +22,7 @@
  * readers" figure in steering was wrong.
  */
 
-import { loadResource, type Inflate } from './resource.ts';
+import { loadResource, magicOf, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from './serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
@@ -665,7 +665,16 @@ export async function readLevel(
 /** What `readThings` found the file to be. */
 export type ThingsKind = 'level' | 'plan' | 'chunk';
 
-const KIND_BY_MAGIC: Readonly<Record<string, ThingsKind>> = { LVLb: 'level', PLNb: 'plan', CHKb: 'chunk' };
+const KIND_BY_MAGIC: ReadonlyMap<string, ThingsKind> = new Map([['LVLb', 'level'], ['PLNb', 'plan'], ['CHKb', 'chunk']]);
+
+/**
+ * Which of the three resources that hold Things a file is, by its magic, or
+ * `undefined` for anything else. `readThings` and `looksLikeLevel` both ask
+ * this, so a fourth kind is added in one place.
+ */
+export function thingsKind(bytes: Uint8Array): ThingsKind | undefined {
+  return KIND_BY_MAGIC.get(magicOf(bytes));
+}
 
 /**
  * Read the Things out of a level, a plan or a streaming chunk, told apart by
@@ -682,9 +691,8 @@ export async function readThings(
   bytes: Uint8Array,
   inflate: Inflate,
 ): Promise<LevelParse & { readonly kind: ThingsKind }> {
-  const magic = String.fromCharCode(...bytes.subarray(0, 4));
-  const kind = KIND_BY_MAGIC[magic];
-  if (!kind) throw new SerializerError(`not a level, plan or chunk: the magic is ${JSON.stringify(magic)}`);
+  const kind = thingsKind(bytes);
+  if (!kind) throw new SerializerError(`not a level, plan or chunk: the magic is ${JSON.stringify(magicOf(bytes))}`);
   const read = kind === 'plan' ? readPlan : kind === 'chunk' ? readChunk : readLevel;
   return { ...(await read(bytes, inflate, partReaders())), kind };
 }

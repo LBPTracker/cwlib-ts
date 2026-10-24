@@ -8,6 +8,7 @@ import { readThings } from '../src/level.ts';
 import type { ShapePart } from '../src/parts.ts';
 import { readFar } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 /**
  * The game's own story levels, which `LBP_GAME` holds and nothing commits. A
@@ -27,7 +28,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
     for (const { bytes } of chunks) {
-      assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), 'CHKb');
+      assert.equal(magicOf(bytes), 'CHKb');
       // An island that does not open is a problem, not an exception; here there are none.
       const parse = await readThings(bytes, nodeInflate);
       assert.deepEqual(parse.problems ?? [], []);

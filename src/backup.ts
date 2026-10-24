@@ -24,6 +24,7 @@ import { looksLikeMod, readMod } from './mod.ts';
 import { psfName } from './psf.ts';
 import { readSaveArchive, saveArchiveRevision } from './savearchive.ts';
 import { readZip, type InflateRaw } from './zip.ts';
+import { thingsKind } from './level.ts';
 
 /** One file out of a folder or an archive. */
 export interface BackupFile {
@@ -90,8 +91,6 @@ export interface BackupResult {
  * if it were a world" -- eleven failures reported for one backup that was fine.
  * The magic was never the problem; the reader was.
  */
-const LEVEL_MAGIC = ['LVLb', 'PLNb', 'CHKb'];
-
 /** A file's folder and its leaf name. Paths are shown, never otherwise parsed. */
 function split(name: string): { folder: string; leaf: string } {
   const at = name.lastIndexOf('/');
@@ -156,9 +155,7 @@ async function unpackSaves(files: readonly BackupFile[]): Promise<{
  * Trying every file works but reports forty failures for one level.
  */
 export function looksLikeLevel(bytes: Uint8Array): boolean {
-  if (bytes.length < 4) return false;
-  const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-  return LEVEL_MAGIC.includes(magic);
+  return thingsKind(bytes) !== undefined;
 }
 
 /**

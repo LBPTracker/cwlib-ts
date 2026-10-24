@@ -17,6 +17,7 @@ import { openFarc } from '../src/farc.ts';
 import { readFileDB } from '../src/filedb.ts';
 import { readThings } from '../src/level.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
@@ -37,7 +38,7 @@ for (const file of FARCS) {
       if (seen.has(entry.sha1) || entry.size < 8) continue;
       seen.add(entry.sha1);
       const head = await access.read(entry.offset, 8);
-      const magic = String.fromCharCode(...head.subarray(0, 4));
+      const magic = magicOf(head);
       if (magic !== 'LVLb' && magic !== 'PLNb') continue;
       const revision = new DataView(head.buffer).getUint32(4, false).toString(16);
       try {

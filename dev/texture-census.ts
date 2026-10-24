@@ -31,6 +31,7 @@ import { openFarc } from '../src/farc.ts';
 import { readFileDB } from '../src/filedb.ts';
 import { decodeLevel, readTexture, type Texture, type TextureLevel } from '../src/texture.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { magicOf } from '../src/resource.ts';
 
 const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
@@ -232,7 +233,7 @@ for (const file of FARCS) {
     for (const entry of farc.entries.values()) {
       if (seen.has(entry.sha1) || entry.size < 8) continue;
       const head = await access.read(entry.offset, 8);
-      const magic = String.fromCharCode(...head.subarray(0, 4));
+      const magic = magicOf(head);
       const name = pathOf.get(entry.sha1) ?? entry.sha1;
       if (magic !== 'GTF ' && magic !== 'TEX ') {
         if (name.endsWith('.tex')) bump(`.tex that is not a texture resource: ${JSON.stringify(magic)}`);

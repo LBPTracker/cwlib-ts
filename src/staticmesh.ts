@@ -15,7 +15,7 @@
  * as big-endian `u16`s to the end.
  */
 
-import type { Inflate } from './resource.ts';
+import { magicOf, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
 import { PRIMITIVE_TRIANGLES, PRIMITIVE_TRIANGLE_STRIP } from './mesh.ts';
 
@@ -101,7 +101,7 @@ function triangles(indices: Uint16Array, first: number, count: number, type: num
 
 export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promise<StaticMesh> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length < 0x10 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'SMHb') {
+  if (bytes.length < 0x10 || magicOf(bytes) !== 'SMHb') {
     throw new StaticMeshFormatError('not a static mesh');
   }
   const head = view.getUint32(4, false);

@@ -13,6 +13,7 @@
 
 import { ByteReader, Revision } from './stream.ts';
 import { toHex } from './hex.ts';
+import { latin1 } from './serializer.ts';
 
 /** Inflate one zlib stream. May be sync or async; `rawSize` is the expected output length. */
 export type Inflate = (
@@ -47,8 +48,13 @@ export const HEADER_MIN = 0x16;
 
 export class ResourceFormatError extends Error {}
 
-function magicOf(bytes: Uint8Array): string {
-  return String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+/**
+ * A file's first four bytes as text: `LVLb`, `GTF `, `DDS `. Shorter when the
+ * file is; every reader here tells its formats apart by this, before inflating
+ * anything.
+ */
+export function magicOf(bytes: Uint8Array): string {
+  return latin1(bytes.subarray(0, 4));
 }
 
 /**
