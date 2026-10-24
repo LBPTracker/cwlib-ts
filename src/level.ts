@@ -601,7 +601,9 @@ export async function readChunk(
   const problems: string[] = [];
   for (let island = 0; island < plans.length; island += 1) {
     try {
-      things.push(...(await readPlan(plans[island], inflate, readers)).things);
+      // A loop, not `push(...things)`: an island's Things as arguments can run
+      // past what a call may take.
+      for (const thing of (await readPlan(plans[island], inflate, readers)).things) things.push(thing);
     } catch (error) {
       // ⚠️ **The island's own index, not the count of problems so far.** This
       // said `problems.length + 1`, so the first failure in a chunk of 167
@@ -818,6 +820,21 @@ export function sequencerAuthor(thing: Thing): string {
  */
 export function musicSequencers(things: readonly (Thing | undefined)[]): FoundSequencer[] {
   const out: FoundSequencer[] = [];
+  // Each board's children in Thing-list order, built the first time an open
+  // board needs them: one pass over the list, not one per open sequencer.
+  let children: Map<Thing, Thing[]> | undefined;
+  const childrenOf = (board: Thing): readonly Thing[] => {
+    if (children === undefined) {
+      children = new Map();
+      for (const child of things) {
+        if (!child?.parent) continue;
+        const list = children.get(child.parent);
+        if (list) list.push(child);
+        else children.set(child.parent, [child]);
+      }
+    }
+    return children.get(board) ?? [];
+  };
   for (const thing of things) {
     if (!thing) continue;
     const settings = thing.parts.get('SEQUENCER') as SequencerPart | undefined;
@@ -834,8 +851,7 @@ export function musicSequencers(things: readonly (Thing | undefined)[]): FoundSe
       // The board's own matrix. Without it there is no frame to measure in, so
       // the placements would have to be dropped rather than guessed at.
       const boardPos = chip.board.parts.get('POS') as Float32Array | undefined;
-      for (const child of things) {
-        if (!child || child.parent !== chip.board) continue;
+      for (const child of childrenOf(chip.board)) {
         const instrument = child.parts.get('INSTRUMENT') as InstrumentPart | undefined;
         if (!instrument) continue;
         const childPos = child.parts.get('POS') as Float32Array | undefined;

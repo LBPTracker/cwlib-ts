@@ -16,6 +16,7 @@
  * (`0x0404`); this reads the strings, which is all a name needs.
  */
 
+const UTF8 = new TextDecoder();
 const MAGIC = 0x46535000; // "\0PSF", little-endian
 
 /** Read the string entries of a `PARAM.SFO`, or an empty map if it is not one. */
@@ -41,11 +42,11 @@ export function readPsf(bytes: Uint8Array): Map<string, string> {
     if (keyAt >= bytes.length || valueAt + length > bytes.length) continue;
     let end = keyAt;
     while (end < bytes.length && bytes[end] !== 0) end += 1;
-    const key = new TextDecoder().decode(bytes.subarray(keyAt, end));
+    const key = UTF8.decode(bytes.subarray(keyAt, end));
     // The value is NUL-padded to its slot; the trailing zeros are not the text.
     let stop = valueAt + length;
     while (stop > valueAt && bytes[stop - 1] === 0) stop -= 1;
-    out.set(key, new TextDecoder().decode(bytes.subarray(valueAt, stop)));
+    out.set(key, UTF8.decode(bytes.subarray(valueAt, stop)));
   }
   return out;
 }

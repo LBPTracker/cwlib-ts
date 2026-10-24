@@ -142,6 +142,7 @@ export type ZipFile = ZipEntry;
 export type InflateRaw = Inflate;
 
 const EOCD = 0x06054b50;
+const UTF8 = new TextDecoder();
 const CENTRAL = 0x02014b50;
 
 /**
@@ -190,7 +191,7 @@ export async function readZip(
     const extraLength = view.getUint16(at + 30, true);
     const commentLength = view.getUint16(at + 32, true);
     const localAt = view.getUint32(at + 42, true);
-    const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    const name = UTF8.decode(bytes.subarray(at + 46, at + 46 + nameLength));
     at += 46 + nameLength + extraLength + commentLength;
 
     if (name.endsWith('/') || rawSize === 0) continue;

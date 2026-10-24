@@ -186,17 +186,17 @@ export async function readFar(archive: Uint8Array): Promise<SaveResource[]> {
   if (fat < 0) throw new Error(`save archive claims ${count} resources it has no room for`);
 
   const out: SaveResource[] = [];
-  const bad: string[] = [];
   for (let i = 0; i < count; i += 1) {
     const entry = fat + i * 0x1c;
     const sha1 = toHex(archive.subarray(entry, entry + 20));
     const offset = view.getUint32(entry + 20, false);
     const length = view.getUint32(entry + 24, false);
     if (offset + length > fat) throw new Error(`resource ${sha1} runs past the archive`);
-    const bytes = archive.subarray(offset, offset + length);
-    if (toHex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))) !== sha1) bad.push(sha1);
-    out.push({ sha1, bytes });
+    out.push({ sha1, bytes: archive.subarray(offset, offset + length) });
   }
+  // Every digest asked for at once rather than awaited one by one.
+  const digests = await Promise.all(out.map(({ bytes }) => crypto.subtle.digest('SHA-1', bytes as BufferSource)));
+  const bad = out.filter((resource, i) => toHex(new Uint8Array(digests[i])) !== resource.sha1).map((resource) => resource.sha1);
   if (bad.length > 0) {
     throw new Error(`${bad.length} of ${count} resources failed their SHA-1 (${bad[0]}…)`);
   }
@@ -222,13 +222,15 @@ export async function writeFar(
   resources: readonly Uint8Array[],
   revision: FarRevision,
 ): Promise<Uint8Array> {
-  const byHash = new Map<string, Uint8Array>();
-  for (const bytes of resources) {
-    byHash.set(toHex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))), bytes);
-  }
+  const digests = await Promise.all(resources.map((bytes) => crypto.subtle.digest('SHA-1', bytes as BufferSource)));
+  const byHash = new Map<string, { hash: Uint8Array; bytes: Uint8Array }>();
+  resources.forEach((bytes, i) => {
+    const hash = new Uint8Array(digests[i]);
+    byHash.set(toHex(hash), { hash, bytes });
+  });
   const hashes = [...byHash.keys()].sort();
   let data = 0;
-  for (const h of hashes) data += byHash.get(h)!.length;
+  for (const h of hashes) data += byHash.get(h)!.bytes.length;
   const pad = (4 - (data % 4)) % 4;
   const KEY = 0x84;
   const out = new Uint8Array(data + pad + KEY + hashes.length * 0x1c + 0x14 + 8);
@@ -236,18 +238,20 @@ export async function writeFar(
   let at = 0;
   const offsets: number[] = [];
   for (const h of hashes) {
+    const { bytes } = byHash.get(h)!;
     offsets.push(at);
-    out.set(byHash.get(h)!, at);
-    at += byHash.get(h)!.length;
+    out.set(bytes, at);
+    at += bytes.length;
   }
   at += pad;
   view.setUint32(at, revision.head, false);
   view.setUint32(at + 4, ((revision.branchId << 16) | revision.branchRevision) >>> 0, false);
   at += KEY; // everything after the two revision words is zero
   hashes.forEach((h, i) => {
-    for (let k = 0; k < 20; k += 1) out[at + k] = parseInt(h.slice(k * 2, k * 2 + 2), 16);
+    const { hash, bytes } = byHash.get(h)!;
+    out.set(hash, at);
     view.setUint32(at + 20, offsets[i], false);
-    view.setUint32(at + 24, byHash.get(h)!.length, false);
+    view.setUint32(at + 24, bytes.length, false);
     at += 0x1c;
   });
   at += 0x14;
