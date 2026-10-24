@@ -12,6 +12,7 @@
  */
 
 import { ByteReader, Revision } from './stream.ts';
+import { toHex } from './hex.ts';
 
 /** Inflate one zlib stream. May be sync or async; `rawSize` is the expected output length. */
 export type Inflate = (
@@ -282,9 +283,7 @@ export function readDependencies(bytes: Uint8Array): Dependency[] {
       throw new ResourceFormatError(`dependency ${i} of ${count} runs past the end of the file`);
     }
     if (kind === 1) {
-      const sha1 = [...bytes.subarray(at, at + 20)]
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
+      const sha1 = toHex(bytes.subarray(at, at + 20));
       at += 20;
       out.push({ kind: 'sha1', sha1, type: view.getUint32(at) });
     } else {

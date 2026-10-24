@@ -29,8 +29,8 @@ import { importLevel, type Sequencer } from '../src/project.ts';
 import { loadResource, readDependencies } from '../src/resource.ts';
 import { setTrace } from '../src/thing.ts';
 import { LBP3_PS4, writeSequencerPlan } from '../src/write-plan.ts';
+import { toHex } from '../src/hex.ts';
 
-const hex = (a: Uint8Array) => [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 /** The part spans of a plan's root Thing, by part name. */
 async function chassis(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
@@ -92,7 +92,7 @@ function compare(a: Sequencer, b: Sequencer): string[] {
     if (drawnColour(x.guid, x.colour) !== y.colour) {
       problems.push(`track ${i} colour: ${x.colour} (drawn ${drawnColour(x.guid, x.colour)}) -> ${y.colour}`);
     }
-    if (hex(x.records) !== hex(y.records)) problems.push(`track ${i} records differ`);
+    if (toHex(x.records) !== toHex(y.records)) problems.push(`track ${i} records differ`);
   }
   return problems;
 }
@@ -139,8 +139,8 @@ for (const root of process.argv.slice(2)) {
         for (const [name, mine] of ours) {
           const real = theirs.get(name);
           if (!real) continue;
-          const same = hex(mine) === hex(real);
-          console.log(`${same ? '✔' : '·'} ${name.padEnd(12)} ours ${String(mine.length).padStart(3)}B  game ${String(real.length).padStart(3)}B${same ? '' : `\n    ours ${hex(mine)}\n    game ${hex(real)}`}`);
+          const same = toHex(mine) === toHex(real);
+          console.log(`${same ? '✔' : '·'} ${name.padEnd(12)} ours ${String(mine.length).padStart(3)}B  game ${String(real.length).padStart(3)}B${same ? '' : `\n    ours ${toHex(mine)}\n    game ${toHex(real)}`}`);
         }
         chassisChecked = 1;
       }

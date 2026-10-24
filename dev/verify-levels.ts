@@ -29,6 +29,7 @@ import path from 'node:path';
 import { musicSequencers, readLevel } from '../src/level.ts';
 import { partReaders } from '../src/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { toHex } from '../src/hex.ts';
 
 const DIR = process.argv[2] ?? 'C:/Users/sgdc3/Desktop/LBP/toolkit/tools/sequencerdump/data';
 const DUMP = 'fixtures/levels/sequencers.jsonl';
@@ -58,8 +59,6 @@ for (const line of (await readFile(DUMP, 'latin1')).split('\n')) {
   }
 }
 
-const hex = (bytes: Uint8Array) =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 let filesChecked = 0;
 let sequencersMatched = 0;
@@ -147,7 +146,7 @@ for (const entry of await readdir(DIR, { withFileTypes: true })) {
         ok = false;
         break;
       }
-      if (hex(mine.notes) !== theirs.notes) {
+      if (toHex(mine.notes) !== theirs.notes) {
         problems.push(`${entry.name.slice(0, 8)} seq ${sequencer.uid} #${i}: note bytes differ`);
         ok = false;
         break;

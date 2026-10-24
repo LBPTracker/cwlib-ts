@@ -22,6 +22,7 @@ import {
   writeSequencerPlan,
 } from '../src/write-plan.ts';
 import { Writer, dependencyKey, writeResource } from '../src/writer.ts';
+import { toHex } from '../src/hex.ts';
 
 /**
  * The plans fetched by `dev/fetch-plan.ts`. Other people's levels are never
@@ -95,8 +96,6 @@ function sequencer(over: Partial<Sequencer> = {}): Sequencer {
   };
 }
 
-const hex = (bytes: Uint8Array) =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 /** Write a plan and read it straight back through the ordinary reader. */
 async function roundTrip(seq: Sequencer, revision = LBP3_PS3): Promise<Sequencer> {
@@ -144,7 +143,7 @@ test('a matrix writes only what differs from the identity', () => {
   // mask. An identity matrix is the mask alone.
   const w = new Writer(LBP3_PS3, 7);
   w.matrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-  assert.equal(hex(w.done()), '0000');
+  assert.equal(toHex(w.done()), '0000');
 });
 
 test('the buffer grows without losing what was already written', () => {
@@ -159,7 +158,7 @@ test('the buffer grows without losing what was already written', () => {
   const out = w.done();
   assert.equal(out.length, 1005);
   assert.equal(out[0], 1);
-  assert.equal(hex(out.subarray(1, 1001)), hex(payload));
+  assert.equal(toHex(out.subarray(1, 1001)), toHex(payload));
   assert.equal(new Serializer(out.subarray(1001), LBP3_PS3, 7).f32(), 52.5);
 });
 
@@ -229,7 +228,7 @@ test('a sequencer survives the round trip, records byte for byte', async () => {
     assert.equal(b.echoSend, a.echoSend);
     assert.equal(b.key, a.key);
     assert.equal(b.colour, a.colour, 'the chip keeps its tint');
-    assert.equal(hex(b.records), hex(a.records), 'note records are the same bytes');
+    assert.equal(toHex(b.records), toHex(a.records), 'note records are the same bytes');
   }
 });
 
@@ -244,7 +243,7 @@ test('a plan large enough to need several chunks still reads back', async () => 
   assert.ok(resource.chunks.length > 1, `expected several chunks, got ${resource.chunks.length}`);
   const back = await roundTrip(sequencer({ tracks: many, boardRows: 4 }));
   assert.equal(back.tracks.length, 40);
-  assert.equal(hex(back.tracks[39].records), hex(many[39].records));
+  assert.equal(toHex(back.tracks[39].records), toHex(many[39].records));
 });
 
 test('the dependency table names the mesh and every instrument, all by GUID', async () => {
@@ -420,7 +419,7 @@ test('every real sequencer plan survives being written and read again', async (t
       assert.equal(back.tempo, original.tempo, `${name}: tempo`);
       assert.equal(back.name, original.name, `${name}: name`);
       for (let i = 0; i < original.tracks.length; i += 1) {
-        assert.equal(hex(back.tracks[i].records), hex(original.tracks[i].records),
+        assert.equal(toHex(back.tracks[i].records), toHex(original.tracks[i].records),
           `${name}: track ${i} records`);
         assert.equal(back.tracks[i].gridX, original.tracks[i].gridX, `${name}: track ${i} cell`);
         assert.equal(back.tracks[i].gridY, original.tracks[i].gridY, `${name}: track ${i} row`);

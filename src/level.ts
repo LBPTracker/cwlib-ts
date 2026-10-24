@@ -26,6 +26,7 @@ import { loadResource, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from './serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
+import { toHex } from './hex.ts';
 
 /** Thrown once `PWorld.things` is in hand, to stop reading the rest. */
 class StopParse extends Error {
@@ -130,8 +131,6 @@ export interface ChunkPlacement {
 /** The chunk files each stream has read so far, collected for `readLevel` to hand out. */
 const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
 
-const hexOf = (bytes: Uint8Array): string => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-
 /**
  * `ChunkFile`: one streamed piece of a level, and where it sits.
  *
@@ -149,10 +148,10 @@ const hexOf = (bytes: Uint8Array): string => [...bytes].map((b) => b.toString(16
 function readChunkFile(s: Serializer): void {
   const { subVersion } = s.revision;
   let sha1 = '';
-  if (subVersion > 0x130) sha1 = hexOf(s.sha1()); // chunkHash
+  if (subVersion > 0x130) sha1 = toHex(s.sha1()); // chunkHash
   else if (subVersion >= 0x73) {
     const ref = s.resource(true); // chunkHash, as a descriptor
-    if (ref?.hash) sha1 = hexOf(ref.hash);
+    if (ref?.hash) sha1 = toHex(ref.hash);
   }
   readStreamingLists(s);
   if (subVersion >= 0xde) {

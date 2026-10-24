@@ -19,6 +19,8 @@
  * wraps a `Blob`.
  */
 
+import { toHex } from './hex.ts';
+
 /** Positioned reads on something too big to hold: a file handle, a `Blob`. */
 export interface RandomAccess {
   readonly size: number;
@@ -43,9 +45,6 @@ export interface Farc {
 const FARC_MAGIC = 0x46415243; // "FARC"
 const FAT_ROW = 0x1c;
 
-const hex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-
 /**
  * Open a FARC: read its table and nothing else.
  *
@@ -68,7 +67,7 @@ export async function openFarc(source: RandomAccess): Promise<Farc> {
   const entries = new Map<string, FarcEntry>();
   for (let i = 0; i < count; i += 1) {
     const at = i * FAT_ROW;
-    const sha1 = hex(fat.subarray(at, at + 20));
+    const sha1 = toHex(fat.subarray(at, at + 20));
     const offset = view.getUint32(at + 20, false);
     const size = view.getUint32(at + 24, false);
     if (offset + size > fatOffset) {

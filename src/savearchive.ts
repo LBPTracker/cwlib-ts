@@ -35,6 +35,8 @@
  * is guarding.
  */
 
+import { toHex } from './hex.ts';
+
 /**
  * XXTEA key, used for save archives and profile backups.
  *
@@ -59,9 +61,6 @@ const CHUNK = 0x240000;
 
 /** "FAR", the top three bytes of the archive magic; the fourth is a digit. */
 const FAR = 0x464152;
-
-const hex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 /** One resource out of a save archive. */
 export interface SaveResource {
@@ -190,12 +189,12 @@ export async function readFar(archive: Uint8Array): Promise<SaveResource[]> {
   const bad: string[] = [];
   for (let i = 0; i < count; i += 1) {
     const entry = fat + i * 0x1c;
-    const sha1 = hex(archive.subarray(entry, entry + 20));
+    const sha1 = toHex(archive.subarray(entry, entry + 20));
     const offset = view.getUint32(entry + 20, false);
     const length = view.getUint32(entry + 24, false);
     if (offset + length > fat) throw new Error(`resource ${sha1} runs past the archive`);
     const bytes = archive.subarray(offset, offset + length);
-    if (hex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))) !== sha1) bad.push(sha1);
+    if (toHex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))) !== sha1) bad.push(sha1);
     out.push({ sha1, bytes });
   }
   if (bad.length > 0) {
@@ -225,7 +224,7 @@ export async function writeFar(
 ): Promise<Uint8Array> {
   const byHash = new Map<string, Uint8Array>();
   for (const bytes of resources) {
-    byHash.set(hex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))), bytes);
+    byHash.set(toHex(new Uint8Array(await crypto.subtle.digest('SHA-1', bytes as BufferSource))), bytes);
   }
   const hashes = [...byHash.keys()].sort();
   let data = 0;

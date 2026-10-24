@@ -37,6 +37,7 @@
 
 import type { RevisionInfo } from './serializer.ts';
 import { COMPRESSED_INTEGERS, COMPRESSED_MATRICES, COMPRESSED_VECTORS } from './serializer.ts';
+import { toHex } from './hex.ts';
 
 /** Deflate one chunk into a complete zlib stream. May be sync or async. */
 export type Deflate = (raw: Uint8Array) => Uint8Array | Promise<Uint8Array>;
@@ -65,10 +66,7 @@ export interface DependencyOut {
  * table -- a plan naming a resource it never declares.
  */
 export function dependencyKey(dependency: { readonly guid?: number; readonly hash?: Uint8Array }): string {
-  if (!dependency.hash) return `g${dependency.guid ?? 0}`;
-  let key = 'h';
-  for (const byte of dependency.hash) key += byte.toString(16).padStart(2, '0');
-  return key;
+  return dependency.hash ? `h${toHex(dependency.hash)}` : `g${dependency.guid ?? 0}`;
 }
 
 /** `ResourceType.PLAN`, the one type a descriptor does not register as a dependency. */

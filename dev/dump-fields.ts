@@ -16,6 +16,7 @@ import { readThings } from '../src/level.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { Serializer } from '../src/serializer.ts';
 import { setTrace } from '../src/thing.ts';
+import { toHex } from '../src/hex.ts';
 
 const FILE = process.argv[2];
 const WANT = (process.argv[3] ?? '').split(',').filter(Boolean);
@@ -36,7 +37,7 @@ for (const name of ['u8', 'i8', 'bool', 'u16', 'i16', 'f32', 'i32', 'u32', 's32'
   };
 }
 function show(v: unknown): string {
-  if (v instanceof Uint8Array) return `[${v.length}]${[...v.subarray(0, 24)].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+  if (v instanceof Uint8Array) return `[${v.length}]${toHex(v.subarray(0, 24))}`;
   if (v instanceof Float32Array) return `m[${[...v].join(',')}]`;
   if (v && typeof v === 'object') return JSON.stringify(v, (_k, x) => (x instanceof Uint8Array ? [...x] : x));
   return String(v);

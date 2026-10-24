@@ -24,6 +24,8 @@
  * ⚠️ The LBP2 row is cwlib's reading only: no LBP2 FileDB was on this disk.
  */
 
+import { toHex } from './hex.ts';
+
 /** One FileDB row. */
 export interface FileDBEntry {
   readonly path: string;
@@ -37,9 +39,6 @@ export interface FileDBEntry {
 
 /** The revision that starts the LBP3 row: `u16` path length and a `u32` date. */
 const LBP3_HEAD = 0x148;
-
-const hex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 /**
  * Read a FileDB into a GUID → row lookup, in the file's own row order.
@@ -65,7 +64,7 @@ export function readFileDB(bytes: Uint8Array): Map<number, FileDBEntry> {
     const date = lbp3 ? view.getUint32(at, false) : Number(view.getBigInt64(at, false));
     at += lbp3 ? 4 : 8;
     const size = view.getUint32(at, false);
-    const sha1 = hex(bytes.subarray(at + 4, at + 24));
+    const sha1 = toHex(bytes.subarray(at + 4, at + 24));
     const guid = view.getUint32(at + 24, false);
     at += 28;
     if (!rows.has(guid)) rows.set(guid, { path, date, size, sha1, guid });
