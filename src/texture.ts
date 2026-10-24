@@ -150,26 +150,44 @@ const log2 = (n: number): number => 31 - Math.clz32(n);
  * any other order scrambles; on the five non-cubic volumes x-then-y-then-z is
  * the smoothest of the six orders.
  */
-function morton(x: number, y: number, z: number, lw: number, lh: number, ld: number): number {
-  let m = 0;
+function mortonTables(lw: number, lh: number, ld: number): [Uint32Array, Uint32Array, Uint32Array] {
+  // ⚠️ **Each axis's bits land in places that depend only on the box**, so the
+  // index is `mx[x] | my[y] | mz[z]`: three tables per mip instead of a loop
+  // of a dozen steps per texel.
+  const tables = [new Uint32Array(1 << lw), new Uint32Array(1 << lh), new Uint32Array(1 << ld)];
+  const sizes = [lw, lh, ld];
   let bit = 0;
   for (let i = 0; i < Math.max(lw, lh, ld); i += 1) {
-    if (i < lw) m |= ((x >> i) & 1) << bit++;
-    if (i < lh) m |= ((y >> i) & 1) << bit++;
-    if (i < ld) m |= ((z >> i) & 1) << bit++;
+    for (let axis = 0; axis < 3; axis += 1) {
+      if (i >= sizes[axis]) continue;
+      const table = tables[axis];
+      for (let v = 0; v < table.length; v += 1) if ((v >> i) & 1) table[v] |= 1 << bit;
+      bit += 1;
+    }
   }
-  return m >>> 0;
+  return tables as [Uint32Array, Uint32Array, Uint32Array];
 }
 
-/** Expand one uncompressed GCM texel to RGBA through the remap register. */
-function remapper(remap: number): (src: readonly number[]) => [number, number, number, number] {
-  // Outputs in register order A, R, G, B; a source index 0..3 names A, R, G, B.
-  const pick = [0, 1, 2, 3].map((k) => (remap >> (k * 2)) & 3);
-  const op = [0, 1, 2, 3].map((k) => (remap >> (8 + k * 2)) & 3);
-  return (src) => {
-    const v = [0, 1, 2, 3].map((k) => (op[k] === 0 ? 0 : op[k] === 1 ? 255 : src[pick[k]]));
-    return [v[1], v[2], v[3], v[0]];
-  };
+/**
+ * The remap register as what each output byte R, G, B, A takes: an offset into
+ * the source texel, or -1 with `constant` 0 or 255.
+ *
+ * The register lists its outputs A, R, G, B, and a source index 0..3 names A,
+ * R, G, B of the texel. ⚠️ A one-byte texel is B, and a remap that reads A, R
+ * or G of it reads that byte too -- so every offset is 0 then.
+ */
+function remapOffsets(remap: number, texel: number): { offset: Int8Array; constant: Uint8Array } {
+  const offset = new Int8Array(4);
+  const constant = new Uint8Array(4);
+  for (let c = 0; c < 4; c += 1) {
+    const k = (c + 1) & 3; // output R, G, B, A is register slot 1, 2, 3, 0
+    const op = (remap >> (8 + k * 2)) & 3;
+    if (op === 0 || op === 1) {
+      offset[c] = -1;
+      constant[c] = op === 0 ? 0 : 255;
+    } else offset[c] = texel === 4 ? (remap >> (k * 2)) & 3 : 0;
+  }
+  return { offset, constant };
 }
 
 async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
@@ -208,7 +226,7 @@ async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
       if (n & (n - 1)) throw new TextureFormatError(`a swizzled texture of ${gcm.width}x${gcm.height}x${depth}`);
     }
   }
-  const expand = remapper(gcm.remap);
+  const { offset, constant } = remapOffsets(gcm.remap, texel);
 
   const levels: TextureLevel[][] = [];
   let at = 0;
@@ -230,22 +248,22 @@ async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
       const size = linear ? stride * h * d : w * h * d * texel;
       if (at + size > data.length) throw new TextureFormatError(`mip ${mip} of face ${face} runs past the payload`);
       const out = new Uint8Array(w * h * d * 4);
-      const [lw, lh, ld] = [log2(w), log2(h), log2(d)];
-      const src = [0, 0, 0, 0];
+      // A linear texture reads by `stride` and never looks in the tables.
+      const [mx, my, mz] = linear ? mortonTables(0, 0, 0) : mortonTables(log2(w), log2(h), log2(d));
+      const [o0, o1, o2, o3] = offset;
+      const [c0, c1, c2, c3] = constant;
+      let to = 0;
       for (let z = 0; z < d; z += 1) {
         for (let y = 0; y < h; y += 1) {
+          const row = linear ? at + (z * h + y) * stride : 0;
+          const yz = linear ? 0 : my[y] | mz[z];
           for (let x = 0; x < w; x += 1) {
-            const from = at + (linear ? (z * h + y) * stride + x * texel : morton(x, y, z, lw, lh, ld) * texel);
-            if (texel === 4) {
-              src[0] = data[from];
-              src[1] = data[from + 1];
-              src[2] = data[from + 2];
-              src[3] = data[from + 3];
-            } else {
-              // One channel, and it is B: a remap that reads A, R or G reads it too.
-              src.fill(data[from]);
-            }
-            out.set(expand(src), ((z * h + y) * w + x) * 4);
+            const from = linear ? row + x * texel : at + ((mx[x] | yz) >>> 0) * texel;
+            out[to] = o0 < 0 ? c0 : data[from + o0];
+            out[to + 1] = o1 < 0 ? c1 : data[from + o1];
+            out[to + 2] = o2 < 0 ? c2 : data[from + o2];
+            out[to + 3] = o3 < 0 ? c3 : data[from + o3];
+            to += 4;
           }
         }
       }
