@@ -5,8 +5,9 @@ field's name string next to a `lea` to the member offset — and then confirmed 
 levels. Addresses are **vaddrs** in the eboot; [lbptracker's eboot-re.md](../../lbptracker/steering/eboot-re.md) has the conventions and
 the delta trap. What the engine *does* with this data — the sampler, the 27 `Params`, the clock,
 the voice pool — is in [lbptracker's synth-engine.md](../../lbptracker/steering/synth-engine.md); the containers it arrives in are in
-[level-files.md](level-files.md). The sampler patch (`RInstrument` and its sample slots, read by
-lbptracker's `rinstrument.ts`), the clip the eboot builds per placement, `Key` and `Scale`, the
+[level-files.md](level-files.md). The sampler patch's layout is here (*`RInstrument`*, read by
+`src/rinstrument.ts`); what the engine makes of it — the zone a note lands in, the unison stack,
+the playback formula — and the clip the eboot builds per placement, `Key` and `Scale`, the
 board's size limit and the thermometer are lbptracker's, in
 [sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md).
 
@@ -153,6 +154,54 @@ the white result makes very likely, and nobody has yet watched.
 **`Notes` element size is 4 bytes**, measured: the array's growth helper (`v0xd68370`, passed as
 the element callback) allocates `count * 4`. The same mechanism gives 1 for `Name`, a string — so
 the multiplier is the element size, not a coincidence.
+
+## `RInstrument` — serialiser at `v0xc68a70`
+
+The resource `PInstrument.Instrument` names: type 48, magic `INSb`, a `.rinst` in the FileDB.
+`src/rinstrument.ts` reads it. The serialiser builds field names with `sprintf("%s_%d", base, i)`,
+so the save format has flat numbered fields rather than nested arrays; each array is preceded by an
+explicit count, and the integers are varints.
+
+| base name | count | member stride | what it is |
+|---|---|---|---|
+| `Samples_0..7` | 8 | `0x10` from `+0x48` | the sample-slot structs below |
+| `SampleGuids_0..7` | 8 | `4` from `+0xc8` | GUIDs → `.smp` files in the FARCs ([lbptracker's game-assets.md](../../lbptracker/steering/game-assets.md)) |
+| `Splitnotes_*` | 9 | from `+0xe8` | key-split bounds |
+| `Numstack` | 1 | `+0x10c` | the unison stack's layer count |
+| `Params[i]_*` | 27 | two f32 at `+0x110 + 8i` | the synth block, each a range `(x, y)`, each written as its own two-element array so its count repeats |
+| `Arpeggio_*` | 32 | bytes, default `0xf` | arpeggiator pattern |
+| `Arpeggiate` | 1 | bool | arpeggiator on/off |
+
+✔ **Measured across the game's 68 `.rinst` files** (lbptracker's `tools/ExtractGuid.java` pulls
+them out): every one parses to its payload's last byte (`test/rinstrument.test.ts`), at revisions
+`0x3ba`, `0x3d5` and `0x3f9` (subVersions `0x1a3`, `0x1a6`). What the values mean to the engine —
+`Splitnotes` descending with each bound owning the zone above it, `Numstack` **not** the count of
+slots in use (test `SampleGuids[i] != 0` for that), `basenote` a MIDI note — is
+[lbptracker's sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md).
+
+### The sample slot — serialiser at `v0xcc0e90`
+
+Each of the 8 slots is 16 bytes in the resource (152 in the engine's own record):
+
+| offset | type | field | stream position | meaning |
+|---|---|---|---|---|
+| `+0x00` | i32 | `basenote` | 1st | the note the sample was recorded at |
+| `+0x04` | f32 | `basebpm` | 2nd | the sample's own tempo, for tempo-synced slots |
+| `+0x08` | f32 | `finetune` | **6th (last)** | fine pitch offset |
+| `+0x0c` | bool | `pitched` | 3rd | pitch-shift with the note, or play at a fixed rate |
+| `+0x0d` | bool | `fitbpm` | 4th **and 5th** | rate-match the sample to the sequencer tempo |
+
+⚠️ **Member offset order and stream order are not the same**, and confusing them produces a
+parser that silently reads `finetune` where `pitched` lives. The serialiser emits `basenote,
+basebpm, pitched, fitbpm, fitbpm, finetune`.
+
+**There is no third bool.** The serialiser emits three `bool` calls, but the third passes the *same*
+member pointer and the *same* name string as the second: at `v0xcc0ed6` the compiler hoists
+`lea r15, [r14+0xd]` and `lea r12, ["fitbpm"]` into registers and makes the identical call twice,
+at `v0xcc0eea` and `v0xcc0ef8`. `fitbpm` is serialised twice into the same field — a duplicate in
+the game's own code, not a hidden setting. An earlier reading listed a phantom bool at `+0x0e`;
+ennuo's toolkit independently reports the same double write. The unit of `finetune` (semitones) is
+the engine's, in [lbptracker's sequencer-engine-inputs.md](../../lbptracker/steering/sequencer-engine-inputs.md).
 
 ## Stream conventions
 

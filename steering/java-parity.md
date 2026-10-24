@@ -37,9 +37,8 @@ So any file in range walks to its end. What differs is what a reader returns:
 `RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RMaterial` (physical
 materials), `RJoint`, `RGuidSubst`, `RScript`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
 `RAdventureCreateProfile`, `BigSave`, `RSlotList`, `RPacks`, `RPins`, `RQuest`, `RPalette`, `RDLC`,
-`RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk` has a
-reader here: `readChunk`, `readChunkIslands`.) `RInstrument` is read, but in lbptracker
-(`../../lbptracker/packages/lbp-tracker-lib/src/rinstrument.ts`), not here.
+`RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk` and `RInstrument`
+have readers here: `readChunk` and `readChunkIslands`, and `readInstrument` in `src/rinstrument.ts`.)
 
 ## Writing
 

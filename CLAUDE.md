@@ -2,7 +2,7 @@
 
 A TypeScript reader and writer for LittleBigPlanet's serialised resources: the container, the Thing
 stream and its 53 part readers, plans, streaming chunks, `FAR4` saves, toolkit `.mod`s, the
-music sequencer as data, the game's FileDB, FARC archives, meshes, textures and materials, and the
+music sequencer and its instruments as data, the game's FileDB, FARC archives, meshes, textures and materials, and the
 `.plan` writer. It exists for [lbptracker](https://github.com/LBPTracker/lbptracker), a faithful re-implementation of LBP3's
 Music Sequencer, and was its `packages/cwlib-ts` until 2026-10-18. "Faithful" reaches down to
 here: a field read one byte off is a song played wrong.
@@ -14,8 +14,11 @@ Rules for this repository's steering, the same as lbptracker's:
 - **Each fact lives in exactly one file, in one of the two repositories; every other file points
   at it.** A fact about the bytes — what a file holds, how it is laid out, what proves the reader —
   lives here. A fact about what the game *does* with them — the sampler, the clock, the mix, the
-  editor's limits, and `RInstrument`, which lbptracker parses into its sampler's own structures —
-  lives in lbptracker's `steering/`. Pointers go both ways, as plain relative links to the sibling
+  editor's limits — lives in lbptracker's `steering/`.
+- **The code splits the same way.** Every resource's reader, writer and the types that hold its
+  data live here, whichever project needs them — `RInstrument` included (`src/rinstrument.ts`).
+  What a project does with that data — lbptracker's sampler model and zone walk, lbprender's
+  scene — stays in that project. Pointers go both ways, as plain relative links to the sibling
   checkout (`../../lbptracker/steering/…` from a file here); prefer pointing down, from
   lbptracker to here, and keep the upward ones to what a reader here cannot do without.
 - A wrong turn earns a place in `answered-questions.md` only if it is a trap the next reader could
@@ -37,8 +40,9 @@ Steering files (read on demand, per the hints):
   streaming chunks, `FAR4` saves, the toolkit's `.mod`, the game's FileDB, its GUID remap and FARCs, its meshes (`RMesh`,
   `PRenderMesh`), decorations and stickers, textures (`GTF `, `TEX `), materials (`RGfxMaterial`), bevels (`RBevel`), backdrops (`RStaticMesh`) and level settings, the corpora, the version bound, and the technique for finding a reader bug.
 - [steering/sequencer-data-model.md](steering/sequencer-data-model.md) — **read before touching
-  `project.ts`, `notes.ts` or `chips.ts`**: the `PSequencer` and `PInstrument` schemas with field
-  names and struct offsets, `Colour`, the stream conventions (endianness, stream order, varints,
+  `project.ts`, `notes.ts`, `chips.ts` or `rinstrument.ts`**: the `PSequencer` and `PInstrument`
+  schemas with field names and struct offsets, `Colour`, the `RInstrument` and sample-slot
+  layouts, the stream conventions (endianness, stream order, varints,
   revision gates), the 4-byte note record and how it was confirmed, and the circuit board
   timeline and its banding.
 - [steering/export-to-game.md](steering/export-to-game.md) — **read before touching `writer.ts`,
@@ -67,8 +71,9 @@ eboot builds, the board's limits) and `level-sources.md` (the public archive and
 
 ## Working here
 
-- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 96
-  tests on 2026-10-24, the corpus ones skipping when `fixtures/` is not beside them.
+- `npm install`, then `npm run check` — typecheck, then `node --test` on the `.ts` sources; 101
+  tests on 2026-10-24, the corpus ones skipping without `fixtures/` beside them or without
+  `LBP_GAME` and `LBP_LEVELS` (`steering/tools.md`).
 - `npm run build` writes `dist/`; `prepare` runs it, which is what a git install of this package
   gets. ❗ **Consumers run `dist/*.js`, never `src/`**: Node 24 refuses to strip types under
   `node_modules`. The README has why and how the `exports` map keeps the specifiers `.ts`.
