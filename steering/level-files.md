@@ -827,6 +827,42 @@ f32 fixedBevelSize, bool spongy, resource softPhysicsSettings, f32 textureRepeat
   of 256, the shape's own material taking it. `fixedBevelSize` is non-zero on all 256; `spongy` on
   46; `includeBackface` on 12.
 
+## Physics materials — `RMaterial`
+
+`readPhysicsMaterial` in `src/resources/physics-material.ts`: magic `MATb`, dependency type 16,
+FileDB paths `….mat` (`gamedata/materials/base_materials/base_plastic.mat`), named by
+`PShape.material` — what a shape weighs, how it slides, bounces and sounds, and whether it breaks;
+its look is `RGfxMaterial`. The field list is cwlib's `resources/RMaterial.java` (ennuo/toolkit
+`d6a2ef8`), every gate on the head's version alone, and it holds: **86 of 86 in the four FARCs read
+to the last byte of their payload, over 46 head words from `0x132` to `0x3f1`**
+(`dev/physics-material-census.ts`, `test/physics-material.test.ts`, 2026-10-24) — so the gates at
+`0x13c`, `0x167`, `0x168`, `0x1d3`, `0x244` and `0x27b` are each crossed by real files.
+
+```
+f32 traction, f32 density                      (< 0x13c: 2 unnamed bytes)
+f32 restitution, f32 slidingFriction           (< 0x13c: an unnamed f32)
+f32 rollingFriction                            (< 0x13c: 5 unnamed bytes)
+i32 soundEnum, bool grabbable                  (< 0x13c: 2 unnamed bytes)
+f32 gravityMultiplier, f32 airResistanceMultiplier   (< 0x167: an unnamed f32)
+bool limb                                      (< 0x1d3: an unnamed byte)
+bool shiftGrip, i32 collideType, i32 collideIgnore
+bool dissolvable, bool explodable, bool cuttableByExplosion
+>= 0x167: bool breakable, f32 breakMinVel, f32 breakMinForce, f32 explosionMinRadius,
+          f32 explosionMaxRadius, f32 explosionMaxVel, (>= 0x168) f32 explosionMaxAngVel,
+          f32 explosionMaxForce
+>= 0x13c: f32 maxForce      >= 0x244: bool bullet      >= 0x27b: bool circuitBoard, bool disableCSG
+```
+
+- `maxForce` is absent, and `NaN` as cwlib defaults it, on exactly the 27 files below `0x13c`; no
+  file stores a `NaN`. Where present it runs from 20,130 to `Infinity`.
+- `collideType` is `0x1` (normal) on 67 of 86; `collideIgnore` is 0 on 38 and `0x8` (magic wall) on
+  28. `soundEnum` is 0 on 35, then 17 other values up to 35 — cwlib's `AudioMaterial`, unchecked
+  here against the audio.
+- Ranges: traction 0–1, density 0 to `1e11` (a stand-in for immovable), restitution 0–1, sliding
+  friction 0–30, gravity multiplier −1 to 1. `grabbable` on 37, `breakable` on 7.
+- The Alear branch's `explosionType`, which cwlib reads from a resource's extra data, is a custom
+  server's and not in the game.
+
 ## The game's textures — `GTF ` and `TEX `
 
 `readTexture` in `src/resources/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is

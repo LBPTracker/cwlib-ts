@@ -34,11 +34,12 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 ## Resources with a Java class and no reader here
 
-`RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RMaterial` (physical
-materials), `RJoint`, `RGuidSubst`, `RScript`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
+`RAnimation` and `RBoneSet` (so a mesh's morphs stay walked, names only), `RJoint`, `RGuidSubst`, `RScript`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
 `RAdventureCreateProfile`, `BigSave`, `RSlotList`, `RPacks`, `RPins`, `RQuest`, `RPalette`, `RDLC`,
-`RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk` and `RInstrument`
-have readers here: `readChunk` and `readChunkIslands`, and `readInstrument` in `src/resources/rinstrument.ts`.)
+`RFontFace`, `RTranslationTable`, `RCachedCostumeData`, `ROutfitList`. (`RStreamingChunk`, `RInstrument` and
+`RMaterial` have readers here: `readChunk` and `readChunkIslands`, `readInstrument` in
+`src/resources/rinstrument.ts`, and `readPhysicsMaterial` in `src/resources/physics-material.ts`,
+added 2026-10-24.)
 
 ## Writing
 

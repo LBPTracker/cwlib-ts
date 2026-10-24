@@ -33,6 +33,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
+| `physics-material.ts` | `RMaterial` (`MATb`): a shape's physics — density, friction, bounce, its sound family, what it collides with, whether it breaks |
 | `rinstrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`sequencer/`** | |
 | `project.ts`, `notes.ts`, `chips.ts` | the music sequencer as data — note records, chaining, automation, the chips' plans and colours |
