@@ -226,7 +226,7 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
   const primitiveType = s.u8();
   // SoftbodyClusterData: a count, then four arrays of that many, each with its
   // own redundant length in front.
-  const clusters = s.i32();
+  const clusters = s.count();
   s.i32();
   for (let i = 0; i < clusters; i += 1) s.vector4(); // restCOM
   s.i32();

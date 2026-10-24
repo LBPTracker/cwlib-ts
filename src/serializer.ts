@@ -139,6 +139,12 @@ export class Serializer {
   }
 
   private need(n: number): number {
+    // ⚠️ `n` is often a length read out of the file, and a negative one passed
+    // the check below and moved the cursor BACKWARDS -- a misread that then
+    // failed somewhere else entirely instead of here.
+    if (!Number.isInteger(n) || n < 0) {
+      throw new SerializerError(`read of ${n} bytes at 0x${this.position.toString(16)}`);
+    }
     if (this.position + n > this.data.length) {
       throw new SerializerError(
         `read of ${n} at 0x${this.position.toString(16)} runs past the end ` +
@@ -362,6 +368,16 @@ export class Serializer {
     this.referenced.set(id, value);
     fill(this, value);
     return value;
+  }
+
+  /**
+   * An element count: an `i32`, varint when compressed, refused when negative.
+   * A negative count would otherwise loop zero times and misparse silently.
+   */
+  count(): number {
+    const count = this.i32();
+    if (count < 0) throw new SerializerError(`negative count ${count} at 0x${this.position.toString(16)}`);
+    return count;
   }
 
   /** A length-prefixed array. The count is an `i32`, varint when compressed. */

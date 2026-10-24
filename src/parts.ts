@@ -40,7 +40,7 @@ import {
 
 /** An array of Thing references — cwlib's `thingarray`. */
 function things(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  const count = s.i32();
+  const count = s.count();
   for (let i = 0; i < count; i += 1) readThingRef(s, readers);
 }
 
@@ -150,7 +150,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   const hideInPlayMode = jv > 0x25c ? s.bool() : false;
   if (jv > 0x2c3) s.i32(); // behaviour
   if (s.revision.subVersion >= 0xed) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) s.vector3(); // railKnotVector
   }
   if (s.revision.subVersion >= 0x197) s.u8(); // railInteractions
@@ -226,7 +226,7 @@ export interface GeneratedMeshPart {
 }
 
 function readPolygon(s: Serializer): Pick<ShapePart, 'vertices' | 'requiresZ' | 'loops'> {
-  const count = s.i32();
+  const count = s.count();
   // ❗ **`requiresZ` arrives at 0x341, and below it there is no flag byte at
   // all** -- cwlib `Polygon.serialize` takes an early return where every vertex
   // is a v3. Reading the flag anyway costs a byte and then picks the vertex
@@ -245,7 +245,7 @@ function readPolygon(s: Serializer): Pick<ShapePart, 'vertices' | 'requiresZ' | 
 
 /** `ContactCache`: who this shape is touching. */
 function readContactCache(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  const count = s.i32();
+  const count = s.count();
   for (let i = 0; i < count; i += 1) {
     // A `Contact` is a reference to another Thing's PShape plus a flag byte.
     s.reference((self) => readShape(self, readers));
@@ -482,7 +482,7 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
   const lighting = readLevelSettings(s); // the superclass, serialised first
   const presets: LevelLighting[] = [];
   if (version >= 0x153) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) presets.push(readLevelSettings(s));
   }
   const backdropAmbience = s.str();
@@ -564,7 +564,7 @@ export function readRenderMesh(s: Serializer, readers: ReadonlyMap<string, PartR
   const { version } = s.revision;
   const mesh = s.resource();
   const boneThings: (Thing | undefined)[] = [];
-  const count = s.i32();
+  const count = s.count();
   for (let i = 0; i < count; i += 1) boneThings.push(readThingRef(s, readers));
   const anim = s.resource();
   const animPos = s.f32();
@@ -662,7 +662,7 @@ function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 
 /** `PDecorations`: every decoration on a Thing. */
 export function readDecorations(s: Serializer, readers: ReadonlyMap<string, PartReader>): Decoration[] {
-  const count = s.i32();
+  const count = s.count();
   const out: Decoration[] = [];
   for (let i = 0; i < count; i += 1) out.push(readDecoration(s, readers));
   return out;
@@ -753,23 +753,23 @@ export interface StickersPart {
 export function readStickers(s: Serializer): StickersPart {
   const { version } = s.revision;
   const decals: Decal[] = [];
-  const count = s.i32();
+  const count = s.count();
   for (let i = 0; i < count; i += 1) decals.push(readDecal(s));
   const costumeDecals: Decal[][] = [];
-  const costumes = s.i32();
+  const costumes = s.count();
   for (let i = 0; i < costumes; i += 1) {
     const list: Decal[] = [];
-    const n = s.i32();
+    const n = s.count();
     for (let j = 0; j < n; j += 1) list.push(readDecal(s));
     costumeDecals.push(list);
   }
   // ⚠️ `paintControl` exists only up to 0x3ba, and the corpus starts at 0x3b8.
   if (version >= 0x158 && version <= 0x3ba) {
-    const n = s.i32();
+    const n = s.count();
     for (let i = 0; i < n; i += 1) s.bytes(4); // x, y, startRadius, endRadius
   }
   if (version >= 0x15d) {
-    const n = s.i32();
+    const n = s.count();
     for (let i = 0; i < n; i += 1) readEyetoyData(s);
   }
   return { decals, costumeDecals };
@@ -940,7 +940,7 @@ function readSwitchTarget(s: Serializer, readers: ReadonlyMap<string, PartReader
 /** `SwitchOutput`: one output port and everything wired to it. */
 function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchTarget[] {
   readSwitchSignal(s);
-  const count = s.i32();
+  const count = s.count();
   const targets: SwitchTarget[] = [];
   for (let i = 0; i < count; i += 1) targets.push(readSwitchTarget(s, readers));
   if (s.revision.version >= 0x34d) s.wstr(); // userDefinedName
@@ -980,12 +980,12 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version < 0x329) {
     s.f32(); // the single output's activation
     if (version > 0x2a2) s.i32(); // player
-    const count = s.i32();
+    const count = s.count();
     const targets: SwitchTarget[] = [];
     for (let i = 0; i < count; i += 1) targets.push(readSwitchTarget(s, readers));
     outputs.push(targets);
   } else {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) {
       outputs.push(s.reference((self) => readSwitchOutput(self, readers)) ?? []);
     }
@@ -1025,10 +1025,10 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   // above `LBP3_MIN_VERSION` has it, so it was never ported; it is most of why
   // an LBP1 switch was read 91 bytes short.
   if (version > 0x1fa && version < 0x327) {
-    const positions = s.i32();
+    const positions = s.count();
     // ⚠️ cwlib `vectorarray` returns Vector4f[], so these are v4 and not v3.
     for (let i = 0; i < positions; i += 1) s.vector4(); // connectorPos
-    const grabbed = s.i32();
+    const grabbed = s.count();
     for (let i = 0; i < grabbed; i += 1) s.bool(); // connectorGrabbed
     s.vector4(); // portPosOffset
     s.vector4(); // looseConnectorPos
@@ -1261,7 +1261,7 @@ export function readMicrochip(
   const components: Component[] = [];
   if (version >= 0x34d) {
     name = decodeEntities(s.wstr());
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) {
       const thing = readThingRef(s, readers);
       const x = s.f32();
@@ -1337,7 +1337,7 @@ export function readCameraTweak(s: Serializer): void {
   if (version > 0x395) s.bool(); // cutSceneSendsSignalOnCancelled
   if (version > 0x396) s.bool(); // cutSceneWasActiveLastFrame
   if (version > 0x37d) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) readCameraNode(s);
   }
   if (subVersion > 0x7d) s.f32(); // frontDOF
@@ -1405,7 +1405,7 @@ export function readInstrumentPart(s: Serializer): InstrumentPart {
     s.i16(); // cursorX
     s.i16(); // cursorY
   }
-  const count = s.i32();
+  const count = s.count();
   const notes = s.bytes(count * 4).slice();
   const icon = version >= 0x379 ? s.resource() : undefined;
   return {
@@ -1568,12 +1568,12 @@ function readInputRecording(s: Serializer): void {
   if (version > 0x2a5) s.intVector(); // absoluteExpressionBuffer
   if (version > 0x2dd) {
     s.matrix(); // startWorldTransform
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) s.matrix(); // startLocalSceneGraph
   }
   if (version > 0x2df) s.vector3(); // startFootPos
   if (version > 0x2e0) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) s.vector3(); // startVelocities
   }
   if (version > 0x3c4) s.bool(); // recordingContainsMoveData
@@ -1921,7 +1921,7 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
   let layout = s.pointers.get(pointer) as FieldLayout[] | undefined;
   if (layout === undefined) {
     const fields: FieldLayout[] = [];
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(s));
     s.i32(); // instanceSize
     layout = fields;
@@ -2004,7 +2004,7 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
 
   switch (type) {
     case OBJ_ARRAY_BOOL: {
-      const n = s.i32();
+      const n = s.count();
       for (let i = 0; i < n; i += 1) s.bool();
       break;
     }
@@ -2012,12 +2012,12 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
       s.intVector();
       break;
     case OBJ_ARRAY_F32: {
-      const n = s.i32();
+      const n = s.count();
       for (let i = 0; i < n; i += 1) s.f32();
       break;
     }
     case OBJ_ARRAY_VECTOR4: {
-      const n = s.i32();
+      const n = s.count();
       for (let i = 0; i < n; i += 1) s.vector4();
       break;
     }
@@ -2040,7 +2040,7 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
       things(s, readers);
       break;
     case OBJ_ARRAY_OBJECT_REF: {
-      const n = s.i32();
+      const n = s.count();
       for (let i = 0; i < n; i += 1) readScriptObject(s, readers);
       break;
     }
@@ -2249,7 +2249,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     thing(); // jetpack
     s.s32(); // wallJumpDir
     s.vector3(); // wallJumpPos
-    const contacts = s.i32();
+    const contacts = s.count();
     for (let i = 0; i < contacts; i += 1) s.vector3(); // bootContactForceList
     s.s32(); // gunType
     s.bool(); // wallJumpMat
@@ -2325,10 +2325,10 @@ function readCostumePiece(s: Serializer): void {
   s.resource(); // mesh
   s.i32(); // categoriesUsed
   if (subVersion < 0x105) {
-    const n = s.i32();
+    const n = s.count();
     for (let i = 0; i < n; i += 1) s.i32(); // morphParamRemap, an i32 each
   } else s.bytes(s.i32());
-  const prims = s.i32();
+  const prims = s.count();
   for (let i = 0; i < prims; i += 1) readPrimitive(s);
   if (version >= 0x19a) s.resource(true); // plan
 }
@@ -2340,12 +2340,12 @@ export function readCostume(s: Serializer): void {
   s.resource(); // material
   if (version >= 0x19a) s.resource(true); // materialPlan
   s.intVector(); // meshPartsHidden
-  const prims = s.i32();
+  const prims = s.count();
   for (let i = 0; i < prims; i += 1) readPrimitive(s);
   // ⚠️ An `i32`, not a byte. It was a byte here and no compressed file could
   // tell: a varint under 128 is one byte either way. See `readFieldLayout`.
   if (subVersion >= 0xdb) s.i32(); // creatureFilter
-  const pieces = s.i32();
+  const pieces = s.count();
   for (let i = 0; i < pieces; i += 1) readCostumePiece(s);
   if (version >= 0x2c5) {
     const temp = s.i32();
@@ -2767,8 +2767,7 @@ function readPoppetMaterialOverride(s: Serializer): void {
 function readPoppetShapeOverride(s: Serializer): void {
   // ⚠️ A plain count and that many vectors, not an `array` of structs: cwlib
   // writes the length itself here rather than going through its array helper.
-  const count = s.i32();
-  if (count < 0) throw new SerializerError(`negative polygon length ${count}`);
+  const count = s.count();
   for (let i = 0; i < count; i += 1) s.vector3(); // polygon
   s.intVector(); // loops
   s.s32(); // back
@@ -2993,7 +2992,7 @@ function readInventoryItemDetails(s: Serializer): void {
   s.u32(); // descriptionKey
   s.reference((self) => {
     // creationHistory: fixed 20-byte names above 0x37c
-    const count = self.i32();
+    const count = self.count();
     for (let i = 0; i < count; i += 1) self.bytes(0x14);
   });
   s.resource(true); // icon
@@ -3060,7 +3059,7 @@ function readPoppetPowerup(s: Serializer): void {
   const { subVersion } = s.revision;
   if (subVersion > 0x124) {
     s.u64(); // tools
-    const items = s.i32();
+    const items = s.count();
     for (let i = 0; i < items; i += 1) s.resource(true); // a plan descriptor
   }
   if (subVersion >= 0x7 && subVersion < 0x124) {
@@ -3069,7 +3068,7 @@ function readPoppetPowerup(s: Serializer): void {
     s.array(readInventoryItem);
   }
   if (subVersion >= 0xb && subVersion < 0x123) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) {
       s.i32();
       s.i32();

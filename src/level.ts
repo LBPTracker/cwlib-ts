@@ -157,7 +157,7 @@ function readChunkFile(s: Serializer): void {
   readStreamingLists(s);
   if (subVersion >= 0xde) {
     // `userResources`: descriptors that carry their type inline.
-    const resources = s.i32();
+    const resources = s.count();
     for (let i = 0; i < resources; i += 1) s.resource(true, true);
   }
   if (subVersion > 0x72) {
@@ -199,7 +199,7 @@ function readLevelData(s: Serializer): void {
 /** `StreamingManager`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
 function readStreamingManager(s: Serializer): void {
   emptyOnly(s, 'StreamingManager.editingThingsList');
-  const count = s.i32();
+  const count = s.count();
   for (let i = 0; i < count; i += 1) s.reference(readLevelData);
   const { subVersion } = s.revision;
   s.i32(); // numIslands
@@ -264,7 +264,7 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
   const { version, subVersion } = s.revision;
   const things = (): void => {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) readThingRef(s, readers);
   };
   s.f32(); // maxVel
@@ -393,7 +393,7 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather
   // than the empty placeholder `reference` would register.
-  const count = s.i32();
+  const count = s.count();
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(s, readers));
   if (tail) readWorldTail(s, readers);
@@ -550,9 +550,9 @@ function readStreamingLists(s: Serializer): void {
 
 function readDependencyLists(s: Serializer): void {
   if (s.revision.subVersion <= 0x169) return;
-  const guids = s.i32();
+  const guids = s.count();
   for (let i = 0; i < guids; i += 1) s.guid();
-  const hashes = s.i32();
+  const hashes = s.count();
   for (let i = 0; i < hashes; i += 1) s.sha1();
 }
 
@@ -635,7 +635,7 @@ export async function readLevel(
   // `RLevel`: the cross-play hashes came in at 0x3e7, and the corpus straddles
   // that, so the count is only there on the later files.
   if (revision.version > 0x3e6) {
-    const count = s.i32();
+    const count = s.count();
     for (let i = 0; i < count; i += 1) s.sha1();
   }
 
