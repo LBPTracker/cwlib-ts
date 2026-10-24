@@ -44,10 +44,14 @@ import path from 'node:path';
 
 const COUNT = Number(process.argv[2] ?? 60);
 const DIR = process.argv[3] ?? path.join('fixtures', 'archive');
-const DB = process.env.LBP_DRY_DB
-  ?? 'C:/Users/sgdc3/Desktop/LBP/lbp-download/dry.db';
-const PYTHON = process.env.LBP_PYTHON
-  ?? 'C:/Users/sgdc3/AppData/Local/Programs/Python/Python314/python.exe';
+// No default for the index: it is a file on one machine (steering/tools.md).
+const DB = process.env.LBP_DRY_DB;
+if (!DB) {
+  console.error("LBP_DRY_DB is not set: it is the public archive's index, dry.db (steering/tools.md).");
+  process.exit(2);
+}
+/** The interpreter that queries it; `python` on the PATH unless `LBP_PYTHON` names another. */
+const PYTHON = process.env.LBP_PYTHON ?? 'python';
 
 /** Where a root level's bytes are. See `rootLevelUrl` in `packages/lbp-tracker-web/src/lbparchive.ts`. */
 const rootLevelUrl = (sha1) => {

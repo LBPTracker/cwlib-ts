@@ -1,7 +1,8 @@
 /** Search the archive's own index (dry.db) by slot name. */
 import { DatabaseSync } from 'node:sqlite';
+import { required } from './env.ts';
 
-const DB = process.env.DRY_DB ?? 'C:/Users/sgdc3/Desktop/LBP/lbp-download/dry.db';
+const DB = required('DRY_DB', "the public archive's index, dry.db");
 const term = process.argv[2] ?? 'music';
 const db = new DatabaseSync(DB, { readOnly: true });
 const cols = db.prepare("select name from pragma_table_info('slot')").all();

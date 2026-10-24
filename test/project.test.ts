@@ -23,8 +23,9 @@ import { nodeInflate } from '../src/platform/node.ts';
  * Real levels are other people's work and are never committed. Point
  * `LBP_LEVELS` at a directory of them; the corpus tests skip without it.
  */
-const LEVELS =
-  process.env.LBP_LEVELS ?? 'C:/Users/sgdc3/Desktop/LBP/toolkit/tools/sequencerdump/data';
+/** `LBP_LEVELS` is the toolkit's `tools/sequencerdump` folder; the PS3 levels are its `data`. */
+const LEVELS = process.env.LBP_LEVELS ? path.join(process.env.LBP_LEVELS, 'data') : '';
+const NO_LEVELS = LEVELS ? `no ${LEVELS}` : 'LBP_LEVELS is not set';
 
 // ------------------------------------------------------------------ fixtures
 
@@ -220,7 +221,7 @@ async function corpus(): Promise<LevelProject[] | null> {
 test('every sequencer in the corpus imports, and the notes survive it', async (t) => {
   const levels = await corpus();
   if (!levels) {
-    t.skip(`no ${LEVELS} — set LBP_LEVELS to a directory of levels`);
+    t.skip(NO_LEVELS);
     return;
   }
 
@@ -266,7 +267,7 @@ test('every sequencer in the corpus imports, and the notes survive it', async (t
 test('the corpus’s tempos and grid cells are in sane ranges', async (t) => {
   const levels = await corpus();
   if (!levels) {
-    t.skip(`no ${LEVELS}`);
+    t.skip(NO_LEVELS);
     return;
   }
 
@@ -302,7 +303,7 @@ test('the corpus’s tempos and grid cells are in sane ranges', async (t) => {
 test('the corpus resolves to real instrument GUIDs', async (t) => {
   const levels = await corpus();
   if (!levels) {
-    t.skip(`no ${LEVELS}`);
+    t.skip(NO_LEVELS);
     return;
   }
   let resolved = 0;
@@ -346,7 +347,7 @@ test('a triplet lands on its third of a step, not on the beat', () => {
 
 test('the corpus’s sub-steps are the two balanced thirds, not a flag', async (t) => {
   if (!existsSync(LEVELS)) {
-    t.skip(`no ${LEVELS}`);
+    t.skip(NO_LEVELS);
     return;
   }
   // ⚠️ The *records*, not the grouped notes: `subStep` is a field of the

@@ -13,11 +13,14 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  * A backdrop out of the game's FARCs; skips without `LBP_GAME`.
  * `dev/staticmesh-census.ts` is the same over all 47.
  */
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
+const GAME = process.env.LBP_GAME ?? '';
+/** Whether the installed game, when `LBP_GAME` names one, holds this file. */
+const inGame = (...parts: string[]): boolean => GAME !== '' && existsSync(path.join(GAME, ...parts));
+const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
 const PATH = 'gamedata/lbp3/unthemed/palettes/env_default_background_template.smh';
 
 test("the default background template: a backdrop that reads, facing out", async (t) => {
-  if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   const row = [...db.values()].find((r) => r.path === PATH)!;
   let bytes: Uint8Array | undefined;

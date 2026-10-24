@@ -1,7 +1,7 @@
 /**
  * Which way V runs, measured on the bytes alone:
  *
- *   node dev/uv-census.ts                  LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/uv-census.ts                  LBP_GAME required
  *
  * A cut-out texture -- alpha-clipped, its diffuse a texture sample -- is drawn
  * only where its alpha is opaque, so the triangles of the meshes that use it

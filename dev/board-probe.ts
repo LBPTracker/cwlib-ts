@@ -29,8 +29,9 @@ import path from 'node:path';
 import { boardCell, readLevel } from '../src/level.ts';
 import { partReaders, type Microchip } from '../src/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { required } from './env.ts';
 
-const DIR = process.argv[2] ?? 'C:/Users/sgdc3/Desktop/LBP/toolkit/tools/sequencerdump/data';
+const DIR = process.argv[2] ?? path.join(required('LBP_LEVELS', "the toolkit checkout's tools/sequencerdump folder, the one holding data*"), 'data');
 /** One horizontal step. Rows are `CELL_HEIGHT`, twice this — see `project.ts`. */
 const CELL = 52.5;
 

@@ -16,9 +16,12 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  * `steering/game-assets.md`. `LBP_GAME` is an installed LBP3 PS4 build, the
  * folder holding `base_001.farc` and `output/`; without it these skip.
  */
-const GAME = process.env.LBP_GAME ?? 'D:\\PS4Games\\CUSA00063';
-const LEVELS =
-  process.env.LBP_LEVELS ?? 'C:\\Users\\sgdc3\\Desktop\\LBP\\toolkit\\tools\\sequencerdump';
+const GAME = process.env.LBP_GAME ?? '';
+/** Whether the installed game, when `LBP_GAME` names one, holds this file. */
+const inGame = (...parts: string[]): boolean => GAME !== '' && existsSync(path.join(GAME, ...parts));
+const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
+/** `LBP_LEVELS`: the toolkit's `tools/sequencerdump` folder, the one holding `data*`. */
+const LEVELS = process.env.LBP_LEVELS ?? '';
 
 const sha1 = (bytes: Uint8Array): string => createHash('sha1').update(bytes).digest('hex');
 
@@ -85,7 +88,7 @@ test('readThings refuses a magic that holds no Things', async () => {
 /* ---------------------------------------------------------------- the game */
 
 test("the game's FileDB names piano_c3, and base_001.farc holds its bytes", async (t) => {
-  if (!existsSync(path.join(GAME, 'base_001.farc'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('base_001.farc')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   // ❗ 107,673 rows on 1.28 and no GUID twice, so nothing is dropped.
   assert.equal(db.size, 107_673);
@@ -107,7 +110,7 @@ test("the game's FileDB names piano_c3, and base_001.farc holds its bytes", asyn
 });
 
 test('an entry past 2^31 in chunk1_001.farc reads whole', async (t) => {
-  if (!existsSync(path.join(GAME, 'chunk1_001.farc'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('chunk1_001.farc')) return t.skip(NO_GAME);
   // ⚠️ The offset is a u32: read as an i32, every entry here is before the file.
   const access = await openFileAccess(path.join(GAME, 'chunk1_001.farc'));
   try {
@@ -122,7 +125,7 @@ test('an entry past 2^31 in chunk1_001.farc reads whole', async (t) => {
 });
 
 test('every entry of intro_001.farc matches the SHA-1 it is filed under', async (t) => {
-  if (!existsSync(path.join(GAME, 'intro_001.farc'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('intro_001.farc')) return t.skip(NO_GAME);
   const access = await openFileAccess(path.join(GAME, 'intro_001.farc'));
   try {
     const farc = await openFarc(access);
@@ -140,7 +143,7 @@ test('every entry of intro_001.farc matches the SHA-1 it is filed under', async 
 });
 
 test('readThings opens a level and a game plan, a fresh part table each', async (t) => {
-  if (!existsSync(path.join(GAME, 'intro_001.farc'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('intro_001.farc')) return t.skip(NO_GAME);
   const access = await openFileAccess(path.join(GAME, 'intro_001.farc'));
   try {
     const farc = await openFarc(access);
@@ -160,7 +163,7 @@ test('readThings opens a level and a game plan, a fresh part table each', async 
   }
 
   const folder = path.join(LEVELS, 'data');
-  if (!existsSync(folder)) return t.skip(`no levels under ${folder}`);
+  if (!LEVELS || !existsSync(folder)) return t.skip(LEVELS ? `no levels under ${folder}` : 'LBP_LEVELS is not set');
   const name = (await readdir(folder)).find((f) => !f.includes('.'))!;
   const bytes = new Uint8Array(await readFile(path.join(folder, name)));
   // Twice: a second level through a shared table would meet the first one's WORLD.

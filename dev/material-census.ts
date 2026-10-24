@@ -2,7 +2,7 @@
  * Every `GMTb` in an installed game's FARCs through `readMaterial`, and the
  * checks behind `materialSummary`:
  *
- *   node dev/material-census.ts            LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/material-census.ts            LBP_GAME required
  *
  * Prints, per revision, how many read to the payload's last byte; then:
  *

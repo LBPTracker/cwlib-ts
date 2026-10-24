@@ -2,7 +2,7 @@
  * Every `GTF ` and `TEX ` in an installed game's FARCs through `readTexture`,
  * and the checks behind each layout convention in `src/texture.ts`:
  *
- *   node dev/texture-census.ts [png-dir]     LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/texture-census.ts [png-dir]     LBP_GAME required
  *
  * Prints how many read, by magic and format, and the failures with their
  * reasons; then the measurements:

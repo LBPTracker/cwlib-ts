@@ -13,8 +13,8 @@ parts matter, and **they have different authors, which changes how much weight e
   carrying field order, per-field revision gates and defaults, with a decade of community use
   behind it. This is the part worth treating as a serious independent reading of the format.
 - **`sequencerdump`** — **this project's own author wrote it**, and it is not in this repository:
-  fork at `https://github.com/sgdc3/toolkit`, local checkout at
-  `C:\Users\sgdc3\Desktop\LBP\toolkit\`. It walks a level or `.plan`, finds every **music**
+  fork at `https://github.com/sgdc3/toolkit`; `LBP_LEVELS` names a checkout's
+  `tools/sequencerdump` ([tools.md](tools.md)). It walks a level or `.plan`, finds every **music**
   sequencer, and exports to MIDI or Ableton ALS. ⚠️ **The author's own instruction: trust its
   level-extraction logic, ignore its sequencer parsing.** The traversal is sound; the musical
   interpretation on top of it (note grouping, durations, triplet timing) is, in the author's words,
@@ -25,8 +25,8 @@ parts matter, and **they have different authors, which changes how much weight e
 MIT means we may port logic from it with attribution. Prefer porting the *understanding* over the
 code.
 
-❗ **cwlib's Java source is on this disk, not just its jar**:
-`C:\Users\sgdc3\Desktop\LBP\toolkit\lib\cwlib\src\main\java\cwlib\` — `structs/things/` for
+❗ **cwlib's Java source is in a toolkit checkout, not just its jar**:
+`lib/cwlib/src/main/java/cwlib/` — `structs/things/` for
 `Thing.java` and the `parts/`, `enums/Part.java` for the mask semantics, `enums/Revisions.java` and
 `enums/Branch.java` for every gate constant. **Read it before tracing bytes.** Question 28 spent a
 session on a byte-level trace and then found its bug in ten minutes by opening `Thing.java`; and

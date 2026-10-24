@@ -2,7 +2,7 @@
  * The game's story levels: every per-level archive under `gamedata/` and every
  * streaming chunk in it, through `readThings`:
  *
- *   node dev/story-census.ts               LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/story-census.ts               LBP_GAME required
  *
  * ❗ The story chunks are not in the four FARCs. Each level has a `.farc` --
  * which is a `FAR4` in the clear, not a FARC -- beside its `_container.farc`
@@ -23,8 +23,9 @@ import type { Thing } from '../src/thing.ts';
 import { readFar } from '../src/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { magicOf } from '../src/resource.ts';
+import { GAME } from './game.ts';
 
-const ROOT = path.join(process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063', 'gamedata');
+const ROOT = path.join(GAME, 'gamedata');
 
 const archives: string[] = [];
 const walk = (dir: string): void => {

@@ -1,7 +1,7 @@
 /**
  * Every `BEVb` in an installed game's FARCs through `readBevel`:
  *
- *   node dev/bevel-census.ts               LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/bevel-census.ts               LBP_GAME required
  *
  * Prints, per revision, how many read to their payload's last byte, and then
  * what the profiles hold: vertex counts, the range of y and z, mapping modes,

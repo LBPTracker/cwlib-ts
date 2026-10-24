@@ -30,8 +30,9 @@ import { musicSequencers, readLevel } from '../src/level.ts';
 import { partReaders } from '../src/parts.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { toHex } from '../src/hex.ts';
+import { required } from './env.ts';
 
-const DIR = process.argv[2] ?? 'C:/Users/sgdc3/Desktop/LBP/toolkit/tools/sequencerdump/data';
+const DIR = process.argv[2] ?? path.join(required('LBP_LEVELS', "the toolkit checkout's tools/sequencerdump folder, the one holding data*"), 'data');
 const DUMP = 'fixtures/levels/sequencers.jsonl';
 
 /** The dump's rows for one level file, keyed by sequencer UID. */

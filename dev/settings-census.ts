@@ -2,7 +2,7 @@
  * The lighting of the game's own levels: every `LVLb` in the four FARCs that
  * parses, its `PLevelSettings`, and the ranges its values take.
  *
- *   node dev/settings-census.ts            LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/settings-census.ts            LBP_GAME required
  *
  * The numbers in steering/level-files.md, *Level settings*.
  */

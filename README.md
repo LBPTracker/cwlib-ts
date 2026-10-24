@@ -69,5 +69,6 @@ there, not a symlink. `exports` maps `@lbptracker/cwlib/<name>.ts` to `dist/<nam
 import specifiers are the same either way.
 
 The corpus tests read lbptracker's `fixtures/`: `LBP_FIXTURES` points at it, and the default is an
-lbptracker checkout next to this one. `LBP_LEVELS` and `LBP_PLANS` override single corpora. Without
-them those tests skip.
+lbptracker checkout next to this one; `LBP_PLANS` overrides its gallery plans. `LBP_LEVELS` (a
+toolkit checkout's `tools/sequencerdump`) and `LBP_GAME` (an installed LBP3 PS4 build) have no
+default: the tests that need them skip without them. `steering/tools.md` has every variable.

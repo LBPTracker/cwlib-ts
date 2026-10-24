@@ -1,7 +1,7 @@
 /**
  * Every `PLNb` and `LVLb` in an installed game's FARCs through `readThings`:
  *
- *   node dev/things-census.ts [list-file]     LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/things-census.ts [list-file]     LBP_GAME required
  *
  * Prints how many parse, how many the version bound (or the oldest header
  * layout) refuses, and the rest grouped by their error with digits folded, one

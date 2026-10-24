@@ -15,8 +15,8 @@ import { magicOf } from '../src/resource.ts';
  * `steering/lbp-modding-toolchain.md`. Point `LBP_LEVELS` at the checkout to run
  * the corpus checks; without it they skip.
  */
-const CORPUS =
-  process.env.LBP_LEVELS ?? 'C:\\Users\\sgdc3\\Desktop\\LBP\\toolkit\\tools\\sequencerdump';
+/** `LBP_LEVELS`: the toolkit's `tools/sequencerdump` folder, the one holding `data*`. */
+const CORPUS = process.env.LBP_LEVELS ?? '';
 
 /* ------------------------------------------------------------- synthetic */
 
@@ -111,7 +111,7 @@ async function chunksOf(folder: string): Promise<Uint8Array[]> {
 test('every plan in the corpus parses, and holds the music the levels do not', async (t) => {
   const folders = await saveFolders(CORPUS);
   if (folders.length === 0) {
-    t.skip(`no save folders under ${CORPUS}`);
+    t.skip(CORPUS ? `no save folders under ${CORPUS}` : 'LBP_LEVELS is not set');
     return;
   }
   const readers = partReaders();
@@ -167,7 +167,7 @@ test('every streaming chunk in the corpus parses, islands and all', async (t) =>
   // holds the Things. Every step of that is a place to be one field wrong.
   const folders = await saveFolders(CORPUS);
   if (folders.length === 0) {
-    t.skip(`no save folders under ${CORPUS}`);
+    t.skip(CORPUS ? `no save folders under ${CORPUS}` : 'LBP_LEVELS is not set');
     return;
   }
   const readers = partReaders();

@@ -18,7 +18,10 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  * it the mesh tests skip. `dev/mesh-census.ts` is the same checks over all
  * 5,941 meshes in its four FARCs; this is the 54 in the smallest.
  */
-const GAME = process.env.LBP_GAME ?? 'D:\\PS4Games\\CUSA00063';
+const GAME = process.env.LBP_GAME ?? '';
+/** Whether the installed game, when `LBP_GAME` names one, holds this file. */
+const inGame = (...parts: string[]): boolean => GAME !== '' && existsSync(path.join(GAME, ...parts));
+const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
 const FIXTURES = process.env.LBP_FIXTURES ?? path.join(import.meta.dirname, '..', '..', 'lbptracker', 'fixtures');
 /** The game's FileDB, 11 MB and 107,673 rows: read once for this file's tests, not once per test. */
 let fileDB: Promise<ReturnType<typeof readFileDB>> | undefined;
@@ -56,7 +59,7 @@ test('an LBP1-era header has no branch and no flags, and a chunk can be stored',
 /* ---------------------------------------------------------------- the game */
 
 async function meshes(file: string): Promise<{ farc: Farc; close(): Promise<void> } | undefined> {
-  if (!existsSync(path.join(GAME, file))) return undefined;
+  if (!inGame(file)) return undefined;
   const access = await openFileAccess(path.join(GAME, file));
   return { farc: await openFarc(access), close: () => access.close() };
 }
@@ -83,7 +86,7 @@ function counterClockwise(m: Mesh): [number, number] {
 
 test("every mesh in intro_001.farc reads to its last byte, and draws the right way out", async (t) => {
   const open = await meshes('intro_001.farc');
-  if (!open) return t.skip(`no game under ${GAME}`);
+  if (!open) return t.skip(NO_GAME);
   try {
     let count = 0;
     let ccw = 0;
@@ -117,7 +120,7 @@ test("every mesh in intro_001.farc reads to its last byte, and draws the right w
 });
 
 test('badge_zip_entrance.mol: the bones, the channels and the materials', async (t) => {
-  if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = await gameFileDB();
   const row = db.get(BADGE_ZIP_ENTRANCE)!;
   assert.equal(row.path, 'gamedata/mesh_library/common_objects/badge_zip_entrance/badge_zip_entrance.mol');
@@ -171,7 +174,7 @@ test("ascetic.lvl's render meshes name their mesh and the Things that pose it", 
   }
   assert.equal(nulls, 138);
 
-  if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = await gameFileDB();
   const archives = await Promise.all(
     ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'].map((f) => meshes(f)),

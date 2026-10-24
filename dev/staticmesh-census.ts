@@ -2,7 +2,7 @@
  * Every `SMHb` in an installed game's FARCs through `readStaticMesh`, and the
  * checks behind its conventions:
  *
- *   node dev/staticmesh-census.ts          LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/staticmesh-census.ts          LBP_GAME required
  *
  * - how many read, the chunk data ending on the dependency table and the index
  *   buffer filling the payload after the vertices;

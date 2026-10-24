@@ -14,9 +14,8 @@ import { nodeInflate, loadResourceFile } from '../src/platform/node.ts';
  * see steering/lbp-modding-toolchain.md. Point LBP_LEVELS at a directory of
  * level resources to run the corpus checks; without it they skip.
  */
-const CORPUS =
-  process.env.LBP_LEVELS ??
-  'C:\\Users\\sgdc3\\Desktop\\LBP\\toolkit\\tools\\sequencerdump';
+/** `LBP_LEVELS`: the toolkit's `tools/sequencerdump` folder, the one holding `data*`. */
+const CORPUS = process.env.LBP_LEVELS ?? '';
 
 async function findLevels(root: string, out: string[] = []): Promise<string[]> {
   let entries;
@@ -85,7 +84,7 @@ test('an uncompressed resource is its payload, with no chunk table', async () =>
 test('every level in the corpus parses, and chunk data ends on the dependency table', async (t) => {
   const levels = await findLevels(CORPUS);
   if (levels.length === 0) {
-    t.skip(`no level corpus at ${CORPUS} (set LBP_LEVELS)`);
+    t.skip(CORPUS ? `no level corpus at ${CORPUS}` : 'LBP_LEVELS is not set');
     return;
   }
 

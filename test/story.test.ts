@@ -17,11 +17,12 @@ import { magicOf } from '../src/resource.ts';
  * `gamedata/` -- both `FAR4` in the clear, holding nothing but `CHKb`. `dev/story-census.ts` is the same
  * over all 88 archives and 41,741 chunks.
  */
-const GAME = process.env.LBP_GAME ?? 'D:/PS4Games/CUSA00063';
+const GAME = process.env.LBP_GAME ?? '';
+const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
 const LEVEL = path.join(GAME, 'gamedata', 'lbp3', 'official_adventure_levels', '01_prologue', '01_needlepoint_peaks');
 
 test('Needlepoint Peaks: every chunk of the level and of its container reads', async (t) => {
-  if (!existsSync(LEVEL)) return t.skip(`no game under ${GAME}`);
+  if (!GAME || !existsSync(LEVEL)) return t.skip(NO_GAME);
   const counts: number[] = [];
   let things = 0;
   let shapes = 0;

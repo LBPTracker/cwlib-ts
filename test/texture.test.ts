@@ -15,7 +15,10 @@ import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
  * it the game tests skip. `dev/texture-census.ts` is the same over all 32,914
  * textures in its four FARCs.
  */
-const GAME = process.env.LBP_GAME ?? 'D:\\PS4Games\\CUSA00063';
+const GAME = process.env.LBP_GAME ?? '';
+/** Whether the installed game, when `LBP_GAME` names one, holds this file. */
+const inGame = (...parts: string[]): boolean => GAME !== '' && existsSync(path.join(GAME, ...parts));
+const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
 
 const noInflate = (): Uint8Array => {
   throw new Error('a stored chunk is not inflated');
@@ -124,14 +127,14 @@ test('a TEX is a DDS in a chunk table, and BUMP after it marks a normal map', as
 /* ---------------------------------------------------------------- the game */
 
 async function archive(file: string): Promise<{ farc: Farc; close(): Promise<void> } | undefined> {
-  if (!existsSync(path.join(GAME, file))) return undefined;
+  if (!inGame(file)) return undefined;
   const access = await openFileAccess(path.join(GAME, file));
   return { farc: await openFarc(access), close: () => access.close() };
 }
 
 test('every texture in intro_001.farc reads, its levels accounting for every byte', async (t) => {
   const open = await archive('intro_001.farc');
-  if (!open) return t.skip(`no game under ${GAME}`);
+  if (!open) return t.skip(NO_GAME);
   try {
     let count = 0;
     for (const entry of open.farc.entries.values()) {
@@ -149,7 +152,7 @@ test('every texture in intro_001.farc reads, its levels accounting for every byt
 });
 
 test('dc_comics_promo_32bit and an auto icon: a swizzled A8R8G8B8 and a TEX', async (t) => {
-  if (!existsSync(path.join(GAME, 'output', 'orbisguids.map'))) return t.skip(`no game under ${GAME}`);
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   const open = (await archive('base_001.farc'))!;
   try {

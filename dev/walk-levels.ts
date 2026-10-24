@@ -19,8 +19,9 @@ import { loadResource } from '../src/resource.ts';
 import { partReaders } from '../src/parts.ts';
 import { UnimplementedPartError } from '../src/thing.ts';
 import { nodeInflate } from '../src/platform/node.ts';
+import { required } from './env.ts';
 
-const DIR = process.argv[2] ?? 'C:/Users/sgdc3/Desktop/LBP/toolkit/tools/sequencerdump/data';
+const DIR = process.argv[2] ?? path.join(required('LBP_LEVELS', "the toolkit checkout's tools/sequencerdump folder, the one holding data*"), 'data');
 const readers = partReaders();
 
 const missing = new Map<string, number>();

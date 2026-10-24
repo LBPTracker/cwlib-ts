@@ -2,7 +2,7 @@
  * Every `MSHb` in an installed game's FARCs through `readMesh`, and the checks
  * behind each convention in `src/mesh.ts`:
  *
- *   node dev/mesh-census.ts            LBP_GAME, default D:/PS4Games/CUSA00063
+ *   node dev/mesh-census.ts            LBP_GAME required
  *
  * Prints, per revision, how many read to the payload's last byte and how many
  * threw (with the first few reasons), then the measurements: winding against

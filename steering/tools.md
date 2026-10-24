@@ -71,8 +71,12 @@ files.
 | variable | read by | meaning |
 |---|---|---|
 | `LBP_FIXTURES` | `test/thing.test.ts`, `test/write.test.ts`, `test/texture.test.ts` (`textures/`) | lbptracker's `fixtures/`; default `../lbptracker/fixtures`, the sibling checkout |
-| `LBP_LEVELS` | `test/resource.test.ts`, `test/project.test.ts`, `test/plan.test.ts` | a directory of level resources; default the toolkit checkout's `sequencerdump` data. The corpus tests **skip** without it |
+| `LBP_LEVELS` | `test/resource.test.ts`, `test/project.test.ts`, `test/plan.test.ts`, `test/archive.test.ts`, `dev/verify-levels.ts`, `dev/walk-levels.ts`, `dev/board-probe.ts` | a toolkit checkout's `tools/sequencerdump`, the folder holding `data*`; the PS3 levels are its `data`. **No default**: the corpus tests skip without it, and the scripts stop unless given a directory |
 | `LBP_PLANS` | `test/write.test.ts` | the gallery plans, overriding `$LBP_FIXTURES/plans` |
-| `LBP_GAME` | `test/archive.test.ts`, `test/mesh.test.ts`, `test/texture.test.ts`, `test/material.test.ts`, `test/story.test.ts`, `dev/mesh-census.ts`, `dev/texture-census.ts`, `dev/material-census.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`; default `D:\PS4Games\CUSA00063`. The FileDB and FARC tests **skip** without it |
-| `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, and the interpreter that queries it — no Node this repository targets ships SQLite |
-| `DRY_DB` | `dev/dry-search.ts` | the same index |
+| `LBP_GAME` | `test/archive.test.ts`, `test/mesh.test.ts`, `test/texture.test.ts`, `test/material.test.ts`, `test/staticmesh.test.ts`, `test/story.test.ts`, and every census of the game through `dev/game.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`. **No default**: the FileDB and FARC tests skip without it, and every census of the game stops (`dev/game.ts`) |
+| `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, required; and the interpreter that queries it, `python` on the PATH unless this names another |
+| `DRY_DB` | `dev/dry-search.ts` | the same index, required |
+
+❗ **None of these has a default that is a path on one machine.** A required variable that is not
+set skips a test or stops a script with a line naming it (`dev/env.ts`); `LBP_FIXTURES` is the one
+default, and it is the sibling checkout's relative path.
