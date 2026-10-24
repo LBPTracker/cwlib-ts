@@ -162,6 +162,17 @@ export function partBit(part: { readonly name: string; readonly index: number },
   return old && part.index > 0x28 ? part.index + 1 : part.index;
 }
 
+/**
+ * `PARTS` with each part's mask bit, in declaration order, for the two sides of
+ * `CREATOR_ANIM_GONE` -- what `fillThing` walks, so `partBit` runs twice per
+ * part at load and never per Thing.
+ */
+const PART_BITS: readonly (readonly { readonly part: (typeof PARTS)[number]; readonly bit: number }[])[] =
+  [0, CREATOR_ANIM_GONE].map((subVersion) => PARTS.flatMap((part) => {
+    const bit = partBit(part, subVersion);
+    return bit === undefined ? [] : [{ part, bit }];
+  }));
+
 /** Reads one part's body. Returning nothing is fine; the bytes are what matter. */
 export type PartReader = (s: Serializer, thing: Thing) => unknown;
 
@@ -317,14 +328,15 @@ function fillThing(
   // was garbage anyway, so nothing was read at all.
   const masked = version >= 0x297 || onLeerdammer(s.revision, LD_RESOURCES);
   const mask = masked ? s.u64Big() : -1n;
+  // `mask` can exceed 2^53, so it is read as a BigInt -- and then split once
+  // into two 32-bit halves, so the test below is a shift rather than a BigInt
+  // allocated per part per Thing. `1 << bit` alone would wrap at 32.
+  const lo = Number(mask & 0xffffffffn);
+  const hi = Number((mask >> 32n) & 0xffffffffn);
 
-  for (const part of PARTS) {
+  for (const { part, bit } of PART_BITS[subVersion < CREATOR_ANIM_GONE ? 0 : 1]) {
     if (partsRevision < part.since) continue;
-    const bit = partBit(part, subVersion);
-    if (bit === undefined) continue;
-    // `mask` can exceed 2^53, so it is a BigInt all the way rather than
-    // `1 << index`, which would silently wrap at 32.
-    if ((mask & (1n << BigInt(bit))) === 0n) continue;
+    if (((bit < 32 ? lo >>> bit : hi >>> (bit - 32)) & 1) === 0) continue;
     const read = readers.get(part.name);
     const partStart = s.position;
     trace?.(part.name, partStart, -1);
