@@ -8,6 +8,9 @@ files.
 - Node 24 runs every `dev/*.ts` directly: `node dev/walk-levels.ts <dir>`. They read relative
   paths like `fixtures/plans` from the **working directory**, and the fixtures are lbptracker's,
   so run them from an lbptracker checkout (`node ../cwlib-ts/dev/…`) or pass the directory.
+- `dev/game.ts` is not a harness: it is where the censuses that read the installed game get
+  `LBP_GAME`, its four FARCs, the FileDB with each row's path, and the GUID remap. A new census
+  of the game starts from it.
 - The Java oracles — `CwlibTrace`, `PartCensus`, `ModCheck`, `InstrumentColours` — live in
   lbptracker's `tools/` and link against the toolkit jar; how to build and run them, and the JDK
   trap, are in [lbptracker's tools.md](../../lbptracker/steering/tools.md).
