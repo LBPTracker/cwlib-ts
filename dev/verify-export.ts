@@ -16,7 +16,7 @@
  * revision; the writer's default is `0x213` (PS3), which differs only where the
  * gates say it does.
  *
- *     node --experimental-strip-types dev/verify-export.ts fixtures/plans
+ *     node ../cwlib-ts/dev/verify-export.ts fixtures/plans
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';

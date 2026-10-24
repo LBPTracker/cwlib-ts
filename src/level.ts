@@ -117,20 +117,6 @@ function readCollectableData(s: Serializer): void {
 }
 
 /**
- * `ChunkFile`: one streamed piece of a level, and where it sits.
- *
- * ❗ **This is the whole reason a streaming level would not open.** An LBP3
- * adventure is cut into chunks and `LevelData.chunkFileList` names them;
- * `emptyOnly` refused any non-empty list, which was right for the ten-level
- * corpus it was written against and wrong for two of the five PS3 saves.
- *
- * ⚠️ **The chunk's Things are NOT in here.** `chunkHash` is the SHA-1 of a
- * separate `RStreamingChunk` resource, so what this recovers is the level's
- * skeleton -- its bounds, checkpoints and quests -- and the music inside a chunk
- * is in a file this list only names. See question 26 in
- * `steering/answered-questions.md` for what following the hash would take.
- */
-/**
  * One `ChunkFile` of a streaming level: which chunk, and the box it fills in
  * the level's world. steering/level-files.md, *The story levels' chunks*.
  */
@@ -146,6 +132,20 @@ const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
 
 const hexOf = (bytes: Uint8Array): string => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
+/**
+ * `ChunkFile`: one streamed piece of a level, and where it sits.
+ *
+ * ❗ **This is the whole reason a streaming level would not open.** An LBP3
+ * adventure is cut into chunks and `LevelData.chunkFileList` names them;
+ * `emptyOnly` refused any non-empty list, which was right for the ten-level
+ * corpus it was written against and wrong for two of the five PS3 saves.
+ *
+ * ⚠️ **The chunk's Things are NOT in here.** `chunkHash` is the SHA-1 of a
+ * separate `RStreamingChunk` resource, so what this recovers is the level's
+ * skeleton -- its bounds, checkpoints and quests -- and the Things are in the
+ * file it names, which `readChunk` reads. Question 26 in
+ * `steering/answered-questions.md` has how following the hash was settled.
+ */
 function readChunkFile(s: Serializer): void {
   const { subVersion } = s.revision;
   let sha1 = '';
@@ -375,9 +375,9 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
 /**
  * `PWorld`: its Things, and with `tail` everything after them.
  *
- * The fields before `things` are few and all gated on subVersion, which the corpus
- * pins at 0x213 — so every branch below is the one that is always taken, and the
- * older ones are omitted rather than left as dead code. `readLevel`'s outermost
+ * The fields before `things` are few and all gated on subVersion. Each gate below
+ * reads its field or nothing; whatever older layout cwlib has behind them is
+ * omitted rather than left as dead code. `readLevel`'s outermost
  * world passes `tail` false: the parse stops at its Things and reads nothing after.
  */
 function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): Thing[] {
@@ -509,18 +509,18 @@ export async function readPlan(
   return { revision, things };
 }
 
-/**
- * `StreamingIsland`: one piece of a streamed level, and the plan that builds it.
- *
- * The island's Things are in `PlanData`, which is **a whole `PLNb` resource**,
- * header and all -- so it is read by `readPlan` rather than by anything here.
- */
 /** A streaming island's bounds, as its chunk stores them. */
 export interface IslandBounds {
   readonly min: readonly [number, number, number];
   readonly max: readonly [number, number, number];
 }
 
+/**
+ * `StreamingIsland`: one piece of a streamed level, and the plan that builds it.
+ *
+ * The island's Things are in `PlanData`, which is **a whole `PLNb` resource**,
+ * header and all -- so it is read by `readPlan` rather than by anything here.
+ */
 function readIsland(s: Serializer, plans: Uint8Array[], bounds: IslandBounds[]): void {
   s.i32(); // timeZone
   // ⚠️ Two i32s before the bounds at subVersion 0x213 (the PS3 saves), one at
@@ -557,20 +557,6 @@ function readDependencyLists(s: Serializer): void {
 }
 
 /**
- * Read a **streaming chunk** (`CHKb`) and return the Things in its islands.
- *
- * An LBP3 adventure is not one level: `LevelData.chunkFileList` names a pile of
- * these, each holding islands, each island holding a plan. This is the last
- * step of that chain and the only one where a whole resource is nested inside
- * another.
- *
- * ⚠️ **Measured, no island in the corpus holds a music sequencer.** 2,553
- * islands over two adventures, 7,407 Things, and the sequencers in those saves
- * are all in ordinary plans beside them. This exists so that an adventure that
- * *does* put a sequencer in an island is not invisible, and because a `CHKb`
- * counted as "not a level" is a file nobody can look inside.
- */
-/**
  * A chunk's islands, each a whole `PLNb` resource, without reading any of them.
  *
  * ❗ **Separate from `readChunk` so that one island can be looked at alone.**
@@ -595,6 +581,20 @@ export async function readChunkIslands(
   return { revision, plans, bounds };
 }
 
+/**
+ * Read a **streaming chunk** (`CHKb`) and return the Things in its islands.
+ *
+ * An LBP3 adventure is not one level: `LevelData.chunkFileList` names a pile of
+ * these, each holding islands, each island holding a plan. This is the last
+ * step of that chain and the only one where a whole resource is nested inside
+ * another.
+ *
+ * ⚠️ **Measured, no island in the corpus holds a music sequencer.** 2,553
+ * islands over two adventures, 7,407 Things, and the sequencers in those saves
+ * are all in ordinary plans beside them. This exists so that an adventure that
+ * *does* put a sequencer in an island is not invisible, and because a `CHKb`
+ * counted as "not a level" is a file nobody can look inside.
+ */
 export async function readChunk(
   bytes: Uint8Array,
   inflate: Inflate,
@@ -702,7 +702,7 @@ export async function readThings(
  *
  * It is tempting to just subtract the two translations, since a circuit board is
  * usually hanging square on the screen. **Measured, that is wrong on real
- * levels**: `packages/cwlib-ts/dev/board-probe.ts` finds that a bare delta puts only 78.93% of the
+ * levels**: `dev/board-probe.ts` finds that a bare delta puts only 78.93% of the
  * corpus's 1,030 open-board placements on a cell at all. One of the seven open
  * sequencer boards is attached to something rotated, and its components come out
  * on fractional cells. Expressing the delta in the board's own frame puts

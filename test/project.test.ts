@@ -294,7 +294,7 @@ test('the corpus’s tempos and grid cells are in sane ranges', async (t) => {
   // ⚠️ A negative cell would mean the half-cell bias or the sign is wrong -- and
   // for a board recovered from world matrices, that the frame change in
   // `boardCell` is wrong. One of the corpus's open boards is rotated 90°, which
-  // without it swaps the time axis with the row axis. See packages/cwlib-ts/dev/board-probe.ts.
+  // without it swaps the time axis with the row axis. See dev/board-probe.ts.
   assert.ok(minCell >= 0, `gridX went negative: ${minCell}`);
   assert.ok(minTempo > 0, 'tempos are positive');
 });

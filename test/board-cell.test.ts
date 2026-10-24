@@ -32,7 +32,7 @@ test('a board square with the world is a plain translation delta', () => {
 });
 
 /**
- * ⚠️ The case `packages/cwlib-ts/dev/board-probe.ts` measures: one of the corpus's seven open
+ * ⚠️ The case `dev/board-probe.ts` measures: one of the corpus's seven open
  * boards hangs on something rotated, and a bare translation delta puts its
  * components on fractional cells. Rotating the board must not move anything.
  */

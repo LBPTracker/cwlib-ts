@@ -1,6 +1,7 @@
 /**
- * Node adapters. Nothing in src/core imports this -- it exists so core can stay
- * free of platform APIs and still be driven from `node --test` and CLI tools.
+ * Node adapters. Nothing else in `src/` imports this -- it exists so the readers
+ * can stay free of platform APIs and still be driven from `node --test` and CLI
+ * tools.
  */
 
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';

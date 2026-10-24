@@ -129,8 +129,10 @@ export class ByteReader {
  * gated field that is not present desynchronises everything after it -- so the
  * revision has to be threaded through every deserialiser.
  *
- * The high half of the revision word is a branch id when non-zero:
- * 0x021303f9 seen on an LBP3-branch level = branch 0x0213, version 0x03f9.
+ * ⚠️ **The high half of the head word is the subVersion, not a branch id**,
+ * whatever `branch` below is called: 0x021303f9 is version 0x3f9, subVersion
+ * 0x213. The branch proper is the separate `(branchId, branchRevision)` pair
+ * on `Resource`; `RevisionInfo` in serializer.ts spells all of it out.
  */
 export class Revision {
   readonly raw: number;
@@ -139,12 +141,12 @@ export class Revision {
     this.raw = raw >>> 0;
   }
 
-  /** The revision proper, with any branch id stripped. */
+  /** The revision proper: the head word's low half. */
   get version(): number {
     return this.raw & 0xffff;
   }
 
-  /** Branch id, or 0 for a mainline revision. */
+  /** The head word's high half, which is the **subVersion** -- see above. */
   get branch(): number {
     return this.raw >>> 16;
   }

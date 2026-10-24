@@ -24,8 +24,9 @@
  * ## What is deliberately absent, and the one deprecated part that is not
  *
  * The LBP3 range this project accepts (`serializer.ts`: version `0x3b7`-`0x3ff`;
- * subVersions `0x0` and `0x205`-`0x218` are what the archive sample carries, and
- * nothing range-checks them) rules out most deprecated parts by itself:
+ * nothing range-checks the subVersion, which is `0x0` and `0x205`-`0x218` in the
+ * archive sample and `0x12c`-`0x1ab` in LBP3 PS4's own story chunks --
+ * steering/level-files.md) rules out most deprecated parts by itself:
  *
  * - `head & 0xffff >= 0x13c` excludes indices `0x36`-`0x3c` — the six LBP1 parts;
  * - the same test at `0x18c` excludes `PARTICLE_EMITTER_2` (`0x3d`).
@@ -44,19 +45,6 @@
 
 import { Serializer, SerializerError } from './serializer.ts';
 
-/**
- * The parts, in **declaration order** — which is the order they serialise in.
- *
- * ⚠️ Declaration order is not index order, and the difference is load-bearing:
- * `Part.fromFlags` in cwlib iterates `Part.values()`, so `LEVEL_SETTINGS`
- * (index `0x0a`) is written after `GENERATED_MESH` (`0x09`) but before
- * `SPRITE_LIGHT` (`0x0b`), while `TRIGGER_EFFECTOR` (`0x36`) sits between
- * `TRIGGER` (`0x05`) and `YELLOWHEAD` (`0x06`). Sorting this table by index
- * would desynchronise every Thing that carries more than one part.
- *
- * `since` is the part's `PartHistory` value: a part is present only when the
- * stream's parts-revision has reached it, whatever its flag bit says.
- */
 /**
  * cwlib `Branch.LEERDAMMER` and the two of its revisions this reader needs.
  *
@@ -81,6 +69,19 @@ export function onLeerdammer(
   return revision.branchId === LEERDAMMER && revision.branchRevision >= since;
 }
 
+/**
+ * The parts, in **declaration order** — which is the order they serialise in.
+ *
+ * ⚠️ Declaration order is not index order, and the difference is load-bearing:
+ * `Part.fromFlags` in cwlib iterates `Part.values()`, so `LEVEL_SETTINGS`
+ * (index `0x0a`) is written after `GENERATED_MESH` (`0x09`) but before
+ * `SPRITE_LIGHT` (`0x0b`), while `TRIGGER_EFFECTOR` (`0x36`) sits between
+ * `TRIGGER` (`0x05`) and `YELLOWHEAD` (`0x06`). Sorting this table by index
+ * would desynchronise every Thing that carries more than one part.
+ *
+ * `since` is the part's `PartHistory` value: a part is present only when the
+ * stream's parts-revision has reached it, whatever its flag bit says.
+ */
 export const PARTS: readonly { readonly name: string; readonly index: number; readonly since: number }[] = [
   { name: 'BODY', index: 0x00, since: 0x01 },
   { name: 'JOINT', index: 0x01, since: 0x02 },
@@ -161,21 +162,6 @@ export function partBit(part: { readonly name: string; readonly index: number },
   return old && part.index > 0x28 ? part.index + 1 : part.index;
 }
 
-/**
- * How far the parts table had got when this Thing was written.
- *
- * ❗ **It is in the stream, and this file used to guess it from the version.**
- * The guess -- `CONTROLINATOR` up to 0x3e2, `STREAMING_HINT` after -- happened to
- * agree with every file in the corpus, because it is derived from the same
- * table; what it could not do is consume the four bytes the Thing writes for it,
- * and the byte that had to be eaten to make the part mask decode was recorded
- * here as "one byte cwlib does not account for". It is this field: an `s32`,
- * which is a **one-byte zigzag varint** in a compressed stream and a full four
- * bytes in one that is not. The first uncompressed resource -- a streaming
- * island's plan -- read three bytes short and produced a plausible, wrong part
- * list. `PartHistory.STREAMING_HINT` is 0x3f, `CONTROLINATOR` 0x2f.
- */
-
 /** Reads one part's body. Returning nothing is fine; the bytes are what matter. */
 export type PartReader = (s: Serializer, thing: Thing) => unknown;
 
@@ -217,14 +203,6 @@ export function setTrace(fn: Trace | undefined): void {
   trace = fn;
 }
 
-/**
- * Read one Thing.
- *
- * `readers` maps a part name to its reader; a part that **has a body** and no
- * reader throws `UnimplementedPartError` naming it, which is what makes building
- * this out a loop rather than a guess. A part the Thing merely declares — its
- * mask bit set and its reference null — needs none; see the note at the call.
- */
 /** An empty Thing, registered before its body is read so cycles resolve. */
 export function emptyThing(): Thing {
   return { uid: 0, planGuid: 0, flags: 0, extraFlags: 0, parts: new Map<string, unknown>() };
@@ -238,6 +216,14 @@ export function readThingRef(
   return s.referenceInto(emptyThing, (self, thing) => fillThing(self, thing, readers));
 }
 
+/**
+ * Read one Thing.
+ *
+ * `readers` maps a part name to its reader; a part that **has a body** and no
+ * reader throws `UnimplementedPartError` naming it, which is what makes building
+ * this out a loop rather than a guess. A part the Thing merely declares — its
+ * mask bit set and its reference null — needs none; see the note at the call.
+ */
 export function readThing(s: Serializer, readers: ReadonlyMap<string, PartReader>): Thing {
   const thing = emptyThing();
   fillThing(s, thing, readers);
@@ -305,9 +291,17 @@ function fillThing(
     if (version >= 0x2f2) s.bool(); // hidden
   }
 
-  // ⚠️ **The parts revision comes first, and it is the field this reader used
-  // to guess.** See the note on `PARTS` above: it is an `s32`, one byte as a
-  // zigzag varint in a compressed stream and four in one that is not.
+  // ⚠️ **The parts revision comes first: how far the parts table had got when
+  // this Thing was written. It is in the stream, and this reader used to guess
+  // it from the version.** The guess -- `CONTROLINATOR` up to 0x3e2,
+  // `STREAMING_HINT` after -- agreed with every file in the corpus, because it
+  // is derived from the same table; what it could not do is consume the bytes
+  // the Thing writes for it, and the byte eaten to make the part mask decode
+  // was recorded as "one byte cwlib does not account for". It is this field: an
+  // `s32`, a **one-byte zigzag varint** in a compressed stream and four bytes in
+  // one that is not. The first uncompressed resource -- a streaming island's
+  // plan -- read three bytes short and produced a plausible, wrong part list.
+  // `PartHistory.STREAMING_HINT` is 0x3f, `CONTROLINATOR` 0x2f.
   const partsRevision = s.s32();
   // The part mask. `u64` here is a varint when the stream is compressed, and a
   // part index can be as high as 0x35, so this really does need 64 bits.

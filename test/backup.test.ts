@@ -89,7 +89,7 @@ test('a level is told from everything else by its first four bytes', () => {
   // ❗ **A plan counts too, and it is where most of the music is.** It is not a
   // level -- its Things sit inside a nested `thingData` blob -- but
   // `readLevelProject` unwraps that now, and the corpus holds 172 sequencers
-  // inside plans against 19 inside levels. See `packages/cwlib-ts/test/plan.test.ts`.
+  // inside plans against 19 inside levels. See `test/plan.test.ts`.
   assert.ok(looksLikeLevel(new TextEncoder().encode('PLNb....')));
   assert.ok(!looksLikeLevel(new TextEncoder().encode('\x89PNG')));
   assert.ok(!looksLikeLevel(Uint8Array.of(1, 2)));

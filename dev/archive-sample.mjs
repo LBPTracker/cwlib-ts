@@ -1,13 +1,13 @@
 /**
  * Sample real levels out of the public archive and say what the reader makes of them.
  *
- *     node packages/cwlib-ts/dev/archive-sample.mjs [count] [dir]
+ *     node ../cwlib-ts/dev/archive-sample.mjs [count] [dir]
  *
  * ❗ **This is what turns question 28 from a browser errand into a measurement.**
  * The reader's coverage used to be argued from ten levels that all came from one
  * creator and one console generation; the sweep behind `LBP3_MIN_VERSION` runs
  * over 103 levels spread across LBP1, LBP2 and LBP3 slots, and it took one
- * command. Every real bug in `packages/cwlib-ts/src/parts.ts` found since 2026-09-05 came out
+ * command. Every real bug in `src/parts.ts` found since 2026-09-05 came out
  * of a file no PS3 save on this machine contains.
  *
  * ## What it needs
@@ -111,7 +111,7 @@ for (let i = 0; i < jobs.length; i += AT_A_TIME) {
   await Promise.all(jobs.slice(i, i + AT_A_TIME).map((j) => j()));
 }
 console.log(`${got} levels in ${DIR}, ${failed} could not be fetched`);
-console.log(`now: node --experimental-strip-types packages/cwlib-ts/dev/walk-levels.ts ${DIR}`);
+console.log(`now: node ../cwlib-ts/dev/walk-levels.ts ${DIR}`);
 // ⚠️ **Nothing else goes in this directory.** An earlier version wrote a
 // `.gitignore` here as belt and braces -- `fixtures/` is ignored wholesale
 // already -- and `walk-levels.ts` dutifully reported it as "too short to be a

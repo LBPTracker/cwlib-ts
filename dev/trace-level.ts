@@ -1,7 +1,7 @@
 /**
  * Where this reader is when it gives up on a level, and what it read to get there.
  *
- *     node --experimental-strip-types packages/cwlib-ts/dev/trace-level.ts <file-or-prefix> [tail-lines]
+ *     node ../cwlib-ts/dev/trace-level.ts <file-or-prefix> [tail-lines]
  *
  * ❗ **The other half of `tools/CwlibTrace.java`.** That prints cwlib's part
  * boundaries with their byte offsets; this prints ours in the same units, so a
@@ -17,9 +17,9 @@
  * readers on 2026-09-06; see question 28 in `steering/open-questions.md`.
  *
  * ⚠️ **To reach an LBP1 file at all, lower `LBP3_MIN_VERSION` in
- * `packages/cwlib-ts/src/serializer.ts` by hand** -- the walk refuses `0x272` long before any
+ * `src/serializer.ts` by hand** -- the walk refuses `0x272` long before any
  * of this runs, and that bound is deliberate. Put it back afterwards; the golden
- * fixture (`packages/cwlib-ts/dev/verify-levels.ts`) is what says you did.
+ * fixture (`dev/verify-levels.ts`) is what says you did.
  *
  * The trace fires twice per frame: on entry with an end of -1, on exit with the
  * real end. The frames still open when it throws are the ones holding the bug,

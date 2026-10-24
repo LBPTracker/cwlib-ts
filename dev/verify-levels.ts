@@ -1,7 +1,7 @@
 /**
  * Check the TypeScript level walk against a frozen dump of the same levels.
  *
- *   node --experimental-strip-types packages/cwlib-ts/dev/verify-levels.ts [dir]
+ *   node ../cwlib-ts/dev/verify-levels.ts [dir]
  *
  * This is the golden-fixture test steering asked for: `fixtures/levels/sequencers.jsonl`
  * is 129,696 rows produced by a reader nobody in this project wrote -- cwlib's,
@@ -19,7 +19,7 @@
  * each instrument placement the GUID, the note count and **the note bytes**.
  * Board coordinates are not in the dump, so they are checked here against the
  * shape they have to have instead: every cell a whole number of steps, and no
- * two components in one cell. `packages/cwlib-ts/dev/board-probe.ts` is where the formula itself
+ * two components in one cell. `dev/board-probe.ts` is where the formula itself
  * is measured.
  */
 

@@ -77,7 +77,6 @@ export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   return s.matrix(); // worldPosition
 }
 
-/** `PJoint`: the connector between two Things. Long, and all of it fixed-width. */
 /**
  * `PJoint`: a bolt, spring, piston, string or the like between two Things.
  * steering/level-files.md, *Joints*, says what of it is measured.
@@ -99,6 +98,7 @@ export interface JointPart {
   readonly settings?: ResourceRef;
 }
 
+/** `PJoint`: the connector between two Things. Long, and all of it fixed-width. */
 export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader>): JointPart {
   const a = readThingRef(s, readers);
   const b = readThingRef(s, readers);
@@ -179,13 +179,6 @@ export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartRead
 }
 
 /**
- * `Polygon`: the outline a shape is cut from.
- *
- * The vertex list is two or three floats each depending on a `requiresZ` flag
- * that follows the count -- the one place in this format where an array's
- * element size is decided by a later field.
- */
-/**
  * `PShape`: a Thing's outline and what it is made of -- the polygon a level's
  * material geometry is extruded from. steering/level-files.md, *Shapes*, has
  * what of it is measured.
@@ -224,6 +217,13 @@ export interface GeneratedMeshPart {
   readonly includeSides: boolean;
 }
 
+/**
+ * `Polygon`: the outline a shape is cut from.
+ *
+ * The vertex list is two or three floats each depending on a `requiresZ` flag
+ * that follows the count -- the one place in this format where an array's
+ * element size is decided by a later field.
+ */
 function readPolygon(s: Serializer): Pick<ShapePart, 'vertices' | 'requiresZ' | 'loops'> {
   const count = s.count();
   // ❗ **`requiresZ` arrives at 0x341, and below it there is no flag byte at
@@ -403,10 +403,6 @@ export function readGroup(s: Serializer, readers: ReadonlyMap<string, PartReader
 }
 
 /**
- * `LevelSettings`: one lighting preset. `PLevelSettings` is one of these
- * inline, followed by a list of the presets a level can cross-fade between.
- */
-/**
  * One set of a level's lighting -- cwlib's `LevelSettings`, the superclass
  * `PLevelSettings` serialises first and its presets repeat. Colours are four
  * floats as stored; steering/level-files.md, *Level settings*, says what of
@@ -437,6 +433,10 @@ export interface LevelSettingsPart extends LevelLighting {
   readonly backgroundSkyHeight: number;
 }
 
+/**
+ * `LevelSettings`: one lighting preset. `PLevelSettings` is one of these
+ * inline, followed by a list of the presets a level can cross-fade between.
+ */
 function readLevelSettings(s: Serializer): LevelLighting {
   const { version, subVersion } = s.revision;
   const sunPosition = s.vector3();
@@ -905,7 +905,6 @@ function readSwitchSignal(s: Serializer): void {
   if (version >= 0x2a3) s.i32(); // player
 }
 
-/** `SwitchTarget`: one Thing a switch drives, and which port on it. */
 /** `SwitchTarget`: one wire, to a Thing's input port. */
 export interface SwitchTarget {
   readonly thing?: Thing;
@@ -913,6 +912,7 @@ export interface SwitchTarget {
   readonly port: number;
 }
 
+/** `SwitchTarget`: one Thing a switch drives, and which port on it. */
 function readSwitchTarget(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchTarget {
   const thing = readThingRef(s, readers);
   const port = s.revision.version > 0x326 ? s.i32() : 0;
@@ -1004,8 +1004,9 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x1a4) s.s32(); // activationHoldTime
   if (version > 0x1a4) s.bool(); // requireAll
   // ❗ **The connector block, gone at 0x327 and about fifty bytes wide.** Nothing
-  // above `LBP3_MIN_VERSION` has it, so it was never ported; it is most of why
-  // an LBP1 switch was read 91 bytes short.
+  // above `LBP3_MIN_VERSION` has it; it is ported for the LBP1 files read with
+  // the bound lowered by hand, and leaving it out is most of why an LBP1 switch
+  // was read 91 bytes short.
   if (version > 0x1fa && version < 0x327) {
     const positions = s.count();
     // ⚠️ cwlib `vectorarray` returns Vector4f[], so these are v4 and not v3.
@@ -1366,7 +1367,7 @@ export interface InstrumentPart {
  * `PInstrument`: one instrument placed on a music sequencer's board.
  *
  * The note list comes back as raw bytes rather than decoded notes, because
- * `packages/cwlib-ts/src/notes.ts` already decodes that record and is the measured reader for
+ * `src/notes.ts` already decodes that record and is the measured reader for
  * it. Four bytes each: `x | triplet<<7`, `y | end<<7`, volume, timbre.
  */
 export function readInstrumentPart(s: Serializer): InstrumentPart {
@@ -1469,12 +1470,11 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
 }
 
 /**
- * `EggLink`: the prize a bubble hands out.
+ * `EggLink`: the plan a prize bubble gives.
  *
  * ⚠️ The painting at the end is behind a **bool it reads first**, not a
  * revision gate — `hasPainting` decides whether a resource follows.
  */
-/** `EggLink`: the plan a prize bubble gives. */
 function readEggLink(s: Serializer): ResourceRef | undefined {
   const { version } = s.revision;
   const plan = s.resource(); // plan
@@ -2401,14 +2401,13 @@ function readScriptName(s: Serializer): void {
   s.bytes(s.s32());
 }
 
-/** `PQuest`: an adventure's objective marker. */
 /**
  * `PMetadata`: what an inventory item calls itself.
  *
- * ❗ **Only reachable below LBP3**, which is why it had no reader: the walk
- * refuses at `LBP3_MIN_VERSION` long before a file carrying one is opened. It is
- * here because it is what nine of the archive's LBP1 levels stop on once the
- * Thing header is read correctly -- see question 28.
+ * ❗ **Only reachable below LBP3**: the walk refuses at `LBP3_MIN_VERSION`
+ * long before a file carrying one is opened. It has a reader because it is
+ * what nine of the archive's LBP1 levels stop on once the Thing header is read
+ * correctly -- see question 28.
  *
  * ⚠️ **The LAMS branch is the only one implemented.** cwlib takes translation
  * *tags* -- four strings -- when the file predates `LD_LAMS_KEYS` (LEERDAMMER
@@ -2521,7 +2520,7 @@ function readQuest(s: Serializer): void {
  *
  * ⚠️ **Adding it is also not what unblocked those levels.** They were failing on
  * the *declaration*, in the walk, before the reference was read — see the note
- * beside `UnimplementedPartError` in `packages/cwlib-ts/src/thing.ts`.
+ * beside `UnimplementedPartError` in `src/thing.ts`.
  */
 function readEffector(s: Serializer): void {
   s.vector3(); // posVel
@@ -2788,15 +2787,15 @@ function readPoppet(s: Serializer, readers: ReadonlyMap<string, PartReader>): vo
  * ✔ **Verified on the one file that has one.** A player's popit state appears in
  * a *save*, not in a published level -- none of the 43 levels or 86 further
  * resources pulled out of the public archive carries one -- but a plan in the
- * corpus saves does, and `packages/cwlib-ts/test/plan.test.ts` opens it. That test verifies the
+ * corpus saves does, and `test/plan.test.ts` opens it. That test verifies the
  * port properly rather than by not throwing: `readPlan` requires the Thing array
  * to fill `thingData` **exactly**, so every field below has been read at the
  * right width. The corpus went from 211 plans parsing to **212**.
  *
  * ✔ **What is settled is that LBP3 is a clean path through it.** cwlib throws a
  * `SerializationException` in two subVersion ranges -- `[0xc, 0x66)` and
- * `[0x88, 0xa3)` -- and the range this reader accepts starts at 0x207, so
- * neither can fire. Every version gate above 0x359 is likewise always true here;
+ * `[0x88, 0xa3)` -- and the subVersions read here are 0, `0x12c`-`0x1ab` and
+ * `0x205`-`0x218` (steering/level-files.md), so neither can fire. Every version gate above 0x359 is likewise always true here;
  * they are written out anyway, because that is where the shape came from.
  */
 export function readYellowHead(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
