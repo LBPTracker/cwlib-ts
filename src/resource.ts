@@ -13,7 +13,7 @@
 
 import { ByteReader, Revision } from './stream.ts';
 import { toHex } from './hex.ts';
-import { latin1 } from './serializer.ts';
+import { Serializer, latin1, type RevisionInfo } from './serializer.ts';
 
 /** Inflate one zlib stream. May be sync or async; `rawSize` is the expected output length. */
 export type Inflate = (
@@ -33,6 +33,11 @@ export interface Resource {
   /** Branch id and revision, a separate pair from the head word's subVersion. */
   readonly branchId: number;
   readonly branchRevision: number;
+  /**
+   * The revision as every reader gates on it: `version` and `subVersion` from
+   * the head word, the branch pair beside them.
+   */
+  readonly revisionInfo: RevisionInfo;
   /** See `COMPRESSED_INTEGERS` in serializer.ts -- this changes how to read everything. */
   readonly compressionFlags: number;
   readonly isCompressed: boolean;
@@ -109,6 +114,9 @@ export async function loadResource(
   const compressionFlags = hasFlags ? reader.u8() : 0;
   const isCompressed = modern ? reader.u8() !== 0 : true;
   const tableAt = reader.position;
+  const revisionInfo: RevisionInfo = {
+    version: revision.version, subVersion: revision.subVersion, branchId, branchRevision,
+  };
 
   // ⚠️ **`isCompressed` is a real branch and was ignored here for months.** An
   // uncompressed resource has no chunk table at all: the payload starts right
@@ -119,7 +127,7 @@ export async function loadResource(
   // level geometry it found behind it.
   if (!isCompressed) {
     return {
-      magic, revision, branchId, branchRevision, compressionFlags, isCompressed,
+      magic, revision, branchId, branchRevision, revisionInfo, compressionFlags, isCompressed,
       dependencyTableOffset, chunks: [],
       data: bytes.subarray(tableAt, dependencyTableOffset),
     };
@@ -171,7 +179,7 @@ export async function loadResource(
       // 0/26 failed to inflate", which sends you looking at zlib.
       throw new ResourceFormatError(
         `chunk ${i}/${chunkCount} failed to inflate — revision 0x${
-          revision.version.toString(16)} sub 0x${revision.branch.toString(16)}` +
+          revision.version.toString(16)} sub 0x${revision.subVersion.toString(16)}` +
           ', whose header layout may not be the one this reader implements',
         { cause },
       );
@@ -196,9 +204,23 @@ export async function loadResource(
   }
 
   return {
-    magic, revision, branchId, branchRevision, compressionFlags, isCompressed,
+    magic, revision, branchId, branchRevision, revisionInfo, compressionFlags, isCompressed,
     dependencyTableOffset, chunks, data: out,
   };
+}
+
+/**
+ * Inflate a resource and start a `Serializer` on its payload, with the
+ * revision and compression flags the payload is read under. What every
+ * resource reader here begins with; each checks its own magic and range.
+ */
+export async function openSerializer(
+  bytes: Uint8Array,
+  inflate: Inflate,
+): Promise<{ resource: Resource; revision: RevisionInfo; s: Serializer }> {
+  const resource = await loadResource(bytes, inflate);
+  const revision = resource.revisionInfo;
+  return { resource, revision, s: new Serializer(resource.data, revision, resource.compressionFlags) };
 }
 
 /**

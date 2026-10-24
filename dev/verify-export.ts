@@ -35,7 +35,7 @@ import { toHex } from '../src/hex.ts';
 /** The part spans of a plan's root Thing, by part name. */
 async function chassis(bytes: Uint8Array): Promise<Map<string, Uint8Array>> {
   const resource = await loadResource(bytes, nodeInflate);
-  let at = resource.revision.branch >= 0xcc ? 1 : 0;
+  let at = resource.revision.subVersion >= 0xcc ? 1 : 0;
   const varint = () => {
     let value = 0;
     for (let shift = 0; ; shift += 7) {

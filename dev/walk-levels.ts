@@ -29,7 +29,7 @@ for (const entry of await readdir(DIR, { withFileTypes: true })) {
   const bytes = new Uint8Array(await readFile(path.join(DIR, entry.name)));
   const head = await loadResource(bytes, nodeInflate).catch(() => null);
   const tag = head
-    ? `${head.magic} v${head.revision.version.toString(16)}/${head.revision.branch.toString(16)} cf${head.compressionFlags}`
+    ? `${head.magic} v${head.revision.version.toString(16)}/${head.revision.subVersion.toString(16)} cf${head.compressionFlags}`
     : 'unreadable';
   try {
     const level = await readLevel(bytes, nodeInflate, readers);

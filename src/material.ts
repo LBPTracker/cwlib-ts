@@ -15,7 +15,7 @@
  * measured and which is a reading of the graph is said on each field.
  */
 
-import { loadResource, type Inflate } from './resource.ts';
+import { openSerializer, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
 
 /** cwlib's `BoxType`; the ids the game's materials use are tallied in steering. */
@@ -201,14 +201,8 @@ function readWire(s: Serializer): MaterialWire {
  * the walk does not end exactly on the payload's last byte.
  */
 export async function readMaterial(bytes: Uint8Array, inflate: Inflate): Promise<GfxMaterial> {
-  const resource = await loadResource(bytes, inflate);
+  const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'GMTb') throw new SerializerError(`not a material: "${resource.magic}"`);
-  const revision: RevisionInfo = {
-    version: resource.revision.version,
-    subVersion: resource.revision.branch,
-    branchId: resource.branchId,
-    branchRevision: resource.branchRevision,
-  };
   const { version, subVersion } = revision;
   // cwlib gates the shader blob count and the box layout on versions below
   // this, and the Vita and toolkit branches differ again; none of those is in
@@ -219,7 +213,6 @@ export async function readMaterial(bytes: Uint8Array, inflate: Inflate): Promise
         revision.branchId.toString(16)}: only LBP3's own (0x3ef..0x3f9, sub >= 0x16b) is measured`,
     );
   }
-  const s = new Serializer(resource.data, revision, resource.compressionFlags);
 
   const flags = s.i32();
   const alphaTestLevel = s.f32();

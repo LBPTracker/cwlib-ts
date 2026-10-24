@@ -22,7 +22,7 @@
  * readers" figure in steering was wrong.
  */
 
-import { loadResource, magicOf, type Inflate } from './resource.ts';
+import { magicOf, openSerializer, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, requireLbp3, type RevisionInfo } from './serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
@@ -432,21 +432,9 @@ async function open(
   bytes: Uint8Array,
   inflate: Inflate,
 ): Promise<{ revision: RevisionInfo; flags: number; s: Serializer }> {
-  const resource = await loadResource(bytes, inflate);
-  // `Revision.branch` is the head word's high half, which serializer.ts spells
-  // `subVersion` -- the branch proper is the separate pair on the resource.
-  const revision: RevisionInfo = {
-    version: resource.revision.version,
-    subVersion: resource.revision.branch,
-    branchId: resource.branchId,
-    branchRevision: resource.branchRevision,
-  };
+  const { resource, revision, s } = await openSerializer(bytes, inflate);
   requireLbp3(revision);
-  return {
-    revision,
-    flags: resource.compressionFlags,
-    s: new Serializer(resource.data, revision, resource.compressionFlags),
-  };
+  return { revision, flags: resource.compressionFlags, s };
 }
 
 /** The subVersion that put `isUsedForStreaming` at the head of `RPlan`. */

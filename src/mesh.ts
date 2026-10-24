@@ -23,7 +23,7 @@
  * - UV channels are interleaved per vertex.
  */
 
-import { loadResource, type Inflate } from './resource.ts';
+import { openSerializer, type Inflate } from './resource.ts';
 import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from './serializer.ts';
 
 /** `CellGcmPrimitive`: the two values `RMesh.primitiveType` takes in the game's meshes. */
@@ -286,15 +286,8 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number 
  * check that it was read right.
  */
 export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mesh> {
-  const resource = await loadResource(bytes, inflate);
+  const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'MSHb') throw new SerializerError(`not a mesh: "${resource.magic}"`);
-  const revision: RevisionInfo = {
-    version: resource.revision.version,
-    subVersion: resource.revision.branch,
-    branchId: resource.branchId,
-    branchRevision: resource.branchRevision,
-  };
-  const s = new Serializer(resource.data, revision, resource.compressionFlags);
   const { version, subVersion } = revision;
 
   const vertexCount = s.i32();

@@ -130,7 +130,7 @@ export class ByteReader {
  * revision has to be threaded through every deserialiser.
  *
  * ⚠️ **The high half of the head word is the subVersion, not a branch id**,
- * whatever `branch` below is called: 0x021303f9 is version 0x3f9, subVersion
+ * which the deprecated `branch` below was named after: 0x021303f9 is version 0x3f9, subVersion
  * 0x213. The branch proper is the separate `(branchId, branchRevision)` pair
  * on `Resource`; `RevisionInfo` in serializer.ts spells all of it out.
  */
@@ -146,14 +146,22 @@ export class Revision {
     return this.raw & 0xffff;
   }
 
-  /** The head word's high half, which is the **subVersion** -- see above. */
-  get branch(): number {
+  /** The head word's high half: the subVersion. */
+  get subVersion(): number {
     return this.raw >>> 16;
   }
 
+  /**
+   * @deprecated The subVersion under the name this getter had while the high
+   * half was believed to be a branch id; use `subVersion`.
+   */
+  get branch(): number {
+    return this.subVersion;
+  }
+
   toString(): string {
-    return this.branch
-      ? `0x${this.version.toString(16)} (branch 0x${this.branch.toString(16)})`
+    return this.subVersion
+      ? `0x${this.version.toString(16)} (sub 0x${this.subVersion.toString(16)})`
       : `0x${this.version.toString(16)}`;
   }
 }

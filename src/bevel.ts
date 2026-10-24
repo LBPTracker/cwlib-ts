@@ -10,8 +10,8 @@
  * throws when the walk does not end on the payload's last byte.
  */
 
-import { loadResource, type Inflate } from './resource.ts';
-import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
+import { openSerializer, type Inflate } from './resource.ts';
+import { SerializerError, type ResourceRef, type RevisionInfo } from './serializer.ts';
 
 /** cwlib's `BevelMappingMode`: how a bevel band's texture is laid. */
 export const BEVEL_HIDDEN = 0;
@@ -54,15 +54,8 @@ export interface Bevel {
 const SLOTS = 4;
 
 export async function readBevel(bytes: Uint8Array, inflate: Inflate): Promise<Bevel> {
-  const resource = await loadResource(bytes, inflate);
+  const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'BEVb') throw new SerializerError(`not a bevel: "${resource.magic}"`);
-  const revision: RevisionInfo = {
-    version: resource.revision.version,
-    subVersion: resource.revision.branch,
-    branchId: resource.branchId,
-    branchRevision: resource.branchRevision,
-  };
-  const s = new Serializer(resource.data, revision, resource.compressionFlags);
   const slots = (): void => {
     const count = s.i32();
     if (count !== SLOTS) throw new SerializerError(`a bevel with ${count} material slots, not ${SLOTS}`);

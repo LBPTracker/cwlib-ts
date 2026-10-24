@@ -179,7 +179,7 @@ test('a written plan is a container the reader accepts', async () => {
   // a header written wrongly fails here rather than in the payload.
   const resource = await loadResource(bytes, nodeInflate);
   assert.equal(resource.revision.version, 0x3f9);
-  assert.equal(resource.revision.branch, 0x213);
+  assert.equal(resource.revision.subVersion, 0x213);
   assert.equal(resource.compressionFlags, 7);
   assert.ok(resource.isCompressed);
   // ⚠️ The game's own zlib header, CINFO 6. `webDeflate` cannot produce it and
@@ -274,7 +274,7 @@ test('the dependency table names the mesh and every instrument, all by GUID', as
  */
 async function iconDescriptor(bytes: Uint8Array): Promise<{ flags: number; guid: number }> {
   const resource = await loadResource(bytes, nodeInflate);
-  let at = resource.revision.branch >= 0xcc ? 1 : 0;
+  let at = resource.revision.subVersion >= 0xcc ? 1 : 0;
   const varint = () => {
     let value = 0;
     for (let shift = 0; ; shift += 7) {
