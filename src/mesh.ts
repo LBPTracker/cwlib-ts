@@ -130,14 +130,21 @@ function unpackNormal(b: Uint8Array, at: number, out: Float32Array, to: number):
 function triangles(indices: DataView, first: number, count: number, type: number): Uint16Array {
   const run = new Uint16Array(count);
   for (let i = 0; i < count; i += 1) run[i] = indices.getUint16((first + i) * 2, false);
-  const out: number[] = [];
+  // Sized for every triangle the run could hold, then cut to those kept: one
+  // typed array and one copy, not a growing `number[]` converted at the end.
+  const out = new Uint16Array(type === PRIMITIVE_TRIANGLES ? count - (count % 3) : Math.max(0, count - 2) * 3);
+  let n = 0;
   const push = (a: number, b: number, c: number): void => {
     // A strip is stitched with degenerate triangles; nothing is drawn by them.
-    if (a !== b && b !== c && a !== c) out.push(a, b, c);
+    if (a === b || b === c || a === c) return;
+    out[n] = a;
+    out[n + 1] = b;
+    out[n + 2] = c;
+    n += 3;
   };
   if (type === PRIMITIVE_TRIANGLES) {
     for (let i = 0; i + 2 < count; i += 3) push(run[i], run[i + 1], run[i + 2]);
-    return Uint16Array.from(out);
+    return out.slice(0, n);
   }
   if (type !== PRIMITIVE_TRIANGLE_STRIP) {
     throw new SerializerError(`primitive type ${type} is neither a strip nor a list`);
@@ -155,7 +162,7 @@ function triangles(indices: DataView, first: number, count: number, type: number
     else push(run[i - 2], run[i - 1], run[i]);
     k += 1;
   }
-  return Uint16Array.from(out);
+  return out.slice(0, n);
 }
 
 type Run = Omit<MeshPrimitive, 'triangles'>;

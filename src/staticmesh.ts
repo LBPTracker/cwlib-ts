@@ -74,20 +74,28 @@ function unpackNormal32(value: number, out: Float32Array, at: number): void {
 
 /** One run of the index buffer as a triangle list, each index offset by `base`. */
 function triangles(indices: Uint16Array, first: number, count: number, type: number, base: number): Uint32Array {
-  const out: number[] = [];
-  const push = (a: number, b: number, c: number): void => {
-    if (a !== b && b !== c && a !== c) out.push(a + base, b + base, c + base);
-  };
   const run = indices.subarray(first, first + count);
+  // Sized for every triangle the run could hold, then cut to those kept.
+  const out = new Uint32Array(type === PRIMITIVE_TRIANGLES ? run.length - (run.length % 3) : Math.max(0, run.length - 2) * 3);
+  let n = 0;
+  const push = (a: number, b: number, c: number): void => {
+    if (a === b || b === c || a === c) return;
+    out[n] = a + base;
+    out[n + 1] = b + base;
+    out[n + 2] = c + base;
+    n += 3;
+  };
   if (type === PRIMITIVE_TRIANGLES) {
     for (let i = 0; i + 2 < run.length; i += 3) push(run[i], run[i + 1], run[i + 2]);
-    return Uint32Array.from(out);
+    return out.slice(0, n);
   }
   if (type !== PRIMITIVE_TRIANGLE_STRIP) throw new StaticMeshFormatError(`primitive type ${type} is neither a strip nor a list`);
   // A strip restarts on 0xffff and alternates its winding, as `RMesh`'s do.
   let parity = 0;
   for (let i = 0; i + 2 < run.length; i += 1) {
-    const [a, b, c] = [run[i], run[i + 1], run[i + 2]];
+    const a = run[i];
+    const b = run[i + 1];
+    const c = run[i + 2];
     if (a === 0xffff || b === 0xffff || c === 0xffff) {
       parity = c === 0xffff ? 0 : b === 0xffff ? 1 : 0;
       continue;
@@ -96,7 +104,7 @@ function triangles(indices: Uint16Array, first: number, count: number, type: num
     else push(a, c, b);
     parity += 1;
   }
-  return Uint32Array.from(out);
+  return out.slice(0, n);
 }
 
 export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promise<StaticMesh> {
