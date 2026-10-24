@@ -50,8 +50,8 @@ files.
   a bogus "0 of 21 read correctly".
 - ⚠️ `PartCensus.java`'s output was once read as scoping the walk down to "eight part readers". It
   answers *what sits on a sequencer's Thing*, which would matter if a Thing could be reached
-  directly — it cannot, the stream is sequential. **`partReaders()` returns 50 today.** Count it, do
-  not quote it.
+  directly — it cannot, the stream is sequential. **`partReaders()` returns 53 today**
+  (2026-10-24, 0.2.74), and `readLevel`/`readPlan` add `WORLD`. Count it, do not quote it.
 - ⚠️ **Reach for `archive-sample.mjs` before arguing about reader coverage from the ten-level
   corpus**, which is one creator on one console generation. The 103-level sweep behind
   `LBP3_MIN_VERSION` took one command, and every real `parts.ts` bug found on 2026-09-05 came out of

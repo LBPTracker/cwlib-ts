@@ -1,7 +1,7 @@
 # Steering index — cwlib-ts
 
 A TypeScript reader and writer for LittleBigPlanet's serialised resources: the container, the Thing
-stream and its 50 part readers, plans, streaming chunks, `FAR4` saves, toolkit `.mod`s, the
+stream and its 53 part readers, plans, streaming chunks, `FAR4` saves, toolkit `.mod`s, the
 music sequencer as data, the game's FileDB, FARC archives, meshes, textures and materials, and the
 `.plan` writer. It exists for [lbptracker](https://github.com/LBPTracker/lbptracker), a faithful re-implementation of LBP3's
 Music Sequencer, and was its `packages/cwlib-ts` until 2026-10-18. "Faithful" reaches down to
