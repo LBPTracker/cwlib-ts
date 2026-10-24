@@ -58,6 +58,9 @@ export interface TextureLevel {
   /**
    * BC blocks row-major, or RGBA8 row-major (slice after slice in a volume),
    * with no padding: `bytesPerRow` is `ceil(width / 4) * 8 or 16`, or `width * 4`.
+   *
+   * ⚠️ A BC level is a **view** into the one buffer the texture inflated into,
+   * shared with its other levels, so writing to it writes to them.
    */
   readonly data: Uint8Array;
 }
@@ -132,7 +135,7 @@ const CHAIN_ALIGN = 0x80;
 async function inflateChunks(bytes: Uint8Array, at: number, inflate: Inflate): Promise<Uint8Array> {
   if (at + 4 > bytes.length) throw new TextureFormatError('no chunk table');
   if (new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(at + 2, false) === 0) {
-    return bytes.subarray(at + 4);
+    return bytes.slice(at + 4); // a copy: the levels are views into what this returns
   }
   const { data, end } = await inflateChunkTable(bytes, at, inflate, { error: TextureFormatError });
   if (end !== bytes.length) throw new TextureFormatError(`chunks end at ${end} of ${bytes.length}`);
@@ -240,7 +243,7 @@ async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
       if (bc) {
         const size = blocksOf(w) * blocksOf(h) * (format === 'bc1' ? 8 : 16) * d;
         if (at + size > data.length) throw new TextureFormatError(`mip ${mip} of face ${face} runs past the payload`);
-        chain.push({ width: w, height: h, depth: d, data: data.slice(at, at + size) });
+        chain.push({ width: w, height: h, depth: d, data: data.subarray(at, at + size) });
         at += size;
         continue;
       }
@@ -330,7 +333,7 @@ async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
     if (format !== 'rgba8') {
       const size = blocksOf(w) * blocksOf(h) * (format === 'bc1' ? 8 : 16);
       if (at + size > dds.length) throw new TextureFormatError(`mip ${mip} runs past the DDS`);
-      chain.push({ width: w, height: h, depth: 1, data: dds.slice(at, at + size) });
+      chain.push({ width: w, height: h, depth: 1, data: dds.subarray(at, at + size) });
       at += size;
       continue;
     }
