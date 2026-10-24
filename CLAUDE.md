@@ -59,7 +59,8 @@ Steering files (read on demand, per the hints):
 - [steering/tools.md](steering/tools.md) — read before reaching for anything in `dev/`: what each
   harness is for, the trap it exists because of, and the environment variables.
 - [steering/open-questions.md](steering/open-questions.md) — read before planning a session: the
-  chip tint, the plan called too big, colouring a mesh, and what still will not open.
+  chip tint, the plan called too big, colouring a mesh, a quest's unnamed fields, and what still
+  will not open.
 - [steering/answered-questions.md](steering/answered-questions.md) — **read before re-deriving
   anything**: per settled question, the answer in a line, where its measurement lives, and the
   wrong turns taken on the way.

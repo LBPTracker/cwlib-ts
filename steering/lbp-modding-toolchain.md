@@ -166,6 +166,7 @@ never silently follow the toolkit against our own measurement.
 | 18 | `RAnimation` block, after the values | not looked at | zero padding to a multiple of 16, or that and 16 more; anything else refused | 1,554 and 1,103 of the game's 2,664 animations ([level-files.md](level-files.md), *Animations*) |
 | 19 | `RAnimation` below `0x378` | stops after the morphs, "TODO: Locators" | two bytes more, zero, and refused otherwise | the five `0x34c` files each end in `00 00` there |
 | 20 | `RBoneSet` flip types | `FlipType.fromValue`, which has nothing for 8 | the byte as stored | `characters.boneset` gives `Bip01 Footsteps` 8 in two of its five skeletons ([level-files.md](level-files.md), *Bone sets*) |
+| 21 | `RQuest` | an empty `serialize`, and a comment whose fields start at `state` and the prizes | five wide strings first — name, title, description, area, group — then the prizes, objectives and slots in the comment's order | all 25 of the game's `QSTb` end on their payload's last byte only so ([level-files.md](level-files.md), *Quests*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

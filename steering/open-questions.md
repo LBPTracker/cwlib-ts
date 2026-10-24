@@ -2,7 +2,8 @@
 
 Read before planning a work session on the reader or the writer. Nothing here blocks reading a
 level or writing a plan: what is left is three things about the chip tint only Create Mode can
-answer, one loose end from the export, and the files that still will not open. When one gets
+answer, one loose end from the export, what a quest's unnamed fields are, and the files that
+still will not open. When one gets
 resolved, move the answer into the descriptive file it belongs to and delete the entry; numbers
 are shared with lbptracker's [open-questions.md](../../lbptracker/steering/open-questions.md).
 
@@ -69,6 +70,19 @@ materials*); what a renderer still has to decide on its own:
 - **The other 3,081 diffuse graphs.** The summary names the first sample and colour it finds;
   mix, blend and Thing-colour graphs need the boxes evaluated, and the box types 13–19 are cwlib's
   partial list.
+
+## 65. A quest's unnamed fields — and whether its keys are a level's
+
+`readQuest` reads all 25 of the game's `QSTb` to the last byte, but part of that is widths
+only ([level-files.md](level-files.md), *Quests*): the two integers before each prize (0 and 3
+everywhere), an objective's `count` (101, or values no count takes), the two extra bytes below
+subVersion `0x167`, and the one to four zero fields after the key. The game's loader for
+`RQuest` in the eboot would name their widths and branches the way `v0xdc0290` did for
+`PQuest`; nothing in the files will, while every one of them is zero or constant.
+
+The cheaper check first: a story level's `PQuest` carries `questKey` and `objectiveKey`,
+which `readQuest` in `things/parts/quest.ts` walks and drops. Kept and compared with the
+`QSTb` keys over the story chunks, they would prove what `key` is — or that it is not.
 
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's
 

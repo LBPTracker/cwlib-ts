@@ -14,6 +14,7 @@ import { readOutfitList } from '../src/resources/outfit-list.ts';
 import { readPacks, type Packs } from '../src/resources/packs.ts';
 import { readPalette, type Palette } from '../src/resources/palette.ts';
 import { readPins } from '../src/resources/pins.ts';
+import { readQuest, type Quest } from '../src/resources/quest.ts';
 import { readSlotList, type SlotList } from '../src/resources/slot-list.ts';
 
 /**
@@ -34,9 +35,10 @@ const READERS = {
   CCDb: readCachedCostumeData,
   SLTb: readSlotList,
   PCKb: readPacks,
+  QSTb: readQuest,
 } as const;
 
-test('palettes, outfit lists, joints, pins, the costume index, slot lists and packs all read to their last byte', async (t) => {
+test('palettes, outfit lists, joints, pins, the costume index, slot lists, packs and quests all read to their last byte', async (t) => {
   if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   const pathOf = new Map([...db.values()].map((r) => [r.sha1, r.path]));
@@ -57,7 +59,7 @@ test('palettes, outfit lists, joints, pins, the costume index, slot lists and pa
   }
   assert.deepEqual(
     Object.fromEntries([...read].map(([m, files]) => [m, files.size])),
-    { PALb: 178, OUTb: 59, JNTb: 9, PINb: 1, CCDb: 1, SLTb: 7, PCKb: 8 },
+    { PALb: 178, OUTb: 59, JNTb: 9, PINb: 1, CCDb: 1, SLTb: 7, PCKb: 8, QSTb: 25 },
   );
 
   // The one palette with converted plans: six pairs, a hash then a GUID.
@@ -84,4 +86,16 @@ test('palettes, outfit lists, joints, pins, the costume index, slot lists and pa
   const developer = lists.find(([sha1]) => pathOf.get(sha1)?.endsWith('/developer_slots.slt'))![1];
   assert.equal(developer.slots.length, 63);
   assert.equal(developer.slots[0].translationTag, 'ENGLAND_GARDEN_MAIN_TUTORIAL_1');
+
+  // Quests: a prize is a costume plan, and one quest's objective shares the quest's key.
+  const quests = [...read.get('QSTb')!] as [string, Quest][];
+  const quest = (end: string): Quest => quests.find(([sha1]) => pathOf.get(sha1)?.endsWith(end))![1];
+  const blueprint = quest('/ziggurat_blueprint.qst');
+  assert.deepEqual([blueprint.name, blueprint.title, blueprint.area], ['ZIG_Blueprint', 'ZIGGURAT_QUEST_TITLE_30', 'Ziggurat']);
+  assert.equal(blueprint.objectives.length, 1);
+  assert.equal(blueprint.objectives[0].key, blueprint.key);
+  const allStars = quest('/bunkum_all_stars_quest.qst');
+  const guidPath = new Map([...db.values()].map((r) => [r.guid, r.path]));
+  assert.equal(guidPath.get(allStars.prize.resource!.guid), 'gamedata/lbp3/character/palettes/cos_newton_low_poly.plan');
+  assert.deepEqual(quest('/bunkum_relics.qst').completedInLevels.map((slot) => slot.type), [11, 11, 11, 11]);
 });

@@ -20,6 +20,7 @@ import { readOutfitList } from '../src/resources/outfit-list.ts';
 import { readPacks } from '../src/resources/packs.ts';
 import { readPalette } from '../src/resources/palette.ts';
 import { readPins } from '../src/resources/pins.ts';
+import { readQuest } from '../src/resources/quest.ts';
 import { readSlotList } from '../src/resources/slot-list.ts';
 import { FARCS, GAME, gameFileDB } from './game.ts';
 
@@ -30,6 +31,7 @@ const READERS: Record<string, (bytes: Uint8Array, inflate: Inflate) => Promise<u
   PALb: readPalette,
   PCKb: readPacks,
   PINb: readPins,
+  QSTb: readQuest,
   SLTb: readSlotList,
 };
 const only = process.argv[2]?.split(',');

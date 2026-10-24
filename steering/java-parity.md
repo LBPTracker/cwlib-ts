@@ -34,13 +34,17 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 ## Resources with a Java class and no reader here
 
-`RGuidSubst`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`, `BigSave`, `RQuest`,
+`RGuidSubst`, `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`, `BigSave`,
 `RDLC`, `RFontFace`, `RTranslationTable`.
 
 Which of them the game itself ships, so a reader can be proven on real files (four FARCs,
-2026-10-24): `RQuest` as 25 `QSTb`. `RGuidSubst` and `RDLC` are there only in their
-text form (`GSBt`, `DLCt`), and the rest not at all. ⚠️ cwlib's `RQuest.serialize` is empty, so a
-`QSTb` reader has no reading to port.
+2026-10-24): `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`), the rest not at
+all.
+
+`RQuest` has a Java class and no reading: its `serialize` is empty. `readQuest`
+(`src/resources/quest.ts`) is a reading of our own, proven on all 25 of the game's `QSTb` and
+named after the class's comment where the bytes fit it ([level-files.md](level-files.md),
+*Quests*).
 
 Readers here that Java also has: `readChunk` and `readChunkIslands` (`RStreamingChunk`),
 `readInstrument` (`RInstrument`), and from 2026-10-24 in `src/resources/`: `readPhysicsMaterial`

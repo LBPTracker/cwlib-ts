@@ -1049,6 +1049,61 @@ distinct strings of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPD
 ids: 478 of the 485 are the `contentId` of a pack in the game's eight `PCKb`s** (*Slots* below);
 the other seven name no pack there.
 
+## Quests — `RQuest`
+
+`readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths
+`gamedata/lbp3/…/quests/….qst` — the story's quests for Bunkum Lagoon, Manglewood, the Ziggurat
+and the Popit Puzzle planet. ❗ **The reading is ours**: cwlib's `resources/RQuest.java`
+(ennuo/toolkit `d6a2ef8`) has an empty `serialize` and a comment listing fields from `state`
+on, which gave the order and the names from the prizes on. ✔ **All 25 in the four FARCs read to
+the last byte of their payload**, at subVersions `0x154`, `0x167`, `0x177` (version `0x3ef`),
+`0x1a6` and `0x1a9` (`0x3f9`), all with every compression flag set (`dev/resources-census.ts`,
+`test/resources.test.ts`, 2026-10-25).
+
+```
+wstr name, wstr title, wstr description, wstr area, wstr group
+2 × { i32 ?, i32 ?, resource }          the prize, then its icon
+i32 ?
+objectives[]   wstr text, wstr id, i16 count, i16 required, bool hidden,
+               (subVersion 0x154: 2 bytes), u32 key
+i32 decals count, i32 decorations count     (both empty in every file)
+bool isPrimary, bool isInvisible
+SlotID[] deactivatedInLevels, activatedInLevels, completedInLevels
+bool stateUpdateViewed, u32 key
+i32 ×1 (0x154, 0x167), ×3 (0x177), ×4 (0x1a6, 0x1a9)
+```
+
+What is measured and what is only a width:
+
+- ✔ The five strings: a name (`ZIG_Blueprint`, `Quest ID` where unset), a title and a
+  description (LAMS keys such as `ZIGGURAT_QUEST_TITLE_30`, or plain text), the area
+  (`THEME_ZIGGURAT`, `Bunkum Lagoon`, `Uncategorised`) and a group, `Independent!` in all 25.
+- ✔ **The prize is a costume plan**: the four non-null prize GUIDs are in the FileDB as
+  `gamedata/lbp3/character/palettes/cos_….plan` (`cos_newton_low_poly`, `cos_sack_boy_1` to
+  `_3`, `cos_journalist_outfit`). The icon's GUIDs are not in the FileDB, so what they name is
+  open.
+- ⚠️ **The two integers before each prize are 0 and 3 in all 50 blocks, and the integer after
+  the icon 0 in all 25**: widths only. The reader refuses a non-zero one there.
+- ✔ The slots are `SlotID`s of type 11, cwlib's `DEVELOPER_ADVENTURE`, in every array that has
+  any; their numbers run round 22.87 M, and `pp01_bridge.qst`'s on another planet's range.
+- ⚠️ An objective's two `i16`s are cwlib's comment's `count` and `required`, but `count` is
+  101 on 13 of 35 objectives, 0 on 7, and on the others values as far as 13,352 and −15,317,
+  which no count is; `required` is 0 on all 35. `hidden` is true on 10.
+- ⚠️ The two extra bytes of an objective below subVersion `0x167` are on one objective in the
+  game, `pp01_bridge.qst`'s at `0x154`, and zero there. Where between `0x154` and `0x167` they
+  go is not known.
+- The keys are not any 32-bit hash tried of the strings (FNV-1 and 1a, CRC-32, Java's
+  `hashCode`, djb2); `ziggurat_blueprint.qst`'s one objective has the quest's own key. That
+  they are what a level's `PQuest` names in `questKey` and `objectiveKey` is the likely
+  reading and **unchecked**: the part reader walks those and keeps nothing.
+- ⚠️ **From `decals` to `key` the names are cwlib's comment's**; the bytes fit them (counts
+  where it has arrays, slot arrays where it has slot arrays, booleans where it has booleans)
+  and prove nothing more. `stateUpdateViewed` is true in all 25.
+- ⚠️ **What follows the key is zero bytes, one, three or four by subVersion**, which an integer,
+  a boolean and an empty array all read alike; only their number is measured. cwlib's comment
+  names five fields after the key. The reader keeps them as `trailing` and refuses a non-zero
+  one.
+
 ## The game's textures — `GTF ` and `TEX `
 
 `readTexture` in `src/resources/texture.ts`, dependency type 1. A game texture is `GTF `; a user texture is
