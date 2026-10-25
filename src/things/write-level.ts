@@ -33,7 +33,7 @@ import { fromHex, toHex } from '../io/hex.ts';
 import {
   planTapes, readChunkIslandsStream, readLevelStream, readPlanStream, type IslandBounds, type LevelParse,
 } from './level.ts';
-import { partReaders } from './parts.ts';
+import { partReaders, withBone, type PosPart } from './parts.ts';
 import type { PartReader, Thing } from './thing.ts';
 
 /** What a level, a plan and an island's plan share: a list of Things on a tape. */
@@ -235,7 +235,9 @@ export function setWorldPosition(target: EditableThings, thing: Thing, matrix: A
   const value = Float32Array.from(matrix);
   if (value.length !== 16) throw new SerializerError(`a world matrix of ${value.length} components`);
   mark.write = (w) => w.matrix(value);
-  thing.parts.set('POS', value);
+  // The bone and its animation stay with the Thing: only the matrix moved.
+  const old = thing.parts.get('POS') as PosPart | undefined;
+  thing.parts.set('POS', withBone(value, { thingOfWhichIAmABone: old?.thingOfWhichIAmABone, animHash: old?.animHash ?? 0 }));
   target.edited = true;
 }
 

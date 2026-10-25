@@ -28,6 +28,7 @@ import {
   writeChunk, writeLevel, writeLevelPayload, writePlan, writePlanPayload,
 } from '../src/things/write-level.ts';
 import { nodeDeflate, nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import type { PosPart } from '../src/things/parts.ts';
 
 const LBP3 = { version: 0x3f9, subVersion: 0x218, branchId: 0, branchRevision: 0 } as RevisionInfo;
 
@@ -202,4 +203,19 @@ test('a plan of the game written back is its own payload, and takes Things from 
   } finally {
     await access.close();
   }
+});
+
+test("a Thing's bone rides on its POS matrix, out of sight of the 16 floats, and stays when it moves", async (t) => {
+  if (!existsSync(LEVEL)) return t.skip(`no level at ${LEVEL}`);
+  const level = await editLevel(new Uint8Array(readFileSync(LEVEL)), nodeInflate);
+  const boned = worldThings(level).find((thing) => (thing.parts.get('POS') as PosPart | undefined)?.thingOfWhichIAmABone);
+  assert.ok(boned, 'a Thing riding a bone');
+  const pos = boned.parts.get('POS') as PosPart;
+  assert.equal(Object.keys(pos).length, 16, 'the bone is not an enumerable key');
+  assert.equal(typeof pos.animHash, 'number');
+  const bone = pos.thingOfWhichIAmABone;
+  setWorldPosition(level, boned, pos);
+  const moved = boned.parts.get('POS') as PosPart;
+  assert.equal(moved.thingOfWhichIAmABone, bone);
+  assert.equal(moved.animHash, pos.animHash);
 });

@@ -27,10 +27,8 @@ the part's interface in `src/things/parts/` — the structures inside too (`NpcB
 named and reachable at `0x3b7` and up — `PShape`'s `colorOff`, `lethalType`, `playerNumberColor`
 and `flags`, `PCheckpoint`'s `activeFlags`, `unk1` and `unk2`, `EmittedObjectSource`'s `f0`–`f5`
 and `b0`, the Vita's `PSwitch.cursorScreenArea` and `PGeneratedMesh.textureScale`; returned since
-0.4.57. The same pass found `PPhysicsTweak` lacking two blocks cwlib reads at subVersions
+0.4.57. `PPos`'s `thingOfWhichIAmABone` and `animHash` ride on its matrix since 0.4.58 (`PosPart`). The same pass found `PPhysicsTweak` lacking two blocks cwlib reads at subVersions
 `0x1`–`0x16` (level-files.md, *Ported from Java, proven on no file*). Left:
-- **`POS`'s bone** (`thingOfWhichIAmABone`, `animHash`): `readPos` returns the world matrix alone,
-  as every renderer reads it, and changing that changes every caller.
 - **Fields only below the revision bound** (`0x3b7`, *Revisions*): `PSwitch`'s `connectorPos`,
   `connectorGrabbed`, `looseConnectorGrabbed` and old `stickerPlan`, `PMaterialTweak`'s old
   `colorIndex`, `PShape`'s old forms of `colorOff` (four floats), `lethalType` (an enum32),

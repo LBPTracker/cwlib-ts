@@ -129,7 +129,7 @@ export { readMaterialTweak, type MaterialTweakPart } from './parts/material-twea
 export { readMicrochip, type Component, type Microchip } from './parts/microchip.ts';
 export { readNpc, type ActingData, type InputRecording, type NpcBehavior, type NpcJumpSolver, type NpcPart } from './parts/npc.ts';
 export { readPhysicsTweak, type PhysicsTweakPart } from './parts/physics-tweak.ts';
-export { readPos } from './parts/pos.ts';
+export { readPos, withBone, type PosBone, type PosPart } from './parts/pos.ts';
 export { readRenderMesh, type RenderMeshPart } from './parts/render-mesh.ts';
 export { readScript, type ScriptField, type ScriptFieldLayout, type ScriptInstance, type ScriptObject, type ScriptValue } from './parts/script.ts';
 export { readSequencerPart, type SequencerPart } from './parts/sequencer.ts';

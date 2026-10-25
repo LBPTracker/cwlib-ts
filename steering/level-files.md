@@ -327,9 +327,16 @@ table and through their reader, and the GUID nowhere** (`dev/rehash-census.ts`, 
   changes in the table alone. Where the row's descriptor bytes do lie in a run no reader cut out,
   the resource is refused rather than half rewritten — **2 levels**, and the one looked at is three
   bytes of a `PShape`'s vertex floats that spell `02 c5 60`.
-- ❗ **`PPos.animHash` is an animation's GUID.** cwlib reads it as an `i32`; the tables list it
-  (type 5), so `readPos` reads it as a bare GUID, the same bytes.
-- ⚠️ **A bare GUID cannot become a hash** — a Thing's `planGuid`, an `animHash`, a script's
+- ❗ **`PPos.animHash` is not a GUID: it names a bone.** 0.4.55 read it as an animation's GUID
+  after one match, which was the reference id above. Over 10,807 of the game's levels and plans,
+  **133,215 Things carry a non-zero `animHash` and not one is in its file's dependency table**;
+  over 1,501 of them, 32,847 of the 33,606 whose `thingOfWhichIAmABone` has a mesh carry the
+  `animHash` of one of that mesh's bones (`MeshBone.animHash`, *The game's meshes*) — the bone
+  the Thing rides. 233,303 of the 397,232 `PPos` name a bone Thing, 109 an `animHash` with none.
+  `readPos` reads it as cwlib's `i32` again and returns both on the matrix (`PosPart`), as
+  non-enumerable properties so that the 16 floats every caller reads are unchanged
+  (dev probes, 2026-10-25).
+- ⚠️ **A bare GUID cannot become a hash** — a Thing's `planGuid`, a script's
   dependency GUIDs: it stays, and so does its row beside the new one. Nor do types 10, 13, 40 and
   49 (`FILENAME`, `FILE_OF_BYTES`, `MUSIC_SETTINGS`, `SAMPLE`), which cwlib also leaves; a
   script's dependencies (type 11) are not followed, as in cwlib.
