@@ -2,7 +2,7 @@
 
 import { Serializer, SerializerError, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { things } from './common.ts';
+import { hasPlayerMode, things } from './common.ts';
 import { readNetworkOnlineId } from '../../structs/network.ts';
 
 /** `SwitchType` values this reader has to branch on. */
@@ -234,7 +234,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     if (vita >= 0x43) for (let i = 0; i < 3; i += 1) s.i32(); // glow front, back, active colours
     if (vita >= 0x54) s.u8(); // playerFilter
   }
-  if (version > 0x3ec) s.u8(); // playerMode
+  if (hasPlayerMode(version)) s.u8(); // playerMode
 
   // ⚠️ Data-dependent again, and the block is not small.
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {

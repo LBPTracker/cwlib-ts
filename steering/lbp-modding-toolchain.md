@@ -167,6 +167,7 @@ never silently follow the toolkit against our own measurement.
 | 19 | `RAnimation` below `0x378` | stops after the morphs, "TODO: Locators" | two bytes more, zero, and refused otherwise | the five `0x34c` files each end in `00 00` there |
 | 20 | `RBoneSet` flip types | `FlipType.fromValue`, which has nothing for 8 | the byte as stored | `characters.boneset` gives `Bip01 Footsteps` 8 in two of its five skeletons ([level-files.md](level-files.md), *Bone sets*) |
 | 21 | `RQuest` | an empty `serialize`, and a comment whose fields start at `state` and the prizes | five wide strings first — name, title, description, area, group — then the prizes, objectives and slots in the comment's order | all 25 of the game's `QSTb` end on their payload's last byte only so ([level-files.md](level-files.md), *Quests*) |
+| 22 | `playerMode` in `PSwitch`, `PSwitchInput`, `PControlinator` | from version 0x3ed | at 0x3eb and from 0x3ed, not at 0x3ec | the game's crossplay plans at 0x3eb read only with it (cwlib fails on 22 of them), the PS3 saves' 11 plans at 0x3ec only without ([level-files.md](level-files.md), *`playerMode` at 0x3eb*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

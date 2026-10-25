@@ -521,6 +521,30 @@ open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the tool
   next level, which does not — so which field it is, and its gate, are open (*28* in
   [open-questions.md](open-questions.md)); they keep their `unreadTail`.
 
+### `playerMode` at 0x3eb, and the plans that still fail
+
+**The game's plans that open but do not read went from 31 to 6** on 2026-10-25
+(`dev/things-census.ts`; each a plan, so each read to the Thing array's last byte):
+
+- ⚠️ **`playerMode` is not monotonic in the version.** It is the last byte of `PSwitch`,
+  `PSwitchInput` and `PControlinator`, and cwlib reads it from 0x3ed. The game's crossplay plans
+  at 0x3eb (`gamedata/lbp2/dlc/crossplay/`) carry it — 22 read only with it, and cwlib fails on
+  them at the same byte (a `GROUP` read as a back-reference to Thing 1, its own body then read
+  as the next part) — while the 11 plans at 0x3ec in the PS3 saves read only without it.
+  `hasPlayerMode` in `src/things/parts/common.ts` is exactly that: 0x3eb, and above 0x3ec.
+  ❗ Every 0x3eb resource the game has that carries one of the three parts is crossplay (the
+  other 71 at 0x3eb, Knights of Old 2 and Ultrashirt, read either way), so whether the byte
+  belongs to the version or to the crossplay build is not known.
+- `PWindTweak` had taken subVersion 0x172 for granted; cwlib's gates, ported whole, read the
+  two plans below it (`sack_town_obj_pumpinator_2a_6.plan` at 0xc8, `mat_base_wind.plan` at
+  0x16b). The 0x3eb crossplay `obj_sack_boy` plan read with the `playerMode` fix.
+- **The 6 left**: `gad_gamelivestreaming_choice.plan` (a switch with fields cwlib does not
+  implement either), and five LBP2 Move DLC `*_stick_palette_identity_*.plan` at 0x3c1 and
+  0x3c7 whose one Thing ends at byte 138 of 294 — **cwlib reads exactly the same Thing and stops
+  there too**. Their `SHAPE` and `GROUP` are reference id 1, the Thing's own, where the run of
+  ids says 6, and `01 01` plus 20 bytes follows: the bytes of a hashed resource descriptor.
+  What these files are is open.
+
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first
 with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).

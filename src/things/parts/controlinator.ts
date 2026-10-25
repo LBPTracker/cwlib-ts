@@ -2,6 +2,7 @@
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
+import { hasPlayerMode } from './common.ts';
 
 /** `PControlinator`: the controller seat. */
 export function readControlinator(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
@@ -38,6 +39,6 @@ export function readControlinator(s: Serializer, readers: ReadonlyMap<string, Pa
     s.u8(); // parentBoneIndex
     s.skipMatrix(); // parentBoneOffset
   }
-  if (version > 0x3ec) s.u8(); // playerMode
+  if (hasPlayerMode(version)) s.u8(); // playerMode
   if (subVersion > 0x189) s.u8(); // layerRange
 }

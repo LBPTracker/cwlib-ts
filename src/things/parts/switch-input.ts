@@ -4,6 +4,7 @@ import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
 import { readNpcBehavior } from './npc.ts';
 import { readSwitchSignal } from './switch.ts';
+import { hasPlayerMode } from './common.ts';
 
 /** `PSwitchInput`: an input port on a circuit board. */
 export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
@@ -30,5 +31,5 @@ export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, Part
   if (version > 0x2d4) s.s32(); // sackbotObjectColorIndex
   if (version > 0x2c3) s.i32(); // behavior
   if (version > 0x308) s.i32(); // effectDestroy
-  if (version > 0x3ec) s.u8(); // playerMode
+  if (hasPlayerMode(version)) s.u8(); // playerMode
 }

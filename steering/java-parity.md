@@ -43,7 +43,7 @@ So any file in range walks to its end. What differs is what a reader returns:
   `RCachedCostumeData`, `RSlotList`, `RPacks`, `RAnimation`, `RScript` (its instructions kept as
   64-bit words, not decoded per class) and `RBoneSet` (the toolkit's own format: its one file,
   none of the game's). Where one reads differently from Java, *Where we deliberately differ* in
-  [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the row (numbered 1 to 21 on 2026-10-25, with a 3b).
+  [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the row (numbered 1 to 22 on 2026-10-25, with a 3b).
 - **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
   `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
   the levels' `PQuest`s name ([level-files.md](level-files.md), *Quests*).
