@@ -5,7 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { openGame } from '../src/archives/game.ts';
-import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { looseFiles, nodeDeflate, nodeInflate, openFileAccess } from '../src/platform/node.ts';
+import { gltfMaterials } from '../src/resources/gltf-material.ts';
 import { readMesh, type Mesh } from '../src/resources/mesh.ts';
 import { meshToGlb } from '../src/resources/mesh-gltf.ts';
 
@@ -21,7 +22,15 @@ interface Gltf {
   asset: { version: string };
   nodes: { name?: string; translation?: number[]; rotation?: number[]; scale?: number[]; children?: number[]; mesh?: number; skin?: number }[];
   meshes: { primitives: { attributes: Record<string, number>; indices: number; material?: number; targets?: Record<string, number>[] }[]; extras?: { targetNames: string[] } }[];
-  materials?: { name: string }[];
+  materials?: {
+    name: string; doubleSided?: boolean; alphaMode?: string; alphaCutoff?: number;
+    pbrMetallicRoughness: { baseColorFactor: number[]; baseColorTexture?: { index: number; texCoord?: number; extensions?: Record<string, { offset: number[]; rotation?: number; scale: number[] }> } };
+    normalTexture?: { index: number };
+  }[];
+  textures?: { source: number; sampler: number }[];
+  images?: { bufferView: number; mimeType: string; name: string }[];
+  samplers?: { wrapS: number; wrapT: number }[];
+  extensionsUsed?: string[];
   skins?: { joints: number[]; inverseBindMatrices: number }[];
   accessors: { bufferView: number; componentType: number; count: number; type: string }[];
   bufferViews: { byteOffset: number; byteLength: number }[];
@@ -91,6 +100,29 @@ test('a mesh comes back out of its .glb: vertices, triangles, regions, bones and
   assert.deepEqual(json.nodes[0].children, [1]);
   assert.deepEqual(json.skins![0].joints, [0, 1]);
   assert.deepEqual(values(json.skins![0].inverseBindMatrices).slice(16), [...mesh.bones[1].invSkinPose]);
+
+  // The same mesh with its material made: a texture turned a quarter, on the second UV channel.
+  const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47);
+  const turned = { png, name: 'jam.tex', texCoord: 1, uvTransform: [0, 2, 0.5, -2, 0, 0.25] as const, wrapS: 1, wrapT: 2 };
+  const made = new Map([['g7', {
+    name: 'jam', doubleSided: true, alphaCutoff: 0.5, baseColorFactor: [1, 0, 0, 1] as const,
+    baseColorTexture: turned, normalTexture: { ...turned, uvTransform: [1, 0, 0, 0, 1, 0] as const, wrapT: 1 },
+  }]]);
+  const textured = readGlb(meshToGlb(mesh, { materials: made }));
+  const jam = textured.json.materials![0];
+  assert.deepEqual([jam.name, jam.doubleSided, jam.alphaMode, jam.alphaCutoff], ['jam', true, 'MASK', 0.5]);
+  assert.deepEqual(jam.pbrMetallicRoughness.baseColorFactor, [1, 0, 0, 1]);
+  const base = jam.pbrMetallicRoughness.baseColorTexture!;
+  assert.equal(base.texCoord, 1);
+  const { offset, rotation, scale } = base.extensions!.KHR_texture_transform;
+  assert.deepEqual(offset, [0.5, 0.25]);
+  assert.ok(Math.abs(rotation! - Math.PI / 2) < 1e-9 && Math.abs(scale[0] - 2) < 1e-9 && Math.abs(scale[1] - 2) < 1e-9, JSON.stringify({ rotation, scale }));
+  assert.deepEqual(textured.json.extensionsUsed, ['KHR_texture_transform']);
+  assert.equal(textured.json.images!.length, 1, 'one image, sampled twice');
+  assert.deepEqual(textured.json.samplers, [{ wrapS: 10497, wrapT: 33648 }, { wrapS: 10497, wrapT: 10497 }]);
+  assert.equal(textured.json.textures!.length, 2);
+  const bytes = textured.json.bufferViews[textured.json.images![0].bufferView];
+  assert.equal(bytes.byteLength, png.length);
 });
 
 test("sack_boy.mol comes back out of its .glb whole", async (t) => {
@@ -98,10 +130,23 @@ test("sack_boy.mol comes back out of its .glb whole", async (t) => {
   const accesses = await Promise.all(FARCS.map((f) => openFileAccess(path.join(GAME, f))));
   const game = await openGame({
     fileDB: new Uint8Array(await readFile(path.join(GAME, 'output', 'orbisguids.map'))),
+    remap: new Uint8Array(await readFile(path.join(GAME, 'output', 'orbisguids.remap'))),
     farcs: accesses.map((access, i) => ({ name: FARCS[i], access })),
+    loose: looseFiles(GAME),
   });
   const mesh = await readMesh((await game.resolve({ kind: 'guid', guid: 453737, type: 2 }))!, nodeInflate);
-  const { json, values } = readGlb(meshToGlb(mesh, { materialName: (ref) => game.row(ref.guid)?.path.split('/').pop() }));
+  const name = (ref: { guid: number }) => game.row(ref.guid)?.path.split('/').pop();
+  const materials = await gltfMaterials(mesh, { resolve: (d) => game.resolve(d), inflate: nodeInflate, deflate: nodeDeflate, name });
+  const glb = meshToGlb(mesh, { materials, materialName: name });
+  const { json, values } = readGlb(glb);
+  // Every material reads, and each texture is a PNG in the buffer.
+  assert.equal(materials.size, new Set(mesh.primitives.flatMap((p) => (p.material ? [p.material.guid] : []))).size);
+  assert.ok(json.materials!.some((m) => m.pbrMetallicRoughness.baseColorTexture !== undefined));
+  const bin = 20 + new DataView(glb.buffer).getUint32(12, true) + 8;
+  for (const image of json.images!) {
+    const at = bin + json.bufferViews[image.bufferView].byteOffset;
+    assert.deepEqual([...glb.subarray(at + 1, at + 4)], [0x50, 0x4e, 0x47], image.name);
+  }
   const primitives = json.meshes.flatMap((m) => m.primitives);
   assert.equal(primitives.length, mesh.primitives.filter((p) => p.triangles.length > 0).length);
   assert.deepEqual(values(primitives[0].attributes.POSITION).length, mesh.vertexCount * 3);

@@ -766,9 +766,11 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
 
 ### Written as glTF — `meshToGlb` in `src/resources/mesh-gltf.ts`
 
-cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `d6a2ef8`), without textures: one glTF mesh
-per primitive `region`, positions, normals, every UV channel, the bones as a skin, the morphs as
-targets named in `extras.targetNames`; a material is a name the caller gives (`materialName`).
+cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `d6a2ef8`): one glTF mesh per primitive
+`region`, positions, normals, every UV channel, the bones as a skin, the morphs as targets named in
+`extras.targetNames`; each material as `gltfMaterials` (`src/resources/gltf-material.ts`) makes it
+from the graph, its textures embedded as PNG (`encodePng`, `src/io/png.ts`), or else a name the
+caller gives (`materialName`).
 
 - ✔ **All 5,941 of the game's meshes validate with no error and no warning** under Khronos's
   `gltf-validator` 2.0.0-dev.3.10 (scratch census, 2026-10-25; 537 MB of `.glb`); `test/mesh-gltf.test.ts`
@@ -785,6 +787,25 @@ targets named in `extras.targetNames`; a material is a name the caller gives (`m
     with 29 morph names. They are written as the skeleton alone.
 - A bone's node is its local pose, `parent.invSkinPose × skinPose`, as translation, rotation and
   scale — Java's decomposition; a raw `matrix` fails glTF's TRS check on float noise.
+- ✔ **With their materials and textures, all 5,941 still validate with no error** (scratch census,
+  2026-10-25, 9.8 GB of `.glb` with every texture inlined per mesh): every material every mesh names
+  resolves and reads; of 11,795 (counted per mesh), 10,666 carry a base-colour texture and 7,761 a
+  normal map. The one warning left, on 7,998 primitives, is that a normal-mapped material has no
+  tangents — `readMesh` does not return the stream (*java-parity.md*), so a viewer makes its own.
+  - The material is `materialSummary`'s reading: port 0's first texture sample upstream as the base
+    colour, port 3's as the normal map, a colour box as `baseColorFactor`, `GFX_TWO_SIDED` as
+    `doubleSided` and `GFX_ALPHA_CLIP` as `MASK` at `alphaTestLevel` (cwlib's names, not measured).
+    ⚠️ The first sample upstream is not always the colour: `sack_boy_weave_base.gmat`'s is
+    `sackboy_knit_ps4_ao.tex`, an AO map, the colour being the Thing's.
+  - ❗ **A colour box holds 0 to 1**: 8,067 of the game's 8,166 (over its 11,011 materials, max 6).
+    Java divides them by 255; they go in as they are, clamped to 1 as glTF wants — one material's
+    diffuse colour reaches past it.
+  - A normal map goes in as Java converts it, x = 1 − alpha and y = green, with z rebuilt as the
+    game's shader does, `sqrt(|1 − x² − y²|)` (lbprender's steering/game-shaders.md), where Java
+    writes 1. The sign of x is Java's and is not measured.
+  - A sample's UV matrix goes in as `KHR_texture_transform` (151 rotated or skewed); a shear has
+    no place there and is lost, on 4. Wrap 1 is `REPEAT`, 2 `MIRRORED_REPEAT`, the rest
+    `CLAMP_TO_EDGE`. A cube or volume texture has no glTF image and is left out.
 
 ## Shapes — `PShape` and `PGeneratedMesh`
 

@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 35 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 39 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -13,7 +13,7 @@ Measured 2026-10-24 and 2026-10-25 by listing the classes under `lib/cwlib/src/m
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
 to touch `lib/cwlib/`) against this repository's
 modules and the return type of every reader `partReaders()` binds; revised as each gap closed, last
-at 0.4.40. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
+at 0.4.41. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
 on this machine is at `fee2239`, but its `lib/cwlib/` is `bb79e81` (2024-04-30), 147 files'
 worth behind — `RTranslationTable.patch`, `MeshExporter` and `RMesh` among them. Name the commit
 whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` with `git show`.

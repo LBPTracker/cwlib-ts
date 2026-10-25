@@ -181,6 +181,10 @@ never silently follow the toolkit against our own measurement.
 | 33 | an inverse bind matrix's last row | written as it is | written (0, 0, 0, 1) | off by up to 2.4e-7 on element 15; glTF wants it exact ([level-files.md](level-files.md), *Written as glTF*) |
 | 34 | NaN in a mesh's vertex streams | written as it is | written 0 | 41 values in two meshes; glTF refuses NaN ([level-files.md](level-files.md), *Written as glTF*) |
 | 35 | a skinned mesh's node | under the armature | at the scene's root | glTF's advice; with rows 31–34, all 5,941 game meshes validate clean ([level-files.md](level-files.md), *Written as glTF*) |
+| 36 | a colour box in a glTF material | divided by 255 | as stored, clamped to 1 | 8,067 of the game's 8,166 colour boxes are 0 to 1 already ([level-files.md](level-files.md), *Written as glTF*) |
+| 37 | a normal map's z in glTF | 1 | `sqrt(\|1 − x² − y²\|)` | what the game's shader rebuilds ([level-files.md](level-files.md), *Written as glTF*) |
+| 38 | a glTF material's faces and alpha | double-sided always, no alpha test | `doubleSided` from `GFX_TWO_SIDED`, `MASK` from `GFX_ALPHA_CLIP` | the material's own flags ([level-files.md](level-files.md), *Written as glTF*) |
+| 39 | the diffuse texture of a glTF material | each texture box in index order, the first whose wires reach port 0 | the first sample upstream of port 0, inputs in port order (`materialSummary`) | the reading the renderer already uses; neither is measured ([level-files.md](level-files.md), *Written as glTF*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

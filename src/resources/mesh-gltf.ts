@@ -1,13 +1,15 @@
 /**
  * An `RMesh` as a binary glTF 2.0 (`.glb`): cwlib's `MeshExporter.GLB.FromMesh`
- * (`io/exports/MeshExporter.java`, ennuo/toolkit `fee2239`), without textures.
+ * (`io/exports/MeshExporter.java`, ennuo/toolkit `d6a2ef8`).
  *
  * What goes in: one glTF mesh per `region` of the primitives, as Java's
  * `getSubmeshes` groups them, each primitive a triangle list under its material;
  * positions, normals, every UV channel; the bones as nodes with a skin, joints
  * and weights; the morphs as targets named in `extras.targetNames`, as Java
- * names them. A material is a name and a white base colour -- the name is the
- * caller's (`materialName`), Java's FileDB file name being one the caller has.
+ * names them. A material is what `gltfMaterials` (`gltf-material.ts`) made of
+ * it -- its textures embedded as PNG, a sample's UV transform as
+ * `KHR_texture_transform`, its wrap as a sampler -- or else a name and a white
+ * base colour, the name the caller's (`materialName`).
  *
  * Where this differs from Java (lbp-modding-toolchain.md, *Where we
  * deliberately differ*):
@@ -34,7 +36,7 @@
  */
 
 import type { ResourceRef } from '../io/serializer.ts';
-import { toHex } from '../io/hex.ts';
+import { refKey, type GltfMaterial, type GltfTexture } from './gltf-material.ts';
 import type { Mesh } from './mesh.ts';
 
 const FLOAT = 5126;
@@ -47,11 +49,29 @@ const JSON_CHUNK = 0x4e4f534a; // "JSON"
 const BIN_CHUNK = 0x004e4942; // "BIN\0"
 
 export interface GltfOptions {
-  /** A material's name; by default its GUID, `g<decimal>`, or its hash in hex. */
+  /** Each material by `refKey`, as `gltfMaterials` makes them. */
+  readonly materials?: ReadonlyMap<string, GltfMaterial>;
+  /** A material's name where `materials` has none; by default `g<GUID>` or its hash in hex. */
   readonly materialName?: (material: ResourceRef) => string | undefined;
 }
 
-const refName = (ref: ResourceRef): string => (ref.hash ? toHex(ref.hash) : `g${ref.guid}`);
+/** cwlib's `TextureWrap` as a glTF wrap: 1 repeat, 2 mirrored repeat, the clamps to the edge. */
+const wrapOf = (wrap: number): number => (wrap === 1 ? 10497 : wrap === 2 ? 33648 : 33071);
+
+/**
+ * A sample's `u' = a·u + b·v + c`, `v' = d·u + e·v + f` as
+ * `KHR_texture_transform`'s offset, rotation and scale (`uv' = T·R·S·uv`, `R`
+ * the rotation by `rotation` counter-clockwise); undefined for the identity.
+ * ⚠️ A shear has no place in it and is lost.
+ */
+function textureTransform([a, b, c, d, e, f]: GltfTexture['uvTransform']): Record<string, unknown> | undefined {
+  if (a === 1 && b === 0 && c === 0 && d === 0 && e === 1 && f === 0) return undefined;
+  if (b === 0 && d === 0) return { offset: [c, f], scale: [a, e] };
+  const rotation = Math.atan2(-d, a);
+  const sx = Math.hypot(a, d);
+  const sy = b * Math.sin(rotation) + e * Math.cos(rotation);
+  return { offset: [c, f], rotation, scale: [sx, sy] };
+}
 
 /** NaN written 0. */
 const finite = (values: Float32Array): Float32Array => (values.some(Number.isNaN) ? values.map((v) => (Number.isNaN(v) ? 0 : v)) : values);
@@ -175,14 +195,59 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
     targets = mesh.morphs.map((morph) => ({ POSITION: vec3(morph.offsets, true), NORMAL: vec3(morph.normals, false) }));
   }
 
+  const images: Record<string, unknown>[] = [];
+  const imageIndex = new Map<Uint8Array, number>();
+  const samplers: Record<string, unknown>[] = [];
+  const textures: Record<string, unknown>[] = [];
+  const textureIndex = new Map<string, number>();
+  let transformed = false;
+  const textureInfo = (texture: GltfTexture, extra: Record<string, unknown> = {}): Record<string, unknown> => {
+    let image = imageIndex.get(texture.png);
+    if (image === undefined) {
+      images.push({ name: texture.name, mimeType: 'image/png', bufferView: view(texture.png) });
+      image = images.length - 1;
+      imageIndex.set(texture.png, image);
+    }
+    const wrapS = wrapOf(texture.wrapS);
+    const wrapT = wrapOf(texture.wrapT);
+    let sampler = samplers.findIndex((s) => s.wrapS === wrapS && s.wrapT === wrapT);
+    if (sampler < 0) sampler = samplers.push({ wrapS, wrapT }) - 1;
+    const key = `${image}/${sampler}`;
+    let index = textureIndex.get(key);
+    if (index === undefined) {
+      index = textures.push({ source: image, sampler }) - 1;
+      textureIndex.set(key, index);
+    }
+    const transform = textureTransform(texture.uvTransform);
+    if (transform) transformed = true;
+    return {
+      index, ...extra,
+      ...(texture.texCoord !== 0 ? { texCoord: texture.texCoord } : {}),
+      ...(transform ? { extensions: { KHR_texture_transform: transform } } : {}),
+    };
+  };
+
   const materials: Record<string, unknown>[] = [];
   const materialIndex = new Map<string, number>();
   const materialOf = (ref: ResourceRef): number => {
-    const key = refName(ref);
+    const key = refKey(ref);
     let index = materialIndex.get(key);
     if (index === undefined) {
       index = materials.length;
-      materials.push({ name: options.materialName?.(ref) ?? key, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0 } });
+      const made = options.materials?.get(key);
+      materials.push(made === undefined
+        ? { name: options.materialName?.(ref) ?? key, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0 } }
+        : {
+          name: made.name,
+          pbrMetallicRoughness: {
+            baseColorFactor: made.baseColorFactor ?? [1, 1, 1, 1],
+            metallicFactor: 0,
+            ...(made.baseColorTexture ? { baseColorTexture: textureInfo(made.baseColorTexture) } : {}),
+          },
+          ...(made.normalTexture ? { normalTexture: textureInfo(made.normalTexture) } : {}),
+          ...(made.doubleSided ? { doubleSided: true } : {}),
+          ...(made.alphaCutoff !== undefined ? { alphaMode: 'MASK', alphaCutoff: made.alphaCutoff } : {}),
+        });
       materialIndex.set(key, index);
     }
     return index;
@@ -232,11 +297,13 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
 
   const json = {
     asset: { version: '2.0', generator: 'cwlib-ts meshToGlb' },
+    ...(transformed ? { extensionsUsed: ['KHR_texture_transform'] } : {}),
     scene: 0,
     scenes: [{ name: 'Scene', nodes: [armature, ...meshNodes] }],
     nodes,
     ...(meshes.length > 0 ? { meshes } : {}),
     ...(materials.length > 0 ? { materials } : {}),
+    ...(textures.length > 0 ? { textures, images, samplers } : {}),
     ...(skins.length > 0 ? { skins } : {}),
     accessors,
     bufferViews,
