@@ -1250,7 +1250,7 @@ block     per bone 8 bytes (i32 animHash, i8 parent, firstChild, nextSibling, pa
   2026-10-25). Pairing them so does not pair the morphs: none of those meshes had the animation's
   morph count — a face is on the body mesh, `sack_boy.mol` with 29, and
   `cs_emote_embarrassed_into_v1.anim` on it writes 17 weight channels, one per region
-  (`test/animation-gltf.test.ts`). 1,029 of the animations move morphs (254 with 29, Sackboy's).
+  (`test/animation-gltf.test.ts`). 661 of the 2,664 animations move morphs (254 of them 29, Sackboy's).
 - ✔ **A parent comes before its child** in all 100,035 bones, so a pose builds in one pass; and
   **99.97% of them (100,008) name a bone of some `MSHb`** by `animHash` — measured once against
   every mesh bone in the four FARCs (2026-10-25), not in the census.
