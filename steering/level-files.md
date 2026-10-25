@@ -1211,7 +1211,8 @@ Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the
 (scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
 tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
 `PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
-`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, the `.trans`, and every
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, `ATXb`, `GLTb`, `VOPb`, the
+`.trans`, and every
 text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 
 | magic | count | what the FileDB calls them |
@@ -1220,11 +1221,26 @@ text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 | none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
 | `RIFF` | 216 | `.smp`, the instruments' samples |
 | `RECb` | 91 | `.rec` |
-| `ATXb` | 24 | `.atx` |
-| `VOPb` | 4 | inside crossplay `.cpv`s |
-| `TUTb`, `GLTb` | 2 each | `.tut`, `.glst` |
+| `TUTb` | 2 | `.tut` (*Small resources*) |
 
 Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
+
+## Small resources — `ATXb`, `GLTb`, `VOPb`
+
+Three types cwlib names in `ResourceType` and has no class for; readings of our own, each ending
+on the payload's last byte in every one of the game's (`test/small-resources.test.ts`, 2026-10-25).
+
+- **`ATXb`, `ANIMATED_TEXTURE`** (`readAnimatedTexture`, 24 files, `texture_library/ui/animated/…`):
+  a texture descriptor, `s32` frames, frame width and height, and a `bool` loop. ✔ **The meanings
+  are measured**: in all 24 the named texture is a grid of frame-sized cells, as many as or more
+  than the frames — 32 frames of 64×64 in a 512×256, 13 of 128×128 in a 512×512 — and loop is true.
+- **`GLTb`, `GUID_LIST`** (`readGuidList`, 2 files): an array of `u32` GUIDs.
+  `face_covering_costumes.glst` names 38 head meshes, all FileDB rows; `attached_shapes.glst` 101,
+  90 of them rows (palette plans), the other 11 neither rows nor in the PS4 remap.
+- **`VOPb`, `VOIP_RECORDING`** (`readVoipRecording`, 4 files, inside crossplay `.cpv`s): one
+  length-prefixed block of audio, kept as bytes; its codec is not read.
+- ⚠️ **`TUTb`, `TUTORIALS`** (2 files) is not read: `tutorials_beta.tut` is `01 00`, and the other's
+  215 bytes hold nine records of varints whose fields the bytes alone do not name.
 
 ## Translation tables — `RTranslationTable`
 
