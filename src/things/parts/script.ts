@@ -149,6 +149,15 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
     const fields: ScriptFieldLayout[] = [];
     const count = self.count();
     for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(self));
+    // Below 0x1ec the layout carries a reflection table: a name and an index each
+    // (cwlib's `InstanceLayout`). Without it the LBP1 scripts read it as values.
+    if (self.revision.version < 0x1ec) {
+      const names = self.count();
+      for (let i = 0; i < names; i += 1) {
+        self.str();
+        self.i32();
+      }
+    }
     self.pointers.set(id, { layout: fields, instanceSize: self.i32() });
   });
   if (pointer === 0) return { script, fields: [] };
@@ -161,6 +170,7 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
       fields.push({ ...field, stored: false, value: undefined });
       continue;
     }
+    if (version > 0x198 && version < 0x19d) s.u8(); // cwlib's `ScriptInstance` writes 0
     let value: ScriptValue;
     switch (field.machineType) {
       case MACHINE_BOOL:
@@ -199,6 +209,8 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
 
 /** `PScript`: a script attached to a Thing, and its fields' values. */
 export function readScript(s: Serializer, readers: ReadonlyMap<string, PartReader>): ScriptInstance {
+  const { version } = s.revision;
+  if (version > 0x179 && version < 0x1a1) s.bool(); // cwlib's `PScript`: "unknown"
   return readScriptInstance(s, readers);
 }
 
@@ -259,7 +271,8 @@ function readScriptObjectBody(s: Serializer, type: number, readers: ReadonlyMap<
       object = { type: 'bools', values: s.array((self) => self.bool()) };
       break;
     case OBJ_ARRAY_S32:
-      object = { type: 's32s', values: s.intVector() };
+      // A signed vector in cwlib (`ScriptObjectUID`): zigzagged when compressed.
+      object = { type: 's32s', values: s.intVector(true) };
       break;
     case OBJ_ARRAY_F32:
       object = { type: 'f32s', values: s.array((self) => self.f32()) };

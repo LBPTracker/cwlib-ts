@@ -155,7 +155,7 @@ function readChunkFile(s: Serializer): void {
   if (subVersion >= 0xde) {
     // `userResources`: descriptors that carry their type inline.
     const resources = s.count();
-    for (let i = 0; i < resources; i += 1) s.resource(true, true);
+    for (let i = 0; i < resources; i += 1) s.resource(true, true, false);
   }
   if (subVersion > 0x72) {
     const min = s.vector3();
@@ -218,9 +218,9 @@ function readStreamingManager(s: Serializer): void {
 function readEggLink(s: Serializer): void {
   const { version } = s.revision;
   if (version < 0x160) {
-    s.resource(true); // item: a GlobalThingDescriptor's level
+    s.resource(true, false, false); // item: a GlobalThingDescriptor's level
     s.i32(); // and the Thing's UID in it
-  } else s.resource(); // plan
+  } else s.resource(false, false, false); // plan
   if (version > 0x15f && version < 0x197) readInventoryItemDetails(s); // details
   if (version > 0x207 && version < 0x22a) s.bool();
   if (version > 0x23b) s.bool(); // shareable
@@ -679,17 +679,19 @@ export function readPlanStream(
   // holds the Thing array and nothing else, so bytes left over mean a part
   // reader took the wrong number and the parse is wrong even though it finished.
   // Measured: 0 bytes left on all 220 corpus plans that parse at all.
+  //
+  // ⚠️ **Reported, not thrown**, as cwlib's `RPlan.getThings` returns its Things
+  // and never looks: the four `palette_tools_*.plan` at 0x1d8 declare one Thing
+  // and carry more after it, where cwlib stops at the same byte this reader does.
+  let leftover: string | undefined;
   if (inner.remaining !== 0) {
-    throw new SerializerError(
-      `the plan's Thing array left ${inner.remaining} of ${inner.data.length} bytes ` +
-        'unread — a part reader consumed the wrong number of bytes',
-    );
-  }
-  inner.tape?.finish(inner.position);
+    leftover = `the plan's Thing array left ${inner.remaining} of ${inner.data.length} bytes ` +
+      'unread — a part reader consumed the wrong number of bytes';
+  } else inner.tape?.finish(inner.position);
   // What follows the Things is read to the payload's last byte, as `readLevel`
   // reads a level's; where it does not, the Things still come back.
   let inventory: PlanInventory | undefined;
-  let unreadTail: string | undefined;
+  let unreadTail: string | undefined = leftover;
   try {
     if (revision.version >= PLAN_DETAILS && !streaming) {
       const details = readInventoryItemDetails(s);
@@ -704,9 +706,9 @@ export function readPlanStream(
         inventory = { details, location: lamsKeyId(locationTag), category: lamsKeyId(categoryTag), locationTag, categoryTag };
       }
     }
-    if (s.remaining !== 0) unreadTail = `${s.remaining} bytes past RPlan's last field`;
+    if (s.remaining !== 0) unreadTail ??= `${s.remaining} bytes past RPlan's last field`;
   } catch (error) {
-    unreadTail = (error as Error).message;
+    unreadTail ??= (error as Error).message;
   }
   return {
     revision, things,

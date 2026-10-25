@@ -82,19 +82,36 @@ export function onLeerdammer(
  * `since` is the part's `PartHistory` value: a part is present only when the
  * stream's parts-revision has reached it, whatever its flag bit says.
  */
-export const PARTS: readonly { readonly name: string; readonly index: number; readonly since: number }[] = [
+export const PARTS: readonly {
+  readonly name: string;
+  readonly index: number;
+  readonly since: number;
+  /** A part long gone: the version from which no Thing holds it (cwlib's `Part.hasPart`). */
+  readonly until?: number;
+}[] = [
   { name: 'BODY', index: 0x00, since: 0x01 },
   { name: 'JOINT', index: 0x01, since: 0x02 },
   { name: 'WORLD', index: 0x02, since: 0x03 },
   { name: 'RENDER_MESH', index: 0x03, since: 0x04 },
   { name: 'POS', index: 0x04, since: 0x05 },
   { name: 'TRIGGER', index: 0x05, since: 0x06 },
+  // ❗ The parts the game dropped, in cwlib's declaration order, which is the order
+  // a Thing writes them: without them a Thing of the LBP1 palettes at 0x15e and
+  // 0x15f read a `PARTICLE_EMITTER_2` as its `CAMERA_TWEAK`. None has a reader, so
+  // a non-null one is an `UnimplementedPartError`, as it is a failure in cwlib.
+  { name: 'TRIGGER_EFFECTOR', index: 0x36, since: 0x07, until: 0x13c },
+  { name: 'PAINT', index: 0x37, since: 0x08, until: 0x13c },
   { name: 'YELLOWHEAD', index: 0x06, since: 0x09 },
   { name: 'AUDIO_WORLD', index: 0x07, since: 0x0a },
   { name: 'ANIMATION', index: 0x08, since: 0x0b },
   { name: 'GENERATED_MESH', index: 0x09, since: 0x0c },
+  { name: 'PARTICLE_CLUMP', index: 0x38, since: 0x0d, until: 0x13c },
+  { name: 'PARTICLE_EMITTER', index: 0x39, since: 0x0e, until: 0x13c },
+  { name: 'CAMERA_ZONE', index: 0x3a, since: 0x0f, until: 0x13c },
   { name: 'LEVEL_SETTINGS', index: 0x0a, since: 0x10 },
   { name: 'SPRITE_LIGHT', index: 0x0b, since: 0x11 },
+  { name: 'KEYFRAMED_POSITION', index: 0x3b, since: 0x12, until: 0x13c },
+  { name: 'CAMERA', index: 0x3c, since: 0x13, until: 0x13c },
   { name: 'SCRIPT_NAME', index: 0x0c, since: 0x14 },
   { name: 'CREATURE', index: 0x0d, since: 0x15 },
   { name: 'CHECKPOINT', index: 0x0e, since: 0x16 },
@@ -107,6 +124,7 @@ export const PARTS: readonly { readonly name: string; readonly index: number; re
   { name: 'REF', index: 0x15, since: 0x1d },
   { name: 'METADATA', index: 0x16, since: 0x1e },
   { name: 'COSTUME', index: 0x17, since: 0x1f },
+  { name: 'PARTICLE_EMITTER_2', index: 0x3d, since: 0x20, until: 0x18c },
   { name: 'CAMERA_TWEAK', index: 0x18, since: 0x21 },
   { name: 'SWITCH', index: 0x19, since: 0x22 },
   { name: 'SWITCH_KEY', index: 0x1a, since: 0x23 },
@@ -156,11 +174,21 @@ const CREATOR_ANIM_GONE = 0x107;
  * loader at `v0xd49d92` (head `<= 0x106ffff`). The reader and the plan writer
  * both ask this, so they cannot drift apart.
  */
-export function partBit(part: { readonly name: string; readonly index: number }, subVersion: number): number | undefined {
+export function partBit(
+  part: { readonly name: string; readonly index: number },
+  subVersion: number,
+  partsRevision = CREATOR_ANIM_SINCE,
+): number | undefined {
   const old = subVersion < CREATOR_ANIM_GONE;
   if (part.name === 'CREATOR_ANIM') return old ? 0x29 : undefined;
+  // ❗ Only a Thing whose parts revision has reached `PCreatorAnim` (0x32) has the
+  // bits moved for it: cwlib's `hasPart`. Older Things keep every index.
+  if (partsRevision < CREATOR_ANIM_SINCE) return part.index;
   return old && part.index > 0x28 ? part.index + 1 : part.index;
 }
+
+/** `PartHistory.CREATOR_ANIM`: the parts revision from which the bits above 0x28 move. */
+const CREATOR_ANIM_SINCE = 0x32;
 
 /**
  * `PARTS` with each part's mask bit, in declaration order, for the two sides of
@@ -175,10 +203,12 @@ export function partBit(part: { readonly name: string; readonly index: number },
 const VITA_PARTS: Readonly<Record<string, string>> = { POPPET_POWERUP: 'VITA_27', POCKET_ITEM: 'VITA_28' };
 
 const PART_BITS: readonly (readonly { readonly part: (typeof PARTS)[number]; readonly bit: number }[])[] =
-  [0, CREATOR_ANIM_GONE].map((subVersion) => PARTS.flatMap((part) => {
-    const bit = partBit(part, subVersion);
-    return bit === undefined ? [] : [{ part, bit }];
-  }));
+  [[0, 0], [0, CREATOR_ANIM_SINCE], [CREATOR_ANIM_GONE, 0], [CREATOR_ANIM_GONE, CREATOR_ANIM_SINCE]].map(
+    ([subVersion, partsRevision]) => PARTS.flatMap((part) => {
+      const bit = partBit(part, subVersion!, partsRevision);
+      return bit === undefined ? [] : [{ part, bit }];
+    }),
+  );
 
 /** Reads one part's body. Returning nothing is fine; the bytes are what matter. */
 export type PartReader = (s: Serializer, thing: Thing) => unknown;
@@ -361,8 +391,10 @@ function fillThing(
   const hi = Number((mask >> 32n) & 0xffffffffn);
 
   const vita = vitaRevision(s.revision) >= 0;
-  for (const { part: declared, bit } of PART_BITS[subVersion < CREATOR_ANIM_GONE ? 0 : 1]) {
+  const bits = PART_BITS[(subVersion < CREATOR_ANIM_GONE ? 0 : 2) + (partsRevision < CREATOR_ANIM_SINCE ? 0 : 1)]!;
+  for (const { part: declared, bit } of bits) {
     if (partsRevision < declared.since) continue;
+    if (declared.until !== undefined && version >= declared.until) continue;
     if (((bit < 32 ? lo >>> bit : hi >>> (bit - 32)) & 1) === 0) continue;
     const name = (vita && VITA_PARTS[declared.name]) || declared.name;
     const part = { ...declared, name };

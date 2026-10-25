@@ -31,7 +31,7 @@ function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): W
     prevDir: s.vector3(),
     currDir: s.vector3(),
     stateTimer: s.i32(),
-    state: s.i32(),
+    state: s.i8(), // an `i8` in cwlib's `WhipSim`, which this read as an `i32`
     attachedThing: thing(),
     attachedLocalPos: s.vector3(),
     attachedLocalNormal: s.vector3(),
@@ -264,11 +264,15 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   let brainsLife: (Thing | undefined)[] = [];
   const thing = () => readThingRef(s, readers);
 
+  // The reads cwlib's `PCreature` makes for old revisions and does not name, each at
+  // its own gate: 26 bytes of them at 0x1e2 and 4 at 0x207 were missing here.
   const config = s.resource();
+  if (version < 0x155) s.array((self) => self.vector3());
   const jumpFrame = s.s32();
   const groundDistance = s.f32();
   const groundNormal = s.vector3();
   const grabJoint = thing();
+  if (version < 0x13c) thing();
   const jumpingOff = thing();
   const state = s.i32();
   if (subVersion >= 0x132) subState = s.i32();
@@ -276,9 +280,23 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   const speedModifier = s.f32();
   const jumpModifier = s.f32();
   const strengthModifier = s.f32();
+  if (version < 0x142) s.skipVector4();
   const zMode = s.i32();
+  if (version < 0x146) s.i32();
+  if (version > 0x145 && version < 0x1f0) {
+    s.i32();
+    s.i32();
+    s.bool();
+    s.bool();
+    s.i32();
+  }
   const playerAwareness = s.s32();
   const moveDirection = s.s32();
+  if (version < 0x15d) s.u8();
+  if (version < 0x1f0) {
+    s.i32(); // the count of a Thing array cwlib writes empty, read bare as cwlib reads it
+    s.f32();
+  }
   const forceThatSmashedCreature = s.vector3();
   const crushFrames = s.i32();
   const awarenessRadius = s.f32();
@@ -290,6 +308,10 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (version >= 0x221) haveNotTouchedGroundSinceUsingJetpack = s.bool();
   if (version >= 0x15d) {
     legs = thingArray(s, readers);
+    if (version < 0x166) {
+      thingArray(s, readers);
+      thingArray(s, readers);
+    }
     lifeSources = thingArray(s, readers);
     lifeCreature = thing();
     aiCreature = thing();
@@ -298,23 +320,27 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     jumpInterval = s.i32();
     jumpIntervalPhase = s.i32();
   }
+  if (version > 0x162 && version < 0x16d) s.bool();
   if (version >= 0x169) meshDirty = s.bool();
   if (version >= 0x166) {
     eyes = thingArray(s, readers);
     brainsAi = thingArray(s, readers);
     brainsLife = thingArray(s, readers);
   }
+  if (version > 0x177 && version < 0x1e3) s.f32();
   if (version >= 0x19c) reactToLethal = s.bool();
   if (version >= 0x1a9) {
     oldAnimMatrix = s.matrix();
     animOffset = s.f32();
   }
+  if (version > 0x1ed && version < 0x225) s.s32();
   if (version >= 0x1fc) groundNormalRaw = s.vector3();
   if (version >= 0x212) {
     groundNormalSmooth = s.vector3();
     bodyAdjustApplied = s.f32();
   }
   if (version >= 0x240 && version < 0x2c4) switchScale = s.f32();
+  if (version > 0x242 && version < 0x24d) s.resource(); // a plan
   if (version >= 0x243) gunDirAndDashVec = s.vector3();
   if (subVersion >= 0x19e) gunDirAndDashVecW = s.f32();
   if (version >= 0x246) resourceThing = thing();

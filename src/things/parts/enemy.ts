@@ -31,8 +31,14 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
   let newWalkConstraintMass: boolean | undefined;
   let touchSensitive: boolean | undefined;
   let touchType: number | undefined;
-  const partType = version >= 0x15d ? s.i32() : 0;
+  // ❗ A signed enum (cwlib's `enum32(partType, true)`): an `s32`, zigzagged in a
+  // compressed stream. Read as an `i32` it came out doubled there -- 2 and 8 for
+  // the eyes and rockets of the game's FARC levels -- and right only in the
+  // uncompressed story chunks.
+  const partType = version >= 0x15d ? s.s32() : 0;
+  if (version > 0x15c && version < 0x19f) readThingRef(s, readers);
   const radius = version >= 0x16d ? s.f32() : 0;
+  if (version < 0x19e) readThingRef(s, readers); // cwlib's `0x19e > version && version < 0x1a9`
   const snapVertex = version >= 0x19f ? s.i32() : 0;
   let centerOffset: [number, number, number] | undefined;
   let animThing: Thing | undefined;
@@ -41,6 +47,18 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
     centerOffset = s.vector3();
     animThing = readThingRef(s, readers);
     animSpeed = s.f32();
+  }
+  if (version > 0x1f1 && version < 0x21e) {
+    for (let i = 0; i < 4; i += 1) readThingRef(s, readers);
+    s.i32();
+    readThingRef(s, readers);
+    readThingRef(s, readers);
+    s.skipVector3();
+    s.s32();
+    s.skipVector3();
+    for (let i = 0; i < 3; i += 1) s.f32();
+    s.s32();
+    s.s32();
   }
   if (version >= 0x246) sourcePlayerNumber = s.i32();
   if (version >= 0x265) newWalkConstraintMass = s.bool();

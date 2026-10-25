@@ -1,6 +1,7 @@
 /** `PHYSICS_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
+import { readThingRef, type PartReader } from '../thing.ts';
 
 /**
  * `PPhysicsTweak`: the movement tweaker.
@@ -68,7 +69,7 @@ export interface PhysicsTweakPart {
   readonly teamFilter?: number;
 }
 
-export function readPhysicsTweak(s: Serializer): PhysicsTweakPart {
+export function readPhysicsTweak(s: Serializer, readers: ReadonlyMap<string, PartReader>): PhysicsTweakPart {
   const { version, subVersion } = s.revision;
   let tweakDampening: readonly [number, number, number] | undefined;
   let velRange: number | undefined;
@@ -115,15 +116,25 @@ export function readPhysicsTweak(s: Serializer): PhysicsTweakPart {
   let [tweakBuoyancy, colorIndex, behavior] = [0, 0, 0];
   let hideInPlayMode = false;
   let name = '';
+  // Below 0x281 the movement is in cwlib's `legacy` fields, interleaved with the rest.
+  const legacy = version < 0x281;
+  if (version < 0x2c4) s.f32(); // activation
   const tweakGravity = s.f32();
   if (version > 0x2ff) tweakBuoyancy = s.f32();
+  if (legacy) s.f32(); // legacyTweakDampening
   if (version > 0x280) tweakDampening = s.vector3();
   const input = s.vector3();
   const middleVel = s.vector3();
+  if (legacy) s.skipVector3(); // legacyDeceleration
   if (version > 0x280) velRange = s.f32();
+  if (legacy) s.skipVector3(); // legacyAcceleration
   if (version > 0x280) {
     accelStrength = s.f32();
     if (version > 0x285) decelStrength = s.f32();
+  }
+  if (legacy) {
+    s.skipVector3(); // legacyDeceleration again
+    s.i32(); // legacyTurnToFace
   }
   if (subVersion > 0xa3) {
     directionModifier = s.u8();
@@ -132,6 +143,9 @@ export function readPhysicsTweak(s: Serializer): PhysicsTweakPart {
   const localSpace = s.bool();
   let configuration = 0;
   if (version > 0x278) configuration = s.i32();
+  // ❗ A Thing between 0x27a and 0x326, which cwlib reads and does not name; the
+  // LBP2 plans at 0x300 and 0x319 ran one byte short without it.
+  if (version >= 0x27a && version < 0x327) readThingRef(s, readers);
   if (version > 0x282) hideInPlayMode = s.bool();
   if (version > 0x28d) colorIndex = s.i32();
   if (version > 0x2db) name = s.wstr();

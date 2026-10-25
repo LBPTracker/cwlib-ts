@@ -360,7 +360,7 @@ export class Serializer {
    * game's 44 bevels at `0x132`--`0x188` need: read the other way, their four
    * material slots come out as a GUID and three garbage hashes.
    */
-  resource(isDescriptor = false, includeType = false): ResourceRef | undefined {
+  resource(isDescriptor = false, includeType = false, isClassPointer = true): ResourceRef | undefined {
     if (this.revision.version > 0x22e && !isDescriptor) this.i32();
     const start = this.position;
     const flag = this.u8();
@@ -378,7 +378,10 @@ export class Serializer {
     }
     let guid = 0;
     let hash: Uint8Array | undefined;
-    const [GUID, HASH] = this.revision.version < 0x191 ? [1, 2] : [2, 1];
+    // ❗ The swap is cwlib's for a class pointer only (`Serializer.resource`'s fourth
+    // argument): a level's descriptor in a `GlobalThingDescriptor`, `PRef`'s and
+    // `EggLink`'s plans and a chunk's user resources keep 1 for a hash.
+    const [GUID, HASH] = this.revision.version < 0x191 && isClassPointer ? [1, 2] : [2, 1];
     if ((flag & GUID) !== 0) guid = this.u32();
     if ((flag & HASH) !== 0) hash = this.sha1();
     const ref = guid === 0 && !hash ? undefined : { guid, hash };
@@ -530,9 +533,9 @@ export class Serializer {
    * `loops` is the one this project met first; reading it as an array put the
    * walk hundreds of bytes into a vertex list and the Thing marker caught it.
    */
-  intVector(): number[] {
+  intVector(signed = false): number[] {
     if ((this.compressionFlags & COMPRESSED_VECTORS) === 0) {
-      return this.array((self) => self.i32());
+      return this.array((self) => (signed ? self.s32() : self.i32()));
     }
     const count = this.i32();
     if (count < 0) throw new SerializerError(`negative vector length ${count}`);
@@ -542,6 +545,8 @@ export class Serializer {
     for (let plane = 0; plane < width; plane += 1) {
       for (let i = 0; i < count; i += 1) out[i] |= this.u8() << (plane * 8);
     }
+    // A signed vector (cwlib's `intvector(value, true)`) is zigzagged after the planes.
+    if (signed) for (let i = 0; i < count; i += 1) out[i] = (out[i]! >>> 1) ^ -(out[i]! & 1);
     return out;
   }
 

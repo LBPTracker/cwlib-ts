@@ -63,7 +63,7 @@ function readValue(s: Serializer): MetadataValue {
     icon: s.resource(),
     type: s.i32(),
     subType: s.i32(),
-    linkTo: { level: s.resource(true), uid: s.i32() },
+    linkTo: { level: s.resource(true, false, false), uid: s.i32() },
     linkSlot: readSlotId(s),
     linkType: s.i32(),
     lastUsed: s.i32(),

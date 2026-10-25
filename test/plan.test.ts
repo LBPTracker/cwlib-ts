@@ -70,14 +70,13 @@ test('a plan with no Things in it reads as no Things', async () => {
   assert.equal(revision.version, 0x3ef);
 });
 
-test('a plan whose Things do not fill thingData is refused', async () => {
+test('a plan whose Things do not fill thingData says so', async () => {
   // ⚠️ **Left-over bytes mean a part reader took the wrong number**, and the
   // parse is wrong even though it ran to the end. Without this check that is a
-  // plan that silently loses whatever came after the misread.
-  await assert.rejects(
-    () => readPlan(buildPlan([...uleb(0), 0x99]), nodeInflate, partReaders()),
-    /left 1 of 2 bytes unread/,
-  );
+  // plan that silently loses whatever came after the misread. It is reported as
+  // the plan's `unreadTail`, as cwlib returns the Things it read.
+  const plan = await readPlan(buildPlan([...uleb(0), 0x99]), nodeInflate, partReaders());
+  assert.match(plan.unreadTail ?? '', /left 1 of 2 bytes unread/);
 });
 
 /* ---------------------------------------------------------------- corpus */
