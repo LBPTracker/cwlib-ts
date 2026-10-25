@@ -189,6 +189,9 @@ never silently follow the toolkit against our own measurement.
 | 41 | a mesh's softbody weight in glTF | `_VERTEX_MASS`, a grey unsigned-short VEC4, on every mesh | `_SOFTBODY_WEIGHT`, a float, where some vertex is below 1 | 4,875 of the game's 5,941 meshes are 1 everywhere; the name says what it is ([level-files.md](level-files.md), *The game's meshes*) |
 | 42 | an `RMesh` as OBJ | every primitive, no material | a run two primitives share written once; `usemtl` when the caller names the material | 345 of the game's meshes draw a run twice under two materials, which would double the faces ([level-files.md](level-files.md), *Written as OBJ*) |
 | 43 | an `RStaticMesh`'s tangent | the pack at 20 (its comment; it writes no tangent to glTF) | the pack at 28, cwlib's "smooth normal", into `StaticMesh.tangents` and the glTF | it lines up with the UV tangent on 89% of the backdrops' vertices, the one at 20 on 8% ([level-files.md](level-files.md), *Backdrops*) |
+| 44 | an animation's position and scale channels on a mesh | the named bone's node, then overwritten with `bone + 1` | the mesh bone of the same `animHash` | Java's own rotation channel does so; the overwrite is a slip ([level-files.md](level-files.md), *Animations*) |
+| 45 | an animation alone in glTF | an armature with a skin, no mesh, no inverse bind matrices | the skeleton's nodes, no skin | a skin is for a mesh; 2,664 of 2,664 validate clean ([level-files.md](level-files.md), *Animations*) |
+| 46 | an animation's rotations in glTF | as unpacked | unit length | glTF's samplers want unit quaternions; the game's are so only to 15 bits ([level-files.md](level-files.md), *Animations*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

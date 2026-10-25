@@ -128,9 +128,38 @@ function multiply(a: Float32Array, b: Float32Array): number[] {
   return out;
 }
 
+/** A mesh's part of a glTF scene: its nodes (bone `i` is node `i`), meshes, skin and the scene's roots. */
+export interface MeshScene {
+  readonly nodes: Record<string, unknown>[];
+  readonly meshes: Record<string, unknown>[];
+  readonly skins: Record<string, unknown>[];
+  /** The scene's root nodes. */
+  readonly roots: number[];
+  /** The nodes that draw a mesh, which a morph animation targets. */
+  readonly meshNodes: number[];
+}
+
 /** Write a mesh as a `.glb`. */
 export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
   const g = new GltfBuilder(options);
+  const scene = meshScene(g, mesh);
+  return g.glb('cwlib-ts meshToGlb', sceneJson(scene));
+}
+
+/** A scene's own objects, as `GltfBuilder.glb` takes them. */
+export function sceneJson({ nodes, meshes, skins, roots }: MeshScene, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    scene: 0,
+    scenes: [{ name: 'Scene', nodes: roots }],
+    nodes,
+    ...(meshes.length > 0 ? { meshes } : {}),
+    ...(skins.length > 0 ? { skins } : {}),
+    ...extra,
+  };
+}
+
+/** A mesh's nodes, meshes and skin, their accessors and materials made in `g`. */
+export function meshScene(g: GltfBuilder, mesh: Mesh): MeshScene {
   const hasVertices = mesh.vertexCount > 0;
   const skinned = mesh.bones.length > 0;
   const attributes: Record<string, number> = {};
@@ -195,11 +224,5 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
   nodes.push({ name: 'Armature', ...(roots.length > 0 ? { children: roots } : {}) });
   const armature = nodes.length - 1;
 
-  return g.glb('cwlib-ts meshToGlb', {
-    scene: 0,
-    scenes: [{ name: 'Scene', nodes: [armature, ...meshNodes] }],
-    nodes,
-    ...(meshes.length > 0 ? { meshes } : {}),
-    ...(skins.length > 0 ? { skins } : {}),
-  });
+  return { nodes, meshes, skins, roots: [armature, ...meshNodes], meshNodes };
 }

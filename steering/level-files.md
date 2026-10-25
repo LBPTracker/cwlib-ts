@@ -1241,6 +1241,16 @@ block     per bone 8 bytes (i32 animHash, i8 parent, firstChild, nextSibling, pa
 - Ranges: `numFrames` 2–2,000, `fps` 15–30, 1–49 bones, 0–29 morphs, 0–6 locators. 1,534,393
   rotations, none whose stored x, y and z exceed unit length; every position, scale and morph
   weight finite.
+- ✔ **Written as glTF** (`animationToGlb`, `src/resources/animation-gltf.ts`, 0.4.47, cwlib's
+  `MeshExporter.GLB.FromAnimation`): alone, on the animation's own skeleton in its base pose; or on
+  a mesh's scene (`meshToGlb`), each bone found by `animHash`; frame `f` at `f / fps`, frame 0 the
+  base pose, a channel per animated rotation, position and scale, and the morph weights on every
+  mesh node when the mesh has as many targets. All 2,664 validate with no error and no warning
+  alone, and the 2,580 whose bones all lie in some mesh on that mesh too (scratch census,
+  2026-10-25). Pairing them so does not pair the morphs: none of those meshes had the animation's
+  morph count — a face is on the body mesh, `sack_boy.mol` with 29, and
+  `cs_emote_embarrassed_into_v1.anim` on it writes 17 weight channels, one per region
+  (`test/animation-gltf.test.ts`). 1,029 of the animations move morphs (254 with 29, Sackboy's).
 - ✔ **A parent comes before its child** in all 100,035 bones, so a pose builds in one pass; and
   **99.97% of them (100,008) name a bone of some `MSHb`** by `animHash` — measured once against
   every mesh bone in the four FARCs (2026-10-25), not in the census.
