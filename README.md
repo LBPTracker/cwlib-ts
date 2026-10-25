@@ -20,7 +20,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`io/`** | |
 | `resource.ts` | the `LVLb` / `PLNb` / … container: revision, branch, the zlib chunk table, the dependency table |
 | `stream.ts`, `serializer.ts` | the big-endian readers: the fixed-width header one, and the payload's with its revision gates and compressed integers |
-| `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`): tab-indented fields, arrays of `[i]` |
+| `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`, `MUSt`, `SSPt`, … 19 magics): tab-indented fields, arrays of `[i]`, read typed or as a tree |
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
 | **`archives/`** | |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily), its FileDB (GUID → path, SHA-1) and its GUID remap |

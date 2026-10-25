@@ -1211,20 +1211,18 @@ Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the
 (scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
 tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
 `PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
-`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `DLCt`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, and the `.trans`. Without:
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, the `.trans`, and every
+text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 
 | magic | count | what the FileDB calls them |
 |---|---|---|
 | none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | |
 | none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
-| `MUSt` | 225 | `.mus`, text |
 | `RIFF` | 216 | `.smp`, the instruments' samples |
 | `RECb` | 91 | `.rec` |
-| `SSPt` | 63 | `.sph`, text |
 | `ATXb` | 24 | `.atx` |
 | `VOPb` | 4 | inside crossplay `.cpv`s |
 | `TUTb`, `GLTb` | 2 each | `.tut`, `.glst` |
-| text | 13 `ASTt`, 9 `CHAt`, 8 `PBRt`, 6 `SASt`, 5 `ABKt`, one each `SLTt`, `LMTt`, `AUMt`, `MIXt` | |
 
 Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
 
@@ -1291,6 +1289,17 @@ array is `Name<tab>count` and then its elements `[i]` a level deeper. `TextResou
   line** (`test/text-resources.test.ts`, 2026-10-25) — 82 distinct files: `subtitles.gsub` has
   the bytes of `button_swap.gsub` and `languages/subtitles.gsub`, `lbp2_wip.dlc` those of
   `lbp2_dad.dlc`. 74 `GSBt` hold 34,985 substitutions; 8 `DLCt` list 526 files.
+- ✔ **Every text resource reads whole as a tree, with no schema** (`readTextTree`, 0.4.22): a
+  field whose next line is `[0]` a level deeper is an array, and its count must equal the elements
+  that follow; any other deeper line opens a struct's own fields — a descriptor's `GUID` and `Hash`
+  under its path (`Texture  …/brush1.tex`), a slot id's `Type` and `SlotNumber`. A line more than
+  one level below the one above it, or a count the elements do not match, throws. All **421 text
+  resources of 19 magics** in the FARCs read so (`test/text-resources.test.ts`, 2026-10-25): 225
+  `MUSt` (`.mus`, music settings), 74 `GSBt`, 63 `SSPt` (`.sph`, soft-physics settings), 13 `ASTt`,
+  9 `CHAt`, 8 `PBRt` (paint brushes), 8 `DLCt`, 6 `SASt`, 5 `ABKt`, and one each of `SLTt`, `LMTt`,
+  `AUMt`, `MIXt`, `AMPt`, `SSFt`, `SRGt`, `CONt`, `POPt`, `SMPt`. `textValue` reads a value as a
+  quoted string, a boolean, a number or numbers apart by commas (`Wind  -1,0.136752,0`); what is
+  left unquoted are enum names (`CAT_BIRD`) and paths. Only `GSBt` and `DLCt` have typed readers.
 - ⚠️ **Edited by hand**: `downloadables.dlc` names a GUID's flags `Flags` and, on some, `flags `;
   separators are a tab, a space or both; lines end in stray tabs; and `inventory_auto_pickup.gsub`
   ends its lines with `# comments`. Names are matched without case, any whitespace separates,

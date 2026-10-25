@@ -9,6 +9,8 @@ import { readFileDB } from '../src/archives/filedb.ts';
 import { openFileAccess } from '../src/platform/node.ts';
 import { readDlc } from '../src/resources/dlc.ts';
 import { readGuidSubst } from '../src/resources/guid-subst.ts';
+import { readTextTree, textValue } from '../src/io/text-resource.ts';
+import { magicOf } from '../src/io/resource.ts';
 
 /**
  * The game's text-serialised `GSBt` and `DLCt`; the corpus tests skip without
@@ -27,6 +29,40 @@ test('a text resource takes any whitespace, names in any case, and # comments', 
   assert.throws(() => readGuidSubst(text('GSBt\nSubstitutions\t1\n\t[0]\n\t\tFrom.guid\t1\n')), /ends where "To.guid"/);
   assert.throws(() => readGuidSubst(text('GSBt\nSubstitutions\t0\nExtra\t1\n')), /left unread/);
   assert.deepEqual(readDlc(text('DLCt\nGUIDS\t0\nFiles\t0\n')), { guids: [], files: [] });
+});
+
+test('a struct field holds its own fields, and values read as what they are', () => {
+  const tree = readTextTree(text('PBRt\nTexture\tbrush1.tex\n\tGUID\t3587\n\tHash\t\nForce\t0,1.5,-2\nOn\ttrue\n'));
+  assert.deepEqual(tree.fields[0], { name: 'Texture', value: 'brush1.tex', fields: [{ name: 'GUID', value: '3587' }, { name: 'Hash', value: '' }] });
+  assert.deepEqual([textValue(tree.fields[1].value), textValue(tree.fields[2].value), textValue('"A B"')], [[0, 1.5, -2], true, 'A B']);
+  assert.throws(() => readTextTree(text('X\nList\t2\n\t[0]\n')), /says 2, 1 follow/);
+  assert.throws(() => readTextTree(text('X\nA\t1\n\t\tB\t2\n')), /below no array/);
+});
+
+test('every text resource in the FARCs reads whole as a tree', async (t) => {
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
+  const counts = new Map<string, number>();
+  const seen = new Set<string>();
+  let soft: ReturnType<typeof readTextTree> | undefined;
+  for (const file of FARCS) {
+    const access = await openFileAccess(path.join(GAME, file));
+    const farc = await openFarc(access);
+    for (const entry of farc.entries.values()) {
+      if (seen.has(entry.sha1)) continue;
+      seen.add(entry.sha1);
+      const magic = magicOf(await access.read(entry.offset, 8));
+      if (!/^[A-Z]{3}t$/.test(magic)) continue;
+      const tree = readTextTree((await farc.get(entry.sha1))!);
+      counts.set(magic, (counts.get(magic) ?? 0) + 1);
+      if (magic === 'SSPt' && !soft) soft = tree;
+    }
+    await access.close();
+  }
+  assert.deepEqual(Object.fromEntries([...counts].sort()), {
+    ABKt: 5, AMPt: 1, ASTt: 13, AUMt: 1, CHAt: 9, CONt: 1, DLCt: 8, GSBt: 74, LMTt: 1, MIXt: 1, MUSt: 225,
+    PBRt: 8, POPt: 1, SASt: 6, SLTt: 1, SMPt: 1, SRGt: 1, SSFt: 1, SSPt: 63,
+  });
+  assert.equal(soft!.fields[0].name, 'Damping');
 });
 
 test('every GSBt and DLCt in the FARCs reads to its last line', async (t) => {

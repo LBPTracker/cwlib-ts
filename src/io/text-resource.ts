@@ -27,6 +27,35 @@ interface Line {
   readonly value: string;
 }
 
+/**
+ * One field of a text resource read without its schema: its name, its value as
+ * written, and below it either an array's elements -- each with the value on
+ * its `[i]` line and the fields under that -- or a struct's own fields, as a
+ * descriptor's `GUID` and `Hash` sit under its path.
+ */
+export interface TextField {
+  readonly name: string;
+  readonly value: string;
+  readonly elements?: readonly TextElement[];
+  readonly fields?: readonly TextField[];
+}
+
+export interface TextElement {
+  readonly value: string;
+  readonly fields: readonly TextField[];
+}
+
+/** What a written value is: a quoted string, `true`/`false`, a number, or numbers apart by commas. */
+export function textValue(raw: string): string | boolean | number | number[] {
+  if (/^".*"$/.test(raw)) return raw.slice(1, -1);
+  if (raw === 'true' || raw === 'false') return raw === 'true';
+  const number = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+  if (number.test(raw)) return Number(raw);
+  const parts = raw.split(',');
+  if (parts.length > 1 && parts.every((p) => number.test(p.trim()))) return parts.map((p) => Number(p.trim()));
+  return raw;
+}
+
 /** A line up to a `#` that is not inside a quoted string. */
 function withoutComment(line: string): string {
   let quoted = false;
@@ -106,9 +135,55 @@ export class TextResource {
     });
   }
 
+  /**
+   * The rest of the file as fields at `depth`, with no schema: a field whose
+   * next line is `[0]` one level deeper is an array, and its count must be the
+   * number of elements that follow; any other deeper line opens a struct's own
+   * fields. Throws on a line more than one level deeper than the one above it,
+   * so a file read whole by this has its indentation and its counts consistent.
+   */
+  tree(depth = 0): TextField[] {
+    const fields: TextField[] = [];
+    while (this.lines[this.at] && this.lines[this.at].depth >= depth) {
+      const line = this.lines[this.at];
+      if (line.depth > depth) {
+        throw new SerializerError(`${this.magic} line ${line.number}: "${line.name}" at depth ${line.depth}, below no array`);
+      }
+      this.at += 1;
+      const next = this.lines[this.at];
+      if (!next || next.depth !== depth + 1) {
+        fields.push({ name: line.name, value: line.value });
+        continue;
+      }
+      if (next.name !== '[0]') {
+        fields.push({ name: line.name, value: line.value, fields: this.tree(depth + 1) });
+        continue;
+      }
+      const count = Number(line.value);
+      const elements: TextElement[] = [];
+      for (let i = 0; this.lines[this.at]?.depth === depth + 1; i += 1) {
+        const value = this.raw(depth + 1, `[${i}]`);
+        elements.push({ value, fields: this.tree(depth + 2) });
+      }
+      if (elements.length !== count) {
+        throw new SerializerError(`${this.magic} line ${line.number}: "${line.name}" says ${line.value}, ${elements.length} follow`);
+      }
+      fields.push({ name: line.name, value: line.value, elements });
+    }
+    return fields;
+  }
+
   /** Throws unless every line was read. */
   end(): void {
     const line = this.lines[this.at];
     if (line) throw new SerializerError(`${this.magic} line ${line.number}: "${line.name}" left unread`);
   }
+}
+
+/** Any text resource, read whole without its schema: its magic and its fields. */
+export function readTextTree(bytes: Uint8Array): { readonly magic: string; readonly fields: readonly TextField[] } {
+  const t = new TextResource(bytes);
+  const fields = t.tree();
+  t.end();
+  return { magic: t.magic, fields };
 }
