@@ -184,6 +184,15 @@ export function readPhysicsTweak(s: Serializer): PhysicsTweakPart {
   if (vita >= 0x1f) followType = s.i32();
   if (vita >= 0x4b) followerDeceleration = s.f32();
   if (vita >= 0x55) playerFilter = s.u8();
+  // Two blocks cwlib writes as constants and this reader lacked: nine `s32`s
+  // from subVersion 0x1 and a float and two bytes from 0x5, both gone at 0x17
+  // (`PPhysicsTweak.java` at `d6a2ef8`). No file read here sits between.
+  if (subVersion >= 0x1 && subVersion < 0x17) for (let i = 0; i < 9; i += 1) s.s32();
+  if (subVersion >= 0x5 && subVersion < 0x17) {
+    s.f32();
+    s.u8();
+    s.u8();
+  }
   if (configuration === 0xe && version > 0x3e3) {
     s.f32();
     s.i32();

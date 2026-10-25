@@ -20,17 +20,27 @@ whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` wit
 
 ## Thing parts: fields walked and not returned
 
-Since 0.4.49 every field cwlib names in a part is returned, under its name, in the part's interface
-in `src/things/parts/` — the structures inside too (`NpcBehavior`, `Poppet`, `WhipSim`,
-`SwitchOutput`, `ContactCache`, `EyetoyData`…). Left:
+Every field cwlib names in a part, at a revision this library reads, is returned under its name in
+the part's interface in `src/things/parts/` — the structures inside too (`NpcBehavior`, `Poppet`,
+`WhipSim`, `SwitchOutput`, `ContactCache`, `EyetoyData`…). ⚠️ 0.4.49 said so and was wrong: on
+2026-10-25 every read that kept no value was matched against its class at `d6a2ef8`, and 12 were
+named and reachable at `0x3b7` and up — `PShape`'s `colorOff`, `lethalType`, `playerNumberColor`
+and `flags`, `PCheckpoint`'s `activeFlags`, `unk1` and `unk2`, `EmittedObjectSource`'s `f0`–`f5`
+and `b0`, the Vita's `PSwitch.cursorScreenArea` and `PGeneratedMesh.textureScale`; returned since
+0.4.57. The same pass found `PPhysicsTweak` lacking two blocks cwlib reads at subVersions
+`0x1`–`0x16` (level-files.md, *Ported from Java, proven on no file*). Left:
 - **`POS`'s bone** (`thingOfWhichIAmABone`, `animHash`): `readPos` returns the world matrix alone,
   as every renderer reads it, and changing that changes every caller.
 - **Fields only below the revision bound** (`0x3b7`, *Revisions*): `PSwitch`'s `connectorPos`,
-  `connectorGrabbed` and `stickerPlan`, `PMaterialTweak`'s old `colorIndex`, `PShape`'s
-  `lethalType` as an enum32, the old switches' single-output activation.
-- **Reads with no name here**: 108 one-line reads in the part readers carry no name — mostly
-  revision-gated padding — and the Vita-only parts (`vita.ts`), which cwlib has no table for.
-  Whether cwlib names each of the 108 was not checked one by one.
+  `connectorGrabbed`, `looseConnectorGrabbed` and old `stickerPlan`, `PMaterialTweak`'s old
+  `colorIndex`, `PShape`'s old forms of `colorOff` (four floats), `lethalType` (an enum32),
+  `playerNumberColor` and `flags`, `PJoint`'s `tweakTargetMaxLength` and `tweakTargetMinLength` as
+  integers, the old switches' single-output activation.
+- **Reads with no name in cwlib either**: the rest of the one-line reads that keep nothing — about
+  70 reachable at `0x3b7` and up, gated on subVersions or the Vita's branch — are reads cwlib
+  writes as constants (`serializer.u8(0)`, `bool(false)`), some with a name in a comment
+  (`PPhysicsTweak`'s attractor block: `attractDistance`, `visualEffectBrightness_On`…). The
+  Vita-only parts (`vita.ts`) have no table in cwlib at all.
 
 ## Resources
 

@@ -38,6 +38,14 @@ export interface ShapePart {
   readonly grabbability?: number;
   readonly grabFilter?: number;
   readonly colorOffOpacity?: number;
+  /** The colour when off, packed ARGB as `color` is; from version 0x38a, an `i32` (cwlib `PShape.colorOff`). */
+  readonly colorOff?: number;
+  /** cwlib's `LethalType`, a `u16` from version 0x346. */
+  readonly lethalType?: number;
+  /** cwlib `PShape.playerNumberColor`, an `i8` from version 0x368. */
+  readonly playerNumberColor?: number;
+  /** cwlib's `ShapeFlags`, an `i16` from version 0x346. */
+  readonly flags?: number;
   readonly ghosty?: boolean;
   readonly partOfPowerUp?: boolean;
   readonly cameraExcluderIsSticky?: boolean;
@@ -150,6 +158,10 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
   let grabbability: number | undefined;
   let grabFilter: number | undefined;
   let colorOffOpacity: number | undefined;
+  let colorOff: number | undefined;
+  let lethalType: number | undefined;
+  let playerNumberColor: number | undefined;
+  let flags: number | undefined;
   let ghosty: boolean | undefined;
   let partOfPowerUp: boolean | undefined;
   let cameraExcluderIsSticky: boolean | undefined;
@@ -178,11 +190,11 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
   if (version >= 0x303) {
     behavior = s.i32();
     if (version < 0x38a) s.skipVector4();
-    else s.i32(); // colorOff
+    else colorOff = s.i32() >>> 0;
     brightnessOff = s.f32();
   }
   if (version <= 0x345) s.i32(); // lethalType, an enum32 here and a u16 after
-  else s.u16();
+  else lethalType = s.u16();
   if (version < 0x2b5) {
     // The flags word does not exist yet; three bools stand in for its bits.
     COLLIDABLE_GAME = s.bool();
@@ -196,11 +208,11 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
   }
   if (version >= 0x2a3) {
     if (version <= 0x367) s.i32();
-    else s.u8(); // playerNumberColor
+    else playerNumberColor = s.i8();
   }
   if (version >= 0x2b5) {
     if (version <= 0x345) s.u8();
-    else s.i16(); // flags
+    else flags = s.i16();
   }
   const contactCache = version >= 0x307 ? readContactCache(s, readers) : undefined;
   if (version >= 0x3bd) {
@@ -250,6 +262,6 @@ export function readShape(s: Serializer, readers: ReadonlyMap<string, PartReader
     oldMaterial, massDepth, COM, COLLIDABLE_POPPET, touchability, colorShininess, canCollect,
     invisibleTouch, bouncePadBehavior, zBiasVita, touchWhenInvisible, defaultClimbable,
     currentlyClimbable, headDucking, isLBP2Shape, isStatic, collidableSackboy, ethereal,
-    contactCache,
+    contactCache, colorOff, lethalType, playerNumberColor, flags,
   };
 }

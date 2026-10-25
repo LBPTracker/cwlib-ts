@@ -8,6 +8,17 @@ import { thingArray } from './common.ts';
 export interface EmittedObjectSource {
   readonly things: readonly (Thing | undefined)[];
   readonly plan?: ResourceRef;
+  /**
+   * Six floats and a byte from subVersion 0xcd, under cwlib's own placeholder
+   * names (`EmittedObjectSource.java`): nothing names what they are.
+   */
+  readonly f0?: number;
+  readonly f1?: number;
+  readonly f2?: number;
+  readonly f3?: number;
+  readonly f4?: number;
+  readonly f5?: number;
+  readonly b0?: number;
 }
 
 /** `PEmitter`, kept: what it emits, how often, how many and where. */
@@ -60,11 +71,8 @@ import { readSwitchSignal, type SwitchSignal } from './switch.ts';
 function readEmittedObjectSource(s: Serializer, readers: ReadonlyMap<string, PartReader>): EmittedObjectSource {
   const things = thingArray(s, readers);
   const plan = s.resource();
-  if (s.revision.subVersion > 0xcc) {
-    for (let i = 0; i < 6; i += 1) s.f32();
-    s.u8();
-  }
-  return { things, plan };
+  if (s.revision.subVersion <= 0xcc) return { things, plan };
+  return { things, plan, f0: s.f32(), f1: s.f32(), f2: s.f32(), f3: s.f32(), f4: s.f32(), f5: s.f32(), b0: s.i8() };
 }
 
 /**

@@ -19,6 +19,8 @@ export interface GeneratedMeshPart {
   readonly slideSteer?: number;
   readonly slideSpeed?: number;
   readonly uvMode?: number;
+  /** The Vita's, at its revision 0x76 alone (cwlib `PGeneratedMesh`). */
+  readonly textureScale?: number;
   readonly sharded?: boolean;
   readonly slideImpactDamping?: number;
 }
@@ -33,6 +35,7 @@ export interface GeneratedMeshPart {
 export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   const { version, subVersion } = s.revision;
   let uvMode: number | undefined;
+  let textureScale: number | undefined;
   let sharded: boolean | undefined;
   let slideImpactDamping: number | undefined;
   let textureAnimationSpeed: number | undefined;
@@ -52,7 +55,7 @@ export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   }
   const vita = vitaRevision(s.revision);
   if (vita >= 0x6b) uvMode = s.i32();
-  if (vita === 0x76) s.f32(); // textureScale, at that one revision
+  if (vita === 0x76) textureScale = s.f32();
   const noBevel = subVersion >= 0x34 ? s.bool() : false;
   if (subVersion >= 0x97) sharded = s.bool();
   const includeSides = subVersion >= 0x13d ? s.bool() : true;
@@ -63,7 +66,7 @@ export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   }
   return {
     gfxMaterial, bevel, uvOffset, planGUID, visibilityFlags, noBevel, includeSides,
-    textureAnimationSpeed, textureAnimationSpeedOff, slideSteer, slideSpeed, uvMode, sharded,
+    textureAnimationSpeed, textureAnimationSpeedOff, slideSteer, slideSpeed, uvMode, textureScale, sharded,
     slideImpactDamping,
   };
 }

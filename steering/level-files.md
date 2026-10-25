@@ -2057,6 +2057,9 @@ the first real file through one is its first test.
 - `readLegacyMod` (`src/archives/legacy-mod.ts`): the one-file `MODb`/`MODe`, AES-CBC under
   Java's fixed password for `MODe`; read into what `readMod` returns.
 - `readDlcBinary` (`src/resources/dlc.ts`): `RDLC`'s binary form, `DLCb`.
+- `PPhysicsTweak`'s two blocks at subVersions `0x1`–`0x16` (`physics-tweak.ts`): nine `s32`s from
+  `0x1`, a float and two bytes from `0x5`, which cwlib writes as constants. No file read here sits
+  between: every level, plan and chunk still reads to its last byte with them.
 - `readGuidSubstCsv` (`src/resources/guid-subst.ts`): `RGuidSubst.fromCSV`, the `from,to` text the
   toolkit ships; a row whose GUID does not parse is dropped (row 50).
 - `readTranslationTable` on the old text layout: a UTF-16 file of tag and text lines.

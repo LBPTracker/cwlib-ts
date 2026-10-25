@@ -137,6 +137,8 @@ export interface SwitchPart {
   readonly playSwitchAudio?: boolean;
   readonly switchTouchType?: number;
   readonly cursorInteractionType?: number;
+  /** The Vita's: a `u32` cut to a byte below its revision 0x2c, an `i8` from it (cwlib `PSwitch`). */
+  readonly cursorScreenArea?: number;
   readonly cursorTouchPanels?: number;
   readonly cursorTouchIndex?: number;
   readonly flags?: number;
@@ -190,6 +192,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   let playSwitchAudio: boolean | undefined;
   let switchTouchType: number | undefined;
   let cursorInteractionType: number | undefined;
+  let cursorScreenArea: number | undefined;
   let cursorTouchPanels: number | undefined;
   let cursorTouchIndex: number | undefined;
   let flags: number | undefined;
@@ -369,8 +372,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (vita >= 0) {
     if (vita >= 0x1) switchTouchType = s.i32();
     if (vita >= 0x6 && vita < 0x36) s.u8();
-    if (vita >= 0x9 && vita < 0x2c) s.u32(); // cursorScreenArea, wide
-    else if (vita >= 0x2c) s.u8(); // cursorScreenArea
+    if (vita >= 0x9 && vita < 0x2c) cursorScreenArea = (s.u32() << 24) >> 24;
+    else if (vita >= 0x2c) cursorScreenArea = s.i8();
     if (vita >= 0xb) cursorInteractionType = s.u8();
     if (vita >= 0xc) cursorTouchPanels = s.u8();
     if (vita >= 0x23) cursorTouchIndex = s.u8();
@@ -431,7 +434,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     bulletPlayerNumber, bulletRefreshTime, resetWhenFull, hideConnectors, logicType, updateFrame,
     includeRigidConnectors, timerAutoCount, teamFilter, keySensorMode, bulletTypes,
     detectUnspawnedPlayers, unspawnedBehavior, playSwitchAudio, switchTouchType,
-    cursorInteractionType, cursorTouchPanels, cursorTouchIndex, flags, outputAndOr,
+    cursorInteractionType, cursorScreenArea, cursorTouchPanels, cursorTouchIndex, flags, outputAndOr,
     includeSameChipTags, playerFilter, playerMode, relativeToSequencer, layerRange, isLbp3Switch,
     randomNonRepeating, stickerSwitchMode, outputPorts, labelName, analogue, ternary, glowColours, creatorID, behavior,
   };

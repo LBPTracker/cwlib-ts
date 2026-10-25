@@ -6,6 +6,11 @@ import { thingArray } from './common.ts';
 
 /** `PCheckpoint`, kept: what kind of spawn point, how many lives, and its name. */
 export interface CheckpointPart {
+  /** cwlib `PCheckpoint.activeFlags`: an `i8` above subVersion 0x101, else a bool read as 0xf or 0. */
+  readonly activeFlags: number;
+  /** cwlib's placeholder names: an `i32` from subVersion 0xe4 and a `wstr` from 0xd1. */
+  readonly unk1?: number;
+  readonly unk2?: string;
   /** -1 where the revision has none; an infinite checkpoint has `instanceInfiniteSpawns`. */
   readonly spawnsLeft: number;
   readonly maxSpawnsLeft: number;
@@ -41,8 +46,7 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
   let persistLives: boolean | undefined;
   let creatureToChangeBackTo: number | undefined;
   let changeBackGate: boolean | undefined;
-  if (subVersion > 0x101) s.u8();
-  else s.bool(); // activeFlags
+  const activeFlags = subVersion > 0x101 ? s.i8() : s.bool() ? 0xf : 0;
   const activationFrame = s.i32();
   const spawnsLeft = version >= 0x1a7 ? s.s32() : -1;
   const maxSpawnsLeft = version >= 0x1c6 ? s.s32() : -1;
@@ -65,8 +69,8 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
   const linkVisibleOnPlanet = subVersion >= 0xd5 ? s.bool() : false;
   if (subVersion >= 0x108 && subVersion < 0x129) s.u8();
   const name = subVersion >= 0xcb ? s.wstr() : '';
-  if (subVersion >= 0xe4) s.i32();
-  if (subVersion >= 0xd1) s.wstr();
+  const unk1 = subVersion >= 0xe4 ? s.i32() : undefined;
+  const unk2 = subVersion >= 0xd1 ? s.wstr() : undefined;
   let checkpointType = 0;
   let teamFlags = 0;
   if (subVersion >= 0x101) {
@@ -84,6 +88,6 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
     spawnsLeft, maxSpawnsLeft, instanceInfiniteSpawns, spawningList, spawningDelay, lifeMultiplier,
     creatureToSpawnAs, isStartPoint, linkVisibleOnPlanet, name, checkpointType, teamFlags,
   activationFrame, creatureToChangeBackTo, changeBackGate,
-    teamFilter, persistPoint, enableAudio, continueMusic, persistLives,
+    teamFilter, persistPoint, enableAudio, continueMusic, persistLives, activeFlags, unk1, unk2,
   };
 }
