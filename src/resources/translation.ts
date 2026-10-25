@@ -42,15 +42,31 @@ export function lamsKeyId(tag: string): number {
 export type TranslationTable = ReadonlyMap<number, string>;
 
 /**
- * Read a `.trans`. Throws on cwlib's older text layout (a UTF-16 file of tag and
- * text lines), which no file of the game's is, and on a table whose strings do
- * not tile its string block exactly.
+ * cwlib's older text layout (`RTranslationTable(byte[])`, ennuo/toolkit
+ * `d6a2ef8`): UTF-16 behind a big-endian BOM, a tag on one line and its text on
+ * the next, an empty line where a tag would be skipped. ⚠️ **Ported from Java and
+ * proven on no file**: the game holds none (steering/java-parity.md).
+ */
+function readTextTable(bytes: Uint8Array): TranslationTable {
+  const lines = new TextDecoder('utf-16be').decode(bytes).split(/\r\n|\r|\n/);
+  const table = new Map<number, string>();
+  for (let i = 0; i < lines.length; i += 1) {
+    const tag = lines[i];
+    if (tag === '' || i + 1 >= lines.length) continue;
+    table.set(lamsKeyId(tag), lines[i + 1]);
+    i += 1;
+  }
+  return table;
+}
+
+/**
+ * Read a `.trans`: the game's binary layout, or cwlib's older text one
+ * (`readTextTable`, unproven). Throws on a binary table whose strings do not
+ * tile its string block exactly.
  */
 export function readTranslationTable(bytes: Uint8Array): TranslationTable {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length >= 2 && view.getUint16(0) === BOM) {
-    throw new SerializerError('a text translation table: not read, the game has none');
-  }
+  if (bytes.length >= 2 && view.getUint16(0) === BOM) return readTextTable(bytes);
   if (bytes.length < 4) throw new SerializerError(`a translation table of ${bytes.length} bytes`);
   const count = view.getUint32(0);
   const strings = 4 + count * 8;

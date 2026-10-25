@@ -33,3 +33,30 @@ export function readGuidSubst(bytes: Uint8Array): GuidSubstitution[] {
   t.end();
   return substitutions;
 }
+
+/** cwlib's `Strings.getGUID`: decimal, `0x` hex, either behind a `g`; undefined where it is none. */
+function parseGuid(text: string): number | undefined {
+  let t = text.replace(/\s/g, '');
+  if (t.startsWith('g')) t = t.slice(1);
+  const value = /^0x/i.test(t) ? Number.parseInt(t.slice(2), 16) : /^-?\d+$/.test(t) ? Number(t) : Number.NaN;
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * cwlib's other GUID substitution, `RGuidSubst.fromCSV` (ennuo/toolkit
+ * `d6a2ef8`): a text of `from,to` lines, whitespace dropped, empty lines and
+ * `#` comments skipped -- the form its toolkit ships (`poppet_lbp1.txt`,
+ * `gmat_lbp1.txt`, LBP2 GUIDs to LBP1's). A GUID that does not parse is taken
+ * as Java takes it, as nothing, and its row dropped. ⚠️ **Ported from Java and
+ * proven on no file**: the game ships `GSBt` only.
+ */
+export function readGuidSubstCsv(text: string): GuidSubstitution[] {
+  const out: GuidSubstitution[] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s/g, '');
+    if (line === '' || line.startsWith('#')) continue;
+    const [from, to] = line.split(',').map(parseGuid);
+    if (from !== undefined && to !== undefined) out.push({ from, to });
+  }
+  return out;
+}

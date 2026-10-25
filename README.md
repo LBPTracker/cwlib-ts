@@ -29,6 +29,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `gather.ts` | everything a resource needs: its dependency tables walked through a resolver the caller injects |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily, and written), its FileDB (GUID → path, SHA-1; read and written) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
+| `legacy-mod.ts`, `big-save.ts` | the one-file `MODb`/`MODe` mod, and a save rooted at an `RBigProfile` listed by path — ported from Java, proven on no file |
 | `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages (with their icon and translation patches), a stored/deflated ZIP reader and writer, `PARAM.SFO` |
 | **`things/`** | |
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
@@ -58,6 +59,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `adventure-shared-data.ts` | the adventure shared data (`ADSb`): one `AdventureData` — the adventure's items, quests and start points |
 | `animated-texture.ts`, `guid-list.ts`, `voip-recording.ts` | `ATXb` (a flipbook: its atlas and frame size), `GLTb` (a list of GUIDs), `VOPb` (a recorded voice, as bytes) |
 | `music-settings.ts` | `MUSt`: interactive music settings, a track's stems and how they fade (the 01.28 update's) |
+| `big-profile.ts`, `local-profile.ts` | `RBigProfile` (`BPRb`) and `RLocalProfile` (`IPRb`): a save's inventory and slots, a player's settings and history — ported from Java, proven on no file |
 | `tutorials.ts` | `RTutorials` (`TUTb`): the tutorial videos by group, each with its title, description and thumbnail |
 | `thing-recording.ts` | `RThingRecording` (`RECb`): a Thing's recorded path, per frame a position, an angle and a flag, as the game's loader reads it — the newest packed into a bit stream, decoded |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash; read and written |

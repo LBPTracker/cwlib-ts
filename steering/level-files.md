@@ -1927,6 +1927,34 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 `test/resource.test.ts` and its siblings read `LBP_LEVELS` and **skip** when it is
 absent, so the suite passes on a machine without the game.
 
+## Ported from Java, proven on no file
+
+❗ **These readers are cwlib's reading (ennuo/toolkit `d6a2ef8`) transcribed, and nothing here has
+measured them**: neither the 01.00 install, its 01.28 update nor the saves on this machine hold a
+file of their kind (a census of the FARCs and the saves by magic, 2026-10-25), and the project's
+owner asked for them so (2026-10-25). A fact any of them states is Java's claim, not this file's;
+the first real file through one is its first test.
+
+- `readBigProfile` (`src/resources/big-profile.ts`): `RBigProfile`, `BPRb` — the inventory, the
+  Vita's cross-dependency hashes, creator data labels, the string table, the moon's slots, the
+  Vita's challenges, treasures, downloaded slots and planet decorations.
+- `readLocalProfile` (`src/resources/local-profile.ts`): `RLocalProfile`, `IPRb` — every field of
+  cwlib's, with its structs (`PlayerMetrics`, `PinsAwarded`, `PlayerDataLabels`, the inventory
+  collections and views…); below version `0x187` nothing, as Java.
+- `readBigSave` (`src/archives/big-save.ts`) with `readSaveKey` and `decryptSaveArchive`
+  (`savearchive.ts`): cwlib's `BigSave`, a save rooted at an `RBigProfile` listed by path.
+  `readSaveKey`'s head and branch are the words `writeFar` writes and `readBackup` has read; its
+  root type and hash are Java's. An inventory plan is named by its magic, where Java names it by
+  its object type — row 49 of *Where we deliberately differ*.
+- `readLegacyMod` (`src/archives/legacy-mod.ts`): the one-file `MODb`/`MODe`, AES-CBC under
+  Java's fixed password for `MODe`; read into what `readMod` returns.
+- `readDlcBinary` (`src/resources/dlc.ts`): `RDLC`'s binary form, `DLCb`.
+- `readGuidSubstCsv` (`src/resources/guid-subst.ts`): `RGuidSubst.fromCSV`, the `from,to` text the
+  toolkit ships; a row whose GUID does not parse is dropped (row 50).
+- `readTranslationTable` on the old text layout: a UTF-16 file of tag and text lines.
+- `readAdventureCreateProfile` below subVersion `0x140` (the inline `AdventureData`), and
+  `PlayedLevelData`'s Vita fields (`D1_DEFERRED_PLAYS`, `D1_UPLOADED_HIGH_SCORE`, `D1_TROPHIES`).
+
 ## The reader's version bound — `LBP3_MIN_VERSION = 0x3b7`
 
 `src/io/serializer.ts` refuses anything older. Two measurements put it at `0x3b7`

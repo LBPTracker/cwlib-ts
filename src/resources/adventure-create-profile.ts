@@ -12,7 +12,7 @@
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
 import { readSlot, readSlotId, type Slot, type SlotId } from '../structs/slot.ts';
-import { installWorldReader } from '../things/level.ts';
+import { installWorldReader, readAdventureData, type AdventureData } from '../things/level.ts';
 import { partReaders } from '../things/parts.ts';
 import { readThingRef, type PartReader, type Thing } from '../things/thing.ts';
 
@@ -38,6 +38,12 @@ export interface AdventureCreateProfile {
   readonly areas: readonly PlanetArea[];
   /** The `ADSb` beside it, from subVersion 0x140. */
   readonly sharedData?: ResourceRef;
+  /**
+   * Below subVersion 0x140 the shared data is inline instead, cwlib's
+   * `AdventureData`. ⚠️ Ported from Java, proven on no file: the game's three
+   * are past it.
+   */
+  readonly inlineSharedData?: AdventureData;
   /** Each slot's photo plans, from subVersion 0x175. */
   readonly photos: readonly { readonly id: SlotId; readonly photos: readonly (ResourceRef | undefined)[] }[];
   readonly startLevel?: SlotId;
@@ -71,43 +77,74 @@ function readPlanetArea(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   return { areaId, area, mainArea, shadowArea, ambienceTrack, ambienceVolume };
 }
 
-/** `PlayedLevelData`: cwlib's `structs/profile/PlayedLevelData.java`, walked. */
-function readPlayedLevelData(s: Serializer): void {
+/** `PlayedLevelData`: cwlib's `structs/profile/PlayedLevelData.java`, a level's play record. */
+export interface PlayedLevelData {
+  readonly slotId: SlotId;
+  readonly lastPlayedTimestamp?: bigint;
+  readonly localHighScore?: readonly number[];
+  readonly playCount: number;
+  readonly completionCount: number;
+  readonly acedCount: number;
+  /** `CollectableData`: a plan and where it came from. */
+  readonly collectables?: readonly { readonly plan?: ResourceRef; readonly source: number }[];
+  readonly videos?: readonly number[];
+  readonly linkedLevels?: readonly SlotId[];
+  readonly subLevels?: readonly SlotId[];
+  readonly levelHash?: Uint8Array;
+  readonly flags?: number;
+  /** The Vita's, from its revisions 0x5c, 0x61 and 0x72. ⚠️ Ported from Java, proven on no file. */
+  readonly deferredPlayCount?: number;
+  readonly deferredPlayCountUploaded?: number;
+  readonly uploadedLocalHighScore?: readonly number[];
+  readonly goldTrophyCount?: number;
+  readonly silverTrophyCount?: number;
+  readonly bronzeTrophyCount?: number;
+  readonly bestTime?: number;
+  readonly multiplayerCompletionCount?: number;
+}
+
+export function readPlayedLevelData(s: Serializer): PlayedLevelData {
   const { version, subVersion } = s.revision;
-  readSlotId(s);
-  if (version > 0x1fd) s.s64Big(); // lastPlayedTimestamp
-  if (version > 0x200) s.array((self) => self.i32()); // localHighScore
+  const out: { -readonly [K in keyof PlayedLevelData]: PlayedLevelData[K] } = {
+    slotId: readSlotId(s), playCount: 0, completionCount: 0, acedCount: 0,
+  };
+  if (version > 0x1fd) out.lastPlayedTimestamp = s.s64Big();
+  if (version > 0x200) out.localHighScore = s.array((self) => self.i32());
   if (version > 0x268 && version < 0x399) {
-    s.bool(); // discovered
-    s.bool(); // unlocked
+    s.bool(); // discovered, which cwlib drops
+    s.bool(); // unlocked, likewise
   }
-  if (version < 0x269) {
-    for (let i = 0; i < 3; i += 1) s.i32(); // play, completion and aced counts
-  } else {
-    for (let i = 0; i < 3; i += 1) s.i16();
-  }
-  if (version > 0x1c1) {
-    s.array((self) => {
-      // CollectableData
-      self.resource(true); // plan
-      self.s32(); // source
-    });
-  }
-  if (version > 0x1e3 && subVersion < 0x106) s.array((self) => self.i32()); // videos
+  const count = (): number => (version < 0x269 ? s.i32() : s.i16());
+  out.playCount = count();
+  out.completionCount = count();
+  out.acedCount = count();
+  if (version > 0x1c1) out.collectables = s.array((self) => ({ plan: self.resource(true), source: self.s32() }));
+  if (version > 0x1e3 && subVersion < 0x106) out.videos = s.array((self) => self.i32());
   if (version > 0x363) {
-    s.array(readSlotId); // linkedLevels
-    s.array(readSlotId); // subLevels
+    out.linkedLevels = s.array(readSlotId);
+    out.subLevels = s.array(readSlotId);
   }
-  if (version > 0x265) s.sha1(); // levelHash
-  if (version > 0x265 && version < 0x399) s.bool(); // levelHasDLC
-  if (version > 0x398) s.i16(); // flags
-  if (vitaRevision(s.revision) >= 0) {
-    throw new SerializerError('PlayedLevelData on the Vita\'s branch is not ported');
+  if (version > 0x265) out.levelHash = s.sha1();
+  if (version > 0x265 && version < 0x399) s.bool(); // levelHasDLC, which cwlib drops
+  if (version > 0x398) out.flags = s.i16();
+  // The Vita's fields, cwlib's `D1_DEFERRED_PLAYS` (0x5c), `D1_UPLOADED_HIGH_SCORE`
+  // (0x61) and `D1_TROPHIES` (0x72). ⚠️ Ported from Java, proven on no file.
+  const vita = vitaRevision(s.revision);
+  if (vita >= 0x5c) {
+    out.deferredPlayCount = s.i16();
+    out.deferredPlayCountUploaded = s.i16();
+    if (vita >= 0x61) out.uploadedLocalHighScore = s.array((self) => self.i32());
+    if (vita >= 0x72) {
+      out.goldTrophyCount = s.i16();
+      out.silverTrophyCount = s.i16();
+      out.bronzeTrophyCount = s.i16();
+    }
   }
   if (subVersion >= 0x1ad) {
-    s.i32(); // bestTime
-    s.i16(); // multiplayerCompletionCount
+    out.bestTime = s.i32();
+    out.multiplayerCompletionCount = s.i16();
   }
+  return out;
 }
 
 /** Read an `ADCb`. Throws on anything else, and unless the walk ends on the payload's last byte. */
@@ -131,8 +168,13 @@ export async function readAdventureCreateProfile(bytes: Uint8Array, inflate: Inf
   const links = subVersion > 0xd4 ? s.array((self) => ({ from: readSlotId(self), to: readSlotId(self) })) : [];
   const areas = subVersion > 0x109 ? s.array((self) => readPlanetArea(self, readers)) : [];
   if (subVersion > 0x11b) s.array(readPlayedLevelData); // startingPlayedLevelData
-  if (subVersion < 0x140) throw new SerializerError('an adventure create profile with inline AdventureData: not ported');
-  const sharedData = s.resource(true);
+  // ❗ Below subVersion 0x140 the shared data is inline; cwlib reads it there, and
+  // refuses 0xee..0xf0 ("legacy adventure data not supported"), as this does.
+  if (subVersion >= 0xee && subVersion < 0xf1) {
+    throw new SerializerError('an adventure create profile with legacy adventure data: cwlib does not read it either');
+  }
+  const inlineSharedData = subVersion < 0x140 ? readAdventureData(s) : undefined;
+  const sharedData = subVersion < 0x140 ? undefined : s.resource(true);
   const photos = subVersion > 0x174
     ? s.array((self) => {
       const id = readSlotId(self);
@@ -146,5 +188,5 @@ export async function readAdventureCreateProfile(bytes: Uint8Array, inflate: Inf
   if (s.remaining !== 0) {
     throw new SerializerError(`ADCb read ended ${s.remaining} bytes before the end of its payload`);
   }
-  return { revision, slots, adventureId, planetWorld, links, areas, sharedData, photos, startLevel };
+  return { revision, slots, adventureId, planetWorld, links, areas, sharedData, inlineSharedData, photos, startLevel };
 }

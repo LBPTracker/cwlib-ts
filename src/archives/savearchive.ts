@@ -143,6 +143,11 @@ export function saveArchiveRevision(bytes: Uint8Array): number | undefined {
 export async function readSaveArchive(
   chunks: readonly Uint8Array[],
 ): Promise<SaveResource[]> {
+  return readFar(decryptSaveArchive(chunks));
+}
+
+/** A save archive's chunks decrypted into the one archive in the clear, for `readFar` and `readSaveKey`. */
+export function decryptSaveArchive(chunks: readonly Uint8Array[]): Uint8Array {
   if (chunks.length === 0) throw new Error('no chunks');
   const last = chunks[chunks.length - 1];
   const revision = saveArchiveRevision(last);
@@ -160,8 +165,62 @@ export async function readSaveArchive(
     crypt(copy, chunk.length - (at + chunk.length === size ? 4 : 0), true);
     at += chunk.length;
   }
+  return archive;
+}
 
-  return readFar(archive);
+/** What a save archive's key says: the game's revision, and the resource the save is rooted at. */
+export interface SaveKey {
+  /** The head word, and from `FAR4` the branch word. */
+  readonly head: number;
+  readonly branch?: number;
+  readonly localUserID: number;
+  readonly copied: boolean;
+  /** cwlib's `ResourceType` number: 28 an `RBigProfile`, 23 an `RSyncedProfile`… */
+  readonly rootType: number;
+  /** Lower-case hex. */
+  readonly rootHash: string;
+  /** Little-endian, as a PS4 or Vita save is. */
+  readonly littleEndian: boolean;
+}
+
+/**
+ * A save archive's key, in the clear: cwlib's `SaveArchive` reading of it
+ * (ennuo/toolkit `d6a2ef8`) -- `0x80` bytes before the table, 4 more from `FAR4`
+ * (the branch), `8 + 4 × fragments` more on the Vita's `FAR5`; little-endian
+ * when its ninth byte is set (a PS4 user ID) or on the Vita. ⚠️ Ported from
+ * Java: the head and branch are what `writeFar` writes and `readBackup` has
+ * read, the root fields proven on no file here.
+ */
+export function readSaveKey(archive: Uint8Array): SaveKey {
+  const revision = saveArchiveRevision(archive);
+  if (revision === undefined) throw new Error('not a save archive: no FAR magic at the end');
+  const size = archive.length;
+  const big = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  const fragments = revision === 5 ? big.getUint32(size - 0xc, true) : 0;
+  const count = big.getUint32(size - 8, false);
+  let fat = size - 8 - count * 0x1c;
+  if (revision > 2) fat -= 0x14;
+  if (revision === 5) fat -= 4;
+  const keySize = 0x80 + (revision > 3 ? 4 : 0) + (revision === 5 ? 8 + 4 * fragments : 0);
+  const at = fat - keySize;
+  if (at < 0) throw new Error('save archive too short for its key');
+  const littleEndian = revision === 5 || archive[at + 8] !== 0;
+  let p = at;
+  const i32 = (): number => {
+    const v = big.getUint32(p, littleEndian);
+    p += 4;
+    return v;
+  };
+  const head = i32();
+  const branch = revision > 3 ? i32() : undefined;
+  if (revision === 5) p += 8 + 4 * fragments; // ID, backupID, the fragment IDs
+  const localUserID = i32();
+  p += 4 * 10; // deprecated1
+  const copied = i32() !== 0;
+  const rootType = i32();
+  p += 4 * 3; // deprecated2
+  const rootHash = toHex(archive.subarray(p, p + 20));
+  return { head, ...(branch === undefined ? {} : { branch }), localUserID, copied, rootType, rootHash, littleEndian };
 }
 
 /**

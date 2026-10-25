@@ -19,8 +19,9 @@
  * a mod handed to `readBackup` as a pile would fail every SHA-1. `readBackupZip`
  * asks `looksLikeMod` first.
  *
- * ⚠️ Only the zip format is read. The legacy single-file `MODb`/`MODe` that
- * `Mod.fromLegacyMod` still opens is not.
+ * ⚠️ Only the zip format is read here. The legacy single-file `MODb`/`MODe`
+ * that `Mod.fromLegacyMod` still opens is `readLegacyMod` in `legacy-mod.ts`,
+ * ported from Java and proven on no file.
  */
 
 import { toHex } from '../io/hex.ts';

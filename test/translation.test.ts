@@ -29,7 +29,8 @@ test('lamsKeyId hashes a tag as the game keys its text', () => {
 
 test('a translation table with no keys is empty', () => {
   assert.equal(readTranslationTable(new Uint8Array(4)).size, 0);
-  assert.throws(() => readTranslationTable(new Uint8Array([0xfe, 0xff, 0, 0x41])), /text translation table/);
+  // cwlib's older text layout, as Java reads it: a tag line, its text line, UTF-16BE behind a BOM.
+  assert.deepEqual([...readTranslationTable(Uint8Array.of(0xfe, 0xff, 0, 0x41, 0, 0x0a, 0, 0x42))], [[lamsKeyId('A'), 'B']]);
 });
 
 test('a table is written back with its texts shared, and a patch replaces and adds', () => {

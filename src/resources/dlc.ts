@@ -23,7 +23,8 @@
  * ```
  */
 
-import { SerializerError } from '../io/serializer.ts';
+import { openSerializer, type Inflate } from '../io/resource.ts';
+import { SerializerError, vitaRevision } from '../io/serializer.ts';
 import { TextResource } from '../io/text-resource.ts';
 
 export interface DlcGuid {
@@ -71,5 +72,37 @@ export function readDlc(bytes: Uint8Array): Dlc {
     typeMask: t.int(2, 'TypeMask'),
   }));
   t.end();
+  return { guids, files };
+}
+
+/**
+ * Read an `RDLC` in its binary form (`DLCb`, a resource container): cwlib's
+ * `RDLC.serialize`, `DLCGUID` and `DLCFile` (ennuo/toolkit `d6a2ef8`) -- the
+ * GUIDs with their flags, then the files: directory, file, content ID, commerce
+ * ID, category ID (version `0x264` on), flags, `nonPlanGuids` (subVersion above
+ * `0x20c`; before the GUIDs here, after them in the text form), the GUIDs, and
+ * `typeMask` on the Vita's branch from its revision `0x85`. ⚠️ **Ported from Java
+ * and proven on no file**: the game ships only the text form
+ * (steering/java-parity.md).
+ */
+export async function readDlcBinary(bytes: Uint8Array, inflate: Inflate): Promise<Dlc> {
+  const { revision, s } = await openSerializer(bytes, inflate);
+  const guids = s.array((x) => ({ guid: x.guid(), flags: x.i32() }));
+  const files = s.array((x): DlcFile => {
+    const directory = x.str();
+    const file = x.str();
+    const contentId = x.str();
+    const inGameCommerceId = x.str();
+    const categoryId = revision.version >= 0x264 ? x.str() : '';
+    const flags = x.i32();
+    const nonPlanGuids = revision.subVersion > 0x20c ? x.intVector() : undefined;
+    const fileGuids = x.intVector();
+    const typeMask = vitaRevision(revision) >= 0x85 ? x.i32() : 0;
+    return {
+      directory, file, contentId, inGameCommerceId, categoryId, flags, guids: fileGuids, typeMask,
+      ...(nonPlanGuids ? { nonPlanGuids } : {}),
+    };
+  });
+  if (s.remaining !== 0) throw new SerializerError(`DLCb read ended ${s.remaining} bytes before the end of its payload`);
   return { guids, files };
 }
