@@ -775,6 +775,14 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
   is not. `test/mesh.test.ts` pins `ascetic.lvl`'s 104.
 - `visibilityFlags`: 3 on 11,937, 2 on 1,073, 0 on 23 — cwlib's bit 0 play mode, bit 1 edit mode.
 
+### Written as OBJ — `meshToObj` in `src/resources/mesh-obj.ts`
+
+cwlib's `MeshExporter.OBJ.export` (ennuo/toolkit `d6a2ef8`): the bind pose's `v` and `vn`, one UV
+channel's `vt` with `v` turned over, each primitive's triangles as `f`, 1-based.
+`test/mesh-obj.test.ts` reads `sack_boy.mol`'s back: every vertex, every triangle of every
+distinct run, every index in range. A repeated run is written once, and a primitive opens with
+`usemtl` when the caller names its material — row 42 of *Where we deliberately differ*.
+
 ### Written as glTF — `meshToGlb` in `src/resources/mesh-gltf.ts`
 
 cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `d6a2ef8`): one glTF mesh per primitive

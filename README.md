@@ -36,6 +36,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents (and their handedness from the UVs, `uvHandedness`), the softbody weight, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
+| `mesh-obj.ts` | an `RMesh` written as Wavefront OBJ |
 | `mesh-gltf.ts`, `gltf-material.ts` | an `RMesh` written as a binary glTF: geometry, skin and morphs, its materials with their textures as PNG |
 | `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
 | `physics-material.ts` | `RMaterial` (`MATb`): a shape's physics — density, friction, bounce, its sound family, what it collides with, whether it breaks |
