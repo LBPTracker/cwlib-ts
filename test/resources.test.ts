@@ -96,6 +96,8 @@ test('palettes, outfit lists, joints, pins, the costume index, slot lists, packs
   assert.equal(blueprint.objectives[0].key, blueprint.key);
   const allStars = quest('/bunkum_all_stars_quest.qst');
   const guidPath = new Map([...db.values()].map((r) => [r.guid, r.path]));
-  assert.equal(guidPath.get(allStars.prize.resource!.guid), 'gamedata/lbp3/character/palettes/cos_newton_low_poly.plan');
+  assert.equal(guidPath.get(allStars.prizes[1]!.guid), 'gamedata/lbp3/character/palettes/cos_newton_low_poly.plan');
   assert.deepEqual(quest('/bunkum_relics.qst').completedInLevels.map((slot) => slot.type), [11, 11, 11, 11]);
+  // Three prizes and three icons in every quest, the game's loader's arrays; only the middle one set.
+  for (const [, q] of quests) assert.deepEqual([q.prizes.length, q.prizeIcons.length, !!q.prizes[0], !!q.prizes[2]], [3, 3, false, false]);
 });

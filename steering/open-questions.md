@@ -2,7 +2,7 @@
 
 Read before planning a work session on the reader or the writer. Nothing here blocks reading a
 level or writing a plan: what is left is three things about the chip tint only Create Mode can
-answer, one loose end from the export, what a quest's unnamed fields are, and the files that
+answer, one loose end from the export, what a quest objective's first field is, and the files that
 still will not open. When one gets
 resolved, move the answer into the descriptive file it belongs to and delete the entry; numbers
 are shared with lbptracker's [open-questions.md](../../lbptracker/steering/open-questions.md).
@@ -71,16 +71,12 @@ materials*); what a renderer still has to decide on its own:
   mix, blend and Thing-colour graphs need the boxes evaluated, and the box types 13–19 are cwlib's
   partial list.
 
-## 65. A quest's unnamed fields
+## 65. A quest objective's first `u16`
 
-`readQuest` reads all 25 of the game's `QSTb` to the last byte, but part of that is widths
-only ([level-files.md](level-files.md), *Quests*): the two integers before each prize (0 and 3
-everywhere), an objective's `count` (101, or values no count takes), the two extra bytes below
-subVersion `0x167`, and the one to four zero fields after the key. The game's loader for
-`RQuest` in the eboot would name their widths and branches the way `v0xdc0290` did for
-`PQuest`; nothing in the files will, while every one of them is zero or constant.
-
-The keys are settled: they are what a level's `PQuest` names (*Quests*).
+The game's loader settled every other field of `RQuest` (*Quests* in
+[level-files.md](level-files.md)). This one it reads raw and the reflective serialiser does not
+name: 101 on 13 of the game's 35 objectives, 0 on 7, and values as far as 13,352 and −15,317 on
+the rest. What reads it — the quest log, the objective UI — would say what it is.
 
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's
 
@@ -99,7 +95,8 @@ branch, into one that stands between a reader and a song. What is left:
   bits `0x27`/`0x28` have a partial reading of our own (2026-10-25): all 148 of the game's Vita
   plans and 19 of its 25 Vita levels read, the levels to their last byte. ⚠️ The other 6
   contradict the reading, and their bytes cannot say where (*The Vita branch* in
-  [level-files.md](level-files.md)); what the two parts are and their fields mean is open. Before that: one level in the saves,
+  [level-files.md](level-files.md)); what the two parts are and their fields mean is open, and
+  the PS4 eboot cannot say: it has no code for the branch. Before that: one level in the saves,
   `f331efa7`, version `0x3e2`, and nothing in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
@@ -110,9 +107,8 @@ branch, into one that stands between a reader and a song. What is left:
   and 18 levels, the 18 all Vita). Levels: 25 "the world Thing carried no WORLD
   part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above, 18 of them now; then
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
-  `sack_town.bin`. Two levels that open end one byte past `RLevel`'s last field, `pod2.bin` and
-  `sack_town.bin` at subVersions `0xe2` and `0xc8`: a field cwlib's gates do not have, where is
-  not known (*`readLevel` reads to the end* in [level-files.md](level-files.md)). In the story chunks, none since 2026-10-24: every island of the 41,741 chunks opens
+  `sack_town.bin`. Every level that opens reads to its last byte since the game's loader gave
+  `RLevel` its missing reference (*`readLevel` reads to the end* in [level-files.md](level-files.md)). In the story chunks, none since 2026-10-24: every island of the 41,741 chunks opens
   (*Streaming levels* in [level-files.md](level-files.md)). Plans: 6 since 2026-10-25 — a
   live-streaming-choice switch and five Move DLC palette plans that cwlib reads short in the same
   place (*`playerMode` at 0x3eb* in [level-files.md](level-files.md), which also has whether

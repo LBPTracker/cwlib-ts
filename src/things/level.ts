@@ -791,6 +791,19 @@ function readLevelTail(s: Serializer): void {
   }
   if (subVersion > 0x34 && subVersion < 0x91) s.bool();
   if (subVersion > 0x34 && subVersion < 0xb3) s.bool();
+  // ❗ **Three reads cwlib does not have, from the game's own loader** (`v0xc51f60` in
+  // `eboot-v128.bin`, which tests the head word: steering/level-files.md, *`readLevel`
+  // reads to the end*). Only the second is in a file here: the reference, null and one
+  // byte in `pod2.bin` (0xe2) and `sack_town.bin` (0xc8), which ended one byte early
+  // without it. What it points at -- a 0x88-byte object the loader frees at once -- is
+  // not read, so a non-null one is refused, as is the struct of the first.
+  if (subVersion >= 0x8e && subVersion <= 0xaf) {
+    throw new SerializerError(`RLevel at subVersion 0x${subVersion.toString(16)}: a struct the game reads there is not ported`);
+  }
+  if (subVersion >= 0xb0 && subVersion <= 0x125 && s.i32() !== 0) {
+    throw new SerializerError('RLevel with a non-null object at subVersion 0xb0..0x125: not ported');
+  }
+  if (subVersion === 0xf0) s.bytes(s.count()); // a buffer, as `dceUuid` is
   if (subVersion > 0x94 && subVersion < 0x12a) s.bool(); // savedThroughPusher
   if (subVersion >= 0xf1 && subVersion <= 0xf9) {
     throw new SerializerError(`legacy adventure data at subVersion 0x${subVersion.toString(16)}: cwlib does not read it either`);

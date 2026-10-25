@@ -1,30 +1,20 @@
 /**
  * `RQuest` -- a story quest: magic `QSTb`, FileDB paths `gamedata/lbp3/…/quests/….qst`.
- * Its names and texts, a prize and the prize's icon, the objectives, the
- * levels that deactivate, activate and complete it, and its key.
+ * Its names and texts, its prizes and their icons, the objectives, the levels
+ * that deactivate, activate and complete it, and its key.
  *
- * ❗ **Read off the game's own files, not off cwlib**, whose
- * `resources/RQuest.java` (ennuo/toolkit `d6a2ef8`) has an empty `serialize`
- * and a comment listing fields. That list gave the names and the order from
- * the prizes on; the five strings before them it does not have. The walk ends
- * on the payload's last byte in all 25 of the game's quests, and each field
- * below says whether its meaning is measured or only its width:
- * steering/level-files.md, *Quests* (`dev/resources-census.ts`).
+ * ❗ **Read as the game's own loader reads it: `v0xdbd490` in `eboot-v128.bin`**
+ * (an objective `v0xdbc520`, a descriptor `v0xbadab0`), every gate on the head
+ * word. cwlib's `resources/RQuest.java` (ennuo/toolkit `d6a2ef8`) has an empty
+ * `serialize`; its comment's field names are the game's own -- the eboot's
+ * reflective serialiser `v0xdbe720` names the same fields in the same order --
+ * and the five strings before them have no name there. All 25 of the game's
+ * quests read to the payload's last byte: steering/level-files.md, *Quests*.
  */
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
 import { readSlotId, type SlotId } from '../structs/slot.ts';
-
-/** A prize, or its icon: a reference after two integers. */
-export interface QuestPrize {
-  /**
-   * ⚠️ Unmeasured: 0 and 3 in all 50 of the game's prize blocks, so nothing
-   * says what either is.
-   */
-  readonly unknown: readonly [number, number];
-  readonly resource: ResourceRef | undefined;
-}
 
 export interface QuestObjective {
   /** The LAMS key or the text of the objective (`ZIGGURAT_QUEST_TODO_30`). */
@@ -32,14 +22,14 @@ export interface QuestObjective {
   /** The objective's name (`ZIG_Blueprint`); `Objective ID` where it was never set. */
   readonly id: string;
   /**
-   * ⚠️ cwlib's comment's `short count` and `short required`, the widths
-   * measured, the meaning not: `count` is 101 on 13 of 35 and as far as 13352
-   * and -15317 on others, which no count is; `required` is 0 on all 35.
+   * Two raw `u16`s and a byte, as the loader reads them. `required` and `hidden`
+   * are the eboot's names; ⚠️ the first has none there, and its values -- 101 on
+   * 13 of the game's 35, and as far as 13352 and -15317 -- are no count.
    */
   readonly count: number;
   readonly required: number;
   readonly hidden: boolean;
-  /** What a level's `PQuest` names in `objectiveKey` (`dev/quest-keys.ts`). */
+  /** What a level's `PQuest` names in `objectiveKey` (`dev/quest-keys.ts`); from subVersion 0x141. */
   readonly key: number;
 }
 
@@ -50,67 +40,58 @@ export interface Quest {
   /** LAMS keys or text: `ZIGGURAT_QUEST_TITLE_30`, `ZIGGURAT_QUEST_DESC_30`. */
   readonly title: string;
   readonly description: string;
-  /** The world it belongs to: `THEME_ZIGGURAT`, `Bunkum Lagoon`, `Uncategorised`. */
+  /** The world it belongs to (`THEME_ZIGGURAT`, `Bunkum Lagoon`, `Uncategorised`); from subVersion 0xeb. */
   readonly area: string;
-  /** `Independent!` in all 25. ⚠️ What else it can be is unmeasured. */
+  /** `Independent!` in all 25; from subVersion 0x112. */
   readonly group: string;
-  /** A costume plan where there is one: `cos_sack_boy_1.plan`. */
-  readonly prize: QuestPrize;
-  /** Its icon. ⚠️ No icon GUID of the game's is in the FileDB, so what it names is unmeasured. */
-  readonly prizeIcon: QuestPrize;
-  readonly objectives: readonly QuestObjective[];
+  /** From subVersion 0xa0; 0 in all 25. */
+  readonly state: number;
   /**
-   * ⚠️ The names from here to `key` are cwlib's comment's and fit the bytes;
-   * the bytes do not prove them. `decals` and `decorations` are the counts of
-   * two arrays empty in all 25, so their elements are not read.
+   * From subVersion 0xb5. **Three each in every one of the game's 25**, and only
+   * the middle one ever set: a costume plan where there is one
+   * (`cos_sack_boy_1.plan`), and its icon, whose GUID is not in the FileDB.
    */
+  readonly prizes: readonly (ResourceRef | undefined)[];
+  readonly prizeIcons: readonly (ResourceRef | undefined)[];
+  readonly objectives: readonly QuestObjective[];
+  /** From subVersion 0x9c. */
   readonly isPrimary: boolean;
+  /** From subVersion 0x144. */
   readonly isInvisible: boolean;
-  /** Developer adventure slots (type 11) in every one the game has. */
+  /** Developer adventure slots (type 11) in every one the game has; from 0xd0, 0x10d and 0x11e. */
   readonly deactivatedInLevels: readonly SlotId[];
   readonly activatedInLevels: readonly SlotId[];
   readonly completedInLevels: readonly SlotId[];
-  /** True in all 25. */
+  /** From subVersion 0xf6; true in all 25. */
   readonly stateUpdateViewed: boolean;
   /** ✔ What a level's `PQuest` names in `questKey`: 292 of the game's 299 non-zero ones (`dev/quest-keys.ts`). */
   readonly key: number;
-  /**
-   * ⚠️ **What follows the key, unnamed**: one integer at subVersion `0x154` and
-   * `0x167`, three at `0x177`, four from `0x1a6`, all zero in all 25. A zero
-   * reads alike as an integer, a boolean or an empty array, so only their
-   * number is measured.
-   */
-  readonly trailing: readonly number[];
+  /** From subVersion 0x141; 0 in all 25. */
+  readonly availabilityDependsUponKey: number;
 }
 
-/** The last subVersion whose objectives carry two more bytes: `0x154` has them, `0x167` does not. */
-const OBJECTIVE_EXTRA_BEFORE = 0x167;
-
-/** How many integers follow the key, per subVersion as measured; a subVersion between two takes the lower. */
-const TRAILING: readonly (readonly [number, number])[] = [[0x1a6, 4], [0x177, 3], [0, 1]];
-
-function readPrize(s: Serializer): QuestPrize {
-  return { unknown: [s.i32(), s.i32()], resource: s.resource() };
+/** An array whose elements no file here has: refused unless empty. */
+function emptyArray(s: Serializer, what: string): void {
+  const count = s.count();
+  if (count !== 0) throw new SerializerError(`a quest with ${count} ${what}: not read`);
 }
 
 function readObjective(s: Serializer): QuestObjective {
-  const text = s.wstr();
-  const id = s.wstr();
-  const count = s.i16();
-  const required = s.i16();
-  const hidden = s.bool();
-  // ⚠️ Unmeasured: one objective in the game is below 0x167 (`pp01_bridge.qst`, 0x154), and it
-  // has `00 00` here. Two bytes is all that is known, and where between 0x154 and 0x167 they go.
-  if (s.revision.subVersion < OBJECTIVE_EXTRA_BEFORE && s.i16() !== 0) {
-    throw new SerializerError('a quest objective below 0x167 with something in its two extra bytes: unmeasured');
+  const { subVersion } = s.revision;
+  const text = subVersion >= 0x9c ? s.wstr() : '';
+  const id = subVersion >= 0x9c ? s.wstr() : '';
+  if (subVersion >= 0x157 && subVersion <= 0x158) s.wstr(); // read and dropped by the game
+  const count = subVersion >= 0x9c ? s.i16() : 0;
+  const required = subVersion >= 0x9c ? s.i16() : 0;
+  const hidden = subVersion >= 0x9c ? s.bool() : false;
+  // Two bytes the game reads and drops: `pp01_bridge.qst` (0x154) has them, zero.
+  if (subVersion >= 0x9c && subVersion <= 0x161) {
+    s.u8();
+    s.u8();
   }
-  return { text, id, count, required, hidden, key: s.u32() };
-}
-
-/** An array whose elements no file has: refused unless empty. */
-function emptyArray(s: Serializer, what: string): void {
-  const count = s.count();
-  if (count !== 0) throw new SerializerError(`a quest with ${count} ${what}: unmeasured`);
+  const key = subVersion >= 0x141 ? s.u32() : 0;
+  if (subVersion >= 0x157 && subVersion <= 0x158) s.u8();
+  return { text, id, count, required, hidden, key };
 }
 
 /** Read a `QSTb`. Throws on anything else, and unless the walk ends on the payload's last byte. */
@@ -118,36 +99,45 @@ export async function readQuest(bytes: Uint8Array, inflate: Inflate): Promise<Qu
   const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'QSTb') throw new SerializerError(`not a quest: "${resource.magic}"`);
   const { subVersion } = revision;
+  const from = (sub: number, read: () => string): string => (subVersion >= sub ? read() : '');
 
-  const name = s.wstr();
-  const title = s.wstr();
-  const description = s.wstr();
-  const area = s.wstr();
-  const group = s.wstr();
-  const prize = readPrize(s);
-  const prizeIcon = readPrize(s);
-  // ⚠️ Unmeasured: an integer, 0 in all 25.
-  if (s.i32() !== 0) throw new SerializerError('a quest with something between its prizes and objectives: unmeasured');
-  const objectives = s.array(readObjective);
-  emptyArray(s, 'decals');
-  emptyArray(s, 'decorations');
-  const isPrimary = s.bool();
-  const isInvisible = s.bool();
-  const deactivatedInLevels = s.array(readSlotId);
-  const activatedInLevels = s.array(readSlotId);
-  const completedInLevels = s.array(readSlotId);
-  const stateUpdateViewed = s.bool();
-  const key = s.u32();
-  const trailing: number[] = [];
-  const count = TRAILING.find(([from]) => subVersion >= from)![1];
-  for (let i = 0; i < count; i += 1) trailing.push(s.i32());
-  if (trailing.some((v) => v !== 0)) throw new SerializerError(`a quest whose fields after the key are not zero (${trailing.join(', ')}): unmeasured`);
+  const name = from(0x9c, () => s.wstr());
+  const title = from(0x9c, () => s.wstr());
+  const description = from(0x9c, () => s.wstr());
+  const area = from(0xeb, () => s.wstr());
+  const group = from(0x112, () => s.wstr());
+  if (subVersion >= 0x157 && subVersion <= 0x158) {
+    s.wstr(); // two strings the game reads and drops
+    s.wstr();
+  }
+  const state = subVersion >= 0xa0 ? s.u32() : 0;
+  const descriptors = (): (ResourceRef | undefined)[] => (subVersion >= 0xb5 ? s.array((x) => x.resource(true)) : []);
+  const prizes = descriptors();
+  const prizeIcons = descriptors();
+  const objectives = subVersion >= 0x9c ? s.array(readObjective) : [];
+  if (subVersion >= 0xc0) emptyArray(s, 'decals');
+  if (subVersion >= 0xc2) emptyArray(s, 'decorations');
+  const isPrimary = subVersion >= 0x9c ? s.bool() : false;
+  const isInvisible = subVersion >= 0x144 ? s.bool() : false;
+  const deactivatedInLevels = subVersion >= 0xd0 ? s.array(readSlotId) : [];
+  const activatedInLevels = subVersion >= 0x10d ? s.array(readSlotId) : [];
+  const completedInLevels = subVersion >= 0x11e ? s.array(readSlotId) : [];
+  const stateUpdateViewed = subVersion >= 0xf6 ? s.bool() : false;
+  const key = subVersion >= 0x141 ? s.u32() : 0;
+  const availabilityDependsUponKey = subVersion >= 0x141 ? s.u32() : 0;
+  if (subVersion >= 0x168) {
+    emptyArray(s, 'new decorations');
+    emptyArray(s, 'new stickers');
+  }
+  if (subVersion >= 0x157 && subVersion <= 0x158) s.u8();
+  if (subVersion >= 0x17b) emptyArray(s, 'potentially completed objectives');
 
   if (s.remaining !== 0) {
     throw new SerializerError(`QSTb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return {
-    revision, name, title, description, area, group, prize, prizeIcon, objectives, isPrimary, isInvisible,
-    deactivatedInLevels, activatedInLevels, completedInLevels, stateUpdateViewed, key, trailing,
+    revision, name, title, description, area, group, state, prizes, prizeIcons, objectives, isPrimary,
+    isInvisible, deactivatedInLevels, activatedInLevels, completedInLevels, stateUpdateViewed, key,
+    availabilityDependsUponKey,
   };
 }

@@ -516,12 +516,15 @@ open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the tool
   reader read them always, and LBP3's pre-alpha `stitchem_manor.bin` (`0x130`) and the outro
   `game_outro.bin` (`0x151`) still "opened" — their worlds hold one Thing each, and the three
   integers came out of what followed. Every story level is past the gate.
-- ⚠️ **Two levels end one byte after `RLevel`'s last field**: `pod2.bin` (subVersion `0xe2`) and
-  the pre-alpha `sack_town.bin` (`0xc8`), both version `0x3e7`. The byte is zero in one and 1 in
-  the other; after `PlayerRecord` and the two empty tutorial lists come three booleans and then
-  it. No gate of cwlib's `RLevel` falls between `0xc8`–`0xe2`, which have it, and `0x12c`, the
-  next level, which does not — so which field it is, and its gate, are open (*28* in
-  [open-questions.md](open-questions.md)); they keep their `unreadTail`.
+- ✔ **`RLevel` has three reads cwlib does not**, from the game's loader `v0xc51f60` (found by
+  its head-word compares, 2026-10-25; the reflective serialiser `v0xc52a20` beside it names the
+  fields and has no gates): a struct for subVersions `0x8e`–`0xaf`, **a reference for `0xb0`–
+  `0x125`** to a `0x88`-byte object the loader frees at once, and a buffer at `0xf0` exactly.
+  The reference is the byte `pod2.bin` (`0xe2`) and `sack_town.bin` (`0xc8`) had over — null
+  in both, and before `savedThroughPusher`, not after it — so **all 251 `LVLb` in the FARCs
+  that open now read to their last byte**. cwlib's own gates there (`0x35`–`0x90`, `0x35`–`0xb2`,
+  `0x95`–`0x129`, `0xf1`–`0xf9`, `0xfa` on) are the loader's too. ⚠️ The loader reads no Vita
+  music GUIDs, which cwlib reads at the Vita's revision `0x70`: *The Vita branch* below.
 
 ### `playerMode` at 0x3eb, and the plans that still fail
 
@@ -589,6 +592,10 @@ it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (1
   `Timer Hand`, `Count - Timer`, `Rec3`, `Sackboy`); `0x28` is always on a Thing with a
   `SCRIPT` and a `SWITCH`. Every field is a width only; the two references of `0x27` are 0 on
   almost every one and 1 on a few, which a pair of bytes would read the same.
+- ❗ **The PS4 eboot does not read the Vita's branch** (2026-10-25): no instruction in it
+  compares with `0x4431` — the one `mov` of it is in a GPU texture-format table — nor with its
+  byte-swapped or shifted forms, and `RLevel`'s loader has no Vita field. So it cannot settle
+  these parts, and the game on PS4 presumably never loads a `.cpv`.
 - ⚠️ **Why the 6 are not settled from their bytes.** In `gamescom_011_crossplayvita_03.cpv` the
   world's Thing array ends two elements before the reader expects — `PWorld`'s tail begins
   (`maxVel` 100, `maxAVel` 1) at element 1,203 of 1,205 — so two bytes the readers take into a
@@ -1151,24 +1158,39 @@ the other seven name no pack there.
 
 `readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths
 `gamedata/lbp3/…/quests/….qst` — the story's quests for Bunkum Lagoon, Manglewood, the Ziggurat
-and the Popit Puzzle planet. ❗ **The reading is ours**: cwlib's `resources/RQuest.java`
-(ennuo/toolkit `d6a2ef8`) has an empty `serialize` and a comment listing fields from `state`
-on, which gave the order and the names from the prizes on. ✔ **All 25 in the four FARCs read to
-the last byte of their payload**, at subVersions `0x154`, `0x167`, `0x177` (version `0x3ef`),
-`0x1a6` and `0x1a9` (`0x3f9`), all with every compression flag set (`dev/resources-census.ts`,
-`test/resources.test.ts`, 2026-10-25).
+and the Popit Puzzle planet. ❗ **Read as the game's own loader reads it**: `v0xdbd490` in
+`eboot-v128.bin` (an objective `v0xdbc520`, a descriptor `v0xbadab0`; found by the five
+calls to the wide-string reader `v0xbdd2a0`, 2026-10-25), every gate a compare on the head
+word. cwlib's `resources/RQuest.java` (ennuo/toolkit `d6a2ef8`) has an empty `serialize`;
+the names in its comment are the game's — the eboot's reflective serialiser `v0xdbe720` names
+`State`, `Prizes` … `PotentiallyCompletedObjectivesInLevels` in this order — and the five
+strings have no name there. ✔ **All 25 in the four FARCs read to the last byte of their
+payload**, at subVersions `0x154`, `0x167`, `0x177` (version `0x3ef`), `0x1a6` and `0x1a9`
+(`0x3f9`), every compression flag set (`dev/resources-census.ts`, `test/resources.test.ts`).
 
 ```
-wstr name, wstr title, wstr description, wstr area, wstr group
-2 × { i32 ?, i32 ?, resource }          the prize, then its icon
-i32 ?
-objectives[]   wstr text, wstr id, i16 count, i16 required, bool hidden,
-               (subVersion 0x154: 2 bytes), u32 key
-i32 decals count, i32 decorations count     (both empty in every file)
-bool isPrimary, bool isInvisible
-SlotID[] deactivatedInLevels, activatedInLevels, completedInLevels
-bool stateUpdateViewed, u32 key
-i32 ×1 (0x154, 0x167), ×3 (0x177), ×4 (0x1a6, 0x1a9)
+                                                     from subVersion
+wstr name, title, description                        0x9c
+wstr area                                            0xeb
+wstr group                                           0x112
+wstr, wstr  (read and dropped)                       0x157..0x158 only
+u32 State                                            0xa0
+descriptor[] Prizes, descriptor[] PrizeIcons         0xb5   (u8 flag, then GUID / SHA-1)
+Objectives[]                                         0x9c
+  wstr text, wstr id                                 0x9c
+  wstr  (dropped)                                    0x157..0x158 only
+  u16 ?, u16 Required, u8 Hidden                     0x9c
+  u8, u8  (read and dropped)                         0x9c..0x161
+  u32 key                                            0x141
+  u8                                                 0x157..0x158 only
+Decals[], Decorations[]                              0xc0, 0xc2
+u8 IsPrimary, u8 IsInvisible                         0x9c, 0x144
+SlotID[] DeactivatedInLevels, Activated…, Completed… 0xd0, 0x10d, 0x11e
+u8 StateUpdateViewed                                 0xf6
+u32 Key, u32 AvailabilityDependsUponKey              0x141
+NewDecorations[], NewStickers[]                      0x168
+u8                                                   0x157..0x158 only
+PotentiallyCompletedObjectivesInLevels[]             0x17b
 ```
 
 What is measured and what is only a width:
@@ -1180,16 +1202,17 @@ What is measured and what is only a width:
   `gamedata/lbp3/character/palettes/cos_….plan` (`cos_newton_low_poly`, `cos_sack_boy_1` to
   `_3`, `cos_journalist_outfit`). The icon's GUIDs are not in the FileDB, so what they name is
   open.
-- ⚠️ **The two integers before each prize are 0 and 3 in all 50 blocks, and the integer after
-  the icon 0 in all 25**: widths only. The reader refuses a non-zero one there.
+- ✔ **`Prizes` and `PrizeIcons` are arrays of three descriptors in every one of the 25, with
+  only the middle one ever set.** The "0 and 3" read before each prize when the reading was
+  ours were `State` (0 in all 25) and the array's count, and "the integer after the icon" its
+  third, null, element.
 - ✔ The slots are `SlotID`s of type 11, cwlib's `DEVELOPER_ADVENTURE`, in every array that has
   any; their numbers run round 22.87 M, and `pp01_bridge.qst`'s on another planet's range.
-- ⚠️ An objective's two `i16`s are cwlib's comment's `count` and `required`, but `count` is
-  101 on 13 of 35 objectives, 0 on 7, and on the others values as far as 13,352 and −15,317,
-  which no count is; `required` is 0 on all 35. `hidden` is true on 10.
-- ⚠️ The two extra bytes of an objective below subVersion `0x167` are on one objective in the
-  game, `pp01_bridge.qst`'s at `0x154`, and zero there. Where between `0x154` and `0x167` they
-  go is not known.
+- An objective's first `u16` has no name in the eboot (`Required` and `Hidden` follow it); ⚠️
+  its values — 101 on 13 of 35 objectives, 0 on 7, others as far as 13,352 and −15,317 — are no
+  count, and what it is is open. `Required` is 0 on all 35, `Hidden` true on 10.
+- ✔ The two bytes of an objective below `0x167` are the game's `0x9c..0x161` pair, read and
+  dropped; `pp01_bridge.qst` (`0x154`) is the one quest here that has them.
 - ✔ **A quest's `key` is what a level's `PQuest` names in `questKey`, and an objective's
   `key` its `objectiveKey`** (`dev/quest-keys.ts`, 2026-10-25). Of the 322 `QUEST` parts
   in the four FARCs' levels and plans (99) and the story's chunks (223) that parse — the
@@ -1206,13 +1229,11 @@ What is measured and what is only a width:
     `ZIG_Rocket_QR`), a copy left over when the part was. Read a part's quest by its key.
   - The keys are no 32-bit hash of the strings that was tried (FNV-1 and 1a, CRC-32, Java's
     `hashCode`, djb2); `ziggurat_blueprint.qst`'s one objective has the quest's own key.
-- ⚠️ **From `decals` to `key` the names are cwlib's comment's**; the bytes fit them (counts
-  where it has arrays, slot arrays where it has slot arrays, booleans where it has booleans)
-  and prove nothing more. `stateUpdateViewed` is true in all 25.
-- ⚠️ **What follows the key is zero bytes, one, three or four by subVersion**, which an integer,
-  a boolean and an empty array all read alike; only their number is measured. cwlib's comment
-  names five fields after the key. The reader keeps them as `trailing` and refuses a non-zero
-  one.
+- ✔ **What follows the key is `AvailabilityDependsUponKey` from `0x141`, `NewDecorations` and
+  `NewStickers` from `0x168` and `PotentiallyCompletedObjectivesInLevels` from `0x17b`** —
+  the one, three and four zero fields measured at `0x154`/`0x167`, `0x177` and `0x1a6`/`0x1a9`.
+  Arrays the game has no element of here are refused when not empty. `StateUpdateViewed` is
+  true in all 25.
 
 ## The game's textures — `GTF ` and `TEX `
 
