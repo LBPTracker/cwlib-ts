@@ -1,6 +1,6 @@
 /** `SWITCH`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError, vitaRevision } from '../../io/serializer.ts';
+import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { hasPlayerMode, things } from './common.ts';
 import { readNetworkOnlineId } from '../../structs/network.ts';
@@ -149,10 +149,11 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     }
   }
 
+  // A live-streaming choice's five option labels ("Red" … "White" in the game's
+  // one), read by the game's loader `v0xd0510a` in `eboot-v128.bin`; cwlib
+  // throws here. steering/level-files.md, *`playerMode` at 0x3eb*.
   if (subVersion > 0x165 && type === SWITCH_GAME_LIVE_STREAMING_CHOICE) {
-    throw new SerializerError(
-      'a live-streaming-choice switch carries fields cwlib does not implement either',
-    );
+    for (let i = 0; i < 5; i += 1) s.wstr();
   }
 
   if (version > 0x243) s.s32(); // bulletsRequired

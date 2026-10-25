@@ -92,6 +92,11 @@ export function readStickers(s: Serializer): StickersPart {
     const n = s.count();
     for (let i = 0; i < n; i += 1) readEyetoyData(s);
   }
+  // ❗ An array of descriptors for versions 0x3bc–0x3cb only, which the game's
+  // loader (`v0xcfff80` in `eboot-v128.bin`, the array `v0xd77400`) reads and
+  // drops and cwlib does not have: the five Move DLC palette plans at 0x3c1 and
+  // 0x3c7, one hash each. steering/level-files.md, *`playerMode` at 0x3eb*.
+  if (version >= 0x3bc && version <= 0x3cb) s.array((self) => self.resource(true));
   return { decals, costumeDecals };
 }
 

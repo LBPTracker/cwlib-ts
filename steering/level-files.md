@@ -526,10 +526,11 @@ open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the tool
   `0x95`–`0x129`, `0xf1`–`0xf9`, `0xfa` on) are the loader's too. ⚠️ The loader reads no Vita
   music GUIDs, which cwlib reads at the Vita's revision `0x70`: *The Vita branch* below.
 
-### `playerMode` at 0x3eb, and the plans that still fail
+### `playerMode` at 0x3eb, and the plans that failed last
 
-**The game's plans that open but do not read went from 31 to 6** on 2026-10-25
-(`dev/things-census.ts`; each a plan, so each read to the Thing array's last byte):
+**The game's plans that open but do not read went from 31 to 6, and then to none,** on
+2026-10-25 (`dev/things-census.ts`: 10,556 plans read, each to the Thing array's last byte;
+`test/game-plans.test.ts` holds the last six):
 
 - ⚠️ **`playerMode` is not monotonic in the version.** It is the last byte of `PSwitch`,
   `PSwitchInput` and `PControlinator`, and cwlib reads it from 0x3ed. The game's crossplay plans
@@ -543,12 +544,20 @@ open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the tool
 - `PWindTweak` had taken subVersion 0x172 for granted; cwlib's gates, ported whole, read the
   two plans below it (`sack_town_obj_pumpinator_2a_6.plan` at 0xc8, `mat_base_wind.plan` at
   0x16b). The 0x3eb crossplay `obj_sack_boy` plan read with the `playerMode` fix.
-- **The 6 left**: `gad_gamelivestreaming_choice.plan` (a switch with fields cwlib does not
-  implement either), and five LBP2 Move DLC `*_stick_palette_identity_*.plan` at 0x3c1 and
-  0x3c7 whose one Thing ends at byte 138 of 294 — **cwlib reads exactly the same Thing and stops
-  there too**. Their `SHAPE` and `GROUP` are reference id 1, the Thing's own, where the run of
-  ids says 6, and `01 01` plus 20 bytes follows: the bytes of a hashed resource descriptor.
-  What these files are is open.
+- ✔ **The last 6 were settled by the game's loaders** in `eboot-v128.bin` (2026-10-25), each a
+  read cwlib has not:
+  - `gad_gamelivestreaming_choice.plan` (subVersion `0x186`): `PSwitch`'s loader (`v0xd0510a`)
+    reads **five wide strings** for a switch of type `0x4b` from subVersion `0x166` — `Red`,
+    `Blue`, `Green`, `Black`, `White` here — and only interns them from `0x187`. cwlib throws
+    there, and its comment guesses four below `0x187`.
+  - five LBP2 Move DLC `*_stick_palette_identity_*.plan` at 0x3c1 and 0x3c7, whose one Thing
+    ended at byte 138 of 294 in cwlib as here: `PStickers`' loader (`v0xcfff80`) reads, after
+    `EyetoyData` and **for versions `0x3bc`–`0x3cb` only**, an array of descriptors
+    (`v0xd77400`) and drops it. Each of the five has one hash there, not in the FARCs; the
+    `SHAPE` that follows is reference id 6, as the run of ids says. Their one decal is the
+    corpus's only `PAINT` below `0x3d0`, but the gate is the version: the eight sticker parts
+    at `0x3ce` have no such array. The same loader reads `EyetoyData` from `0x15e`, where
+    cwlib has `0x15d` — no file between.
 
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first

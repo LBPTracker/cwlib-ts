@@ -109,9 +109,9 @@ branch, into one that stands between a reader and a song. What is left:
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
   `sack_town.bin`. Every level that opens reads to its last byte since the game's loader gave
   `RLevel` its missing reference (*`readLevel` reads to the end* in [level-files.md](level-files.md)). In the story chunks, none since 2026-10-24: every island of the 41,741 chunks opens
-  (*Streaming levels* in [level-files.md](level-files.md)). Plans: 6 since 2026-10-25 — a
-  live-streaming-choice switch and five Move DLC palette plans that cwlib reads short in the same
-  place (*`playerMode` at 0x3eb* in [level-files.md](level-files.md), which also has whether
+  (*Streaming levels* in [level-files.md](level-files.md)). Plans: none since 2026-10-25 — the last six, a
+  live-streaming-choice switch and five Move DLC palette plans, read as the game's loaders read
+  them (*`playerMode` at 0x3eb* in [level-files.md](level-files.md), which also has whether
   `playerMode` belongs to 0x3eb or to the crossplay build). Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
   decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws
   the game's own furniture.
