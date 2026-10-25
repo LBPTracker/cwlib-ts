@@ -12,6 +12,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** cwlib's `BevelMappingMode`: how a bevel band's texture is laid. */
 export const BEVEL_HIDDEN = 0;
@@ -90,4 +91,32 @@ export async function readBevel(bytes: Uint8Array, inflate: Inflate): Promise<Be
     revision, materials, uvScales, autoSmoothCutoffAngle, vertices, includeBackface, smoothWithFront,
     relaxStrength, subDivRadius, fixedBevelSize, spongy, softPhysicsSettings, textureRepeats,
   };
+}
+
+/** `readBevel`'s mirror: the payload, from the value. */
+export function encodeBevel(value: Bevel, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(SLOTS);
+  for (let i = 0; i < SLOTS; i += 1) w.ref(value.materials[i]);
+  w.i32(SLOTS);
+  for (let i = 0; i < SLOTS; i += 1) w.f32(value.uvScales[i]);
+  w.f32(value.autoSmoothCutoffAngle);
+  w.i32(value.vertices.length);
+  for (const v of value.vertices) {
+    w.f32(v.y);
+    w.f32(v.z);
+    w.f32(v.rigidity);
+    w.i8(v.smoothWithPrevious);
+    w.i8(v.gmatSlot);
+    w.u8(v.mappingMode);
+  }
+  w.bool(value.includeBackface);
+  w.bool(value.smoothWithFront);
+  w.f32(value.relaxStrength);
+  w.f32(value.subDivRadius);
+  w.f32(value.fixedBevelSize);
+  w.bool(value.spongy);
+  w.ref(value.softPhysicsSettings);
+  w.f32(value.textureRepeats);
+  return w.done();
 }

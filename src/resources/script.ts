@@ -12,7 +12,8 @@
  */
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
-import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { COMPRESSED_VECTORS, SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** A type the script names: a machine type, a Fish type, and for a class the script that defines it. */
 export interface TypeReference {
@@ -84,6 +85,8 @@ export interface Script {
   readonly constantsS64: readonly bigint[];
   readonly constantsF32: Float32Array;
   readonly dependingGuids: readonly number[];
+  /** Up to version `0x360`: cwlib's `upToDateScript`, which it reads and drops. Kept to be written back. */
+  readonly upToDateScript?: ResourceRef;
 }
 
 /** cwlib's modifier flags: an `i16` from `0x3d9`, an `i32` before. */
@@ -133,7 +136,7 @@ export async function readScript(bytes: Uint8Array, inflate: Inflate): Promise<S
   // cwlib: "Inline script format not supported!"
   if (version <= 0x1eb) throw new SerializerError(`a script at 0x${version.toString(16)}: the inline format is not read`);
 
-  if (version <= 0x360) s.resource(); // upToDateScript
+  const upToDateScript = version <= 0x360 ? s.resource() : undefined;
   const className = s.str();
   const superClassScript = s.resource();
   const classModifiers = modifiers(s);
@@ -178,5 +181,140 @@ export async function readScript(bytes: Uint8Array, inflate: Inflate): Promise<S
     revision, className, superClassScript, modifiers: classModifiers, typeReferences, fieldReferences,
     functionReferences, fieldDefinitions, propertyDefinitions, functionDefinitions, sharedArguments,
     bytecode, lineNos, localVariables, stringA, stringW, constantsS64, constantsF32, dependingGuids,
+    ...(upToDateScript ? { upToDateScript } : {}),
   };
+}
+
+function writeModifiers(w: Writer, value: number): void {
+  if (w.revision.version >= 0x3d9) w.i16(value);
+  else w.i32(value);
+}
+
+function writeField(w: Writer, f: FieldDefinition): void {
+  writeModifiers(w, f.modifiers);
+  w.i32(f.type);
+  w.i32(f.name);
+}
+
+/**
+ * A string pool's starts and bytes: each string and one NUL. ✔ The reader
+ * drops the NULs, and this puts them back exactly: all 853 scripts of the
+ * install and its 01.28 update write their two pools byte for byte
+ * (`dev/resource-census-write.ts`, 2026-10-25).
+ */
+function poolOut(strings: readonly string[], wide: boolean): { starts: number[]; bytes: Uint8Array } {
+  const starts: number[] = [];
+  const units: number[] = [];
+  for (const string of strings) {
+    starts.push(units.length);
+    for (let i = 0; i < string.length; i += 1) units.push(string.charCodeAt(i));
+    units.push(0);
+  }
+  const bytes = new Uint8Array(units.length * (wide ? 2 : 1));
+  units.forEach((u, i) => {
+    if (wide) {
+      bytes[i * 2] = u >> 8;
+      bytes[i * 2 + 1] = u & 0xff;
+    } else bytes[i] = u & 0xff;
+  });
+  return { starts, bytes };
+}
+
+/** `Serializer.longVector`'s mirror. */
+function writeLongVector(w: Writer, values: readonly bigint[]): void {
+  if ((w.compressionFlags & COMPRESSED_VECTORS) === 0) {
+    w.i32(values.length);
+    for (const v of values) w.u64Big(v);
+    return;
+  }
+  w.i32(values.length);
+  if (values.length === 0) return;
+  let width = 0;
+  for (const v of values) {
+    for (let byte = 8; byte > width; byte -= 1) if ((BigInt.asUintN(64, v) >> BigInt((byte - 1) * 8)) & 0xffn) width = byte;
+  }
+  w.u8(width);
+  for (let plane = 0; plane < width; plane += 1) {
+    for (const v of values) w.u8(Number((BigInt.asUintN(64, v) >> BigInt(plane * 8)) & 0xffn));
+  }
+}
+
+/** `readScript`'s mirror: the payload, byte for byte, from the value. */
+export function encodeScript(value: Script, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version } = header.revision;
+  if (version <= 0x1eb) throw new SerializerError(`a script at 0x${version.toString(16)}: the inline format is not written`);
+  if (version <= 0x360) w.ref(value.upToDateScript);
+  w.str(value.className);
+  w.ref(value.superClassScript);
+  writeModifiers(w, value.modifiers);
+  w.i32(value.typeReferences.length);
+  for (const t of value.typeReferences) {
+    w.u8(t.machineType);
+    w.u8(t.fishType);
+    w.i8(t.dimensionCount);
+    w.u8(t.arrayBaseMachineType);
+    w.ref(t.script);
+    w.i32(t.typeName);
+  }
+  for (const list of [value.fieldReferences, value.functionReferences]) {
+    w.i32(list.length);
+    for (const m of list) {
+      w.i32(m.type);
+      w.i32(m.name);
+    }
+  }
+  w.i32(value.fieldDefinitions.length);
+  for (const f of value.fieldDefinitions) writeField(w, f);
+  w.i32(value.propertyDefinitions.length);
+  for (const p of value.propertyDefinitions) {
+    writeField(w, p);
+    w.i32(p.getFunction);
+    w.i32(p.setFunction);
+  }
+  w.i32(value.functionDefinitions.length);
+  const wide = version < 0x3d9;
+  for (const f of value.functionDefinitions) {
+    writeField(w, f);
+    for (const [begin, end] of [f.arguments, f.bytecode, f.lineNos, f.localVariables]) {
+      if (wide) {
+        w.i32(begin);
+        w.i32(end);
+      } else {
+        w.u16(begin);
+        w.u16(end - begin);
+      }
+    }
+    w.i32(f.stackSize);
+  }
+  w.i32(value.sharedArguments.length);
+  for (const a of value.sharedArguments) {
+    w.i32(a.type);
+    w.i32(a.offset);
+  }
+  w.i32(value.bytecode.length);
+  for (const op of value.bytecode) w.u64Big(op);
+  w.i32(value.lineNos.length);
+  for (const n of value.lineNos) w.i16(n);
+  w.i32(value.localVariables.length);
+  for (const l of value.localVariables) {
+    writeField(w, l);
+    w.i32(l.offset);
+  }
+  const a = poolOut(value.stringA, false);
+  w.intVector(a.starts);
+  w.i32(a.bytes.length);
+  w.bytes(a.bytes);
+  const wPool = poolOut(value.stringW, true);
+  w.intVector(wPool.starts);
+  w.i32(wPool.bytes.length / 2);
+  w.bytes(wPool.bytes);
+  if (version >= 0x30c) writeLongVector(w, value.constantsS64);
+  w.i32(value.constantsF32.length);
+  for (const c of value.constantsF32) w.f32(c);
+  if (version >= 0x1ec) {
+    w.i32(value.dependingGuids.length);
+    for (const g of value.dependingGuids) w.guid(g);
+  }
+  return w.done();
 }

@@ -17,6 +17,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** cwlib's `BoxType`; the ids the game's materials use are tallied in steering. */
 export const BOX_OUTPUT = 0;
@@ -271,6 +272,92 @@ export async function readMaterial(bytes: Uint8Array, inflate: Inflate): Promise
     fuzzSwirlAngle, fuzzSwirlAmplitude, fuzzLightingBias, fuzzLightingScale, iridesenceRoughness,
     shaders, code, textures, wrapS, wrapT, boxes, wires, soundEnum, parameterAnimations,
   };
+}
+
+/* -------------------------------------------------------------- encode */
+
+function writeAnimation(w: Writer, a: MaterialParameterAnimation): void {
+  w.vector4(a.baseValue);
+  // The keys back into the per-component runs `readAnimation` split them from.
+  const animated = [0, 1, 2, 3].filter((c) => a.componentsAnimated & (1 << c));
+  const components: number[] = [];
+  for (const c of animated) for (const key of a.keys) components.push(key[c]);
+  w.i32(components.length);
+  for (const v of components) w.f32(v);
+  w.i32(a.name.length);
+  for (let i = 0; i < a.name.length; i += 1) w.u8(a.name.charCodeAt(i));
+  w.u8(a.componentsAnimated);
+}
+
+/**
+ * `readMaterial`'s mirror: the payload, from the value. The shader offsets are
+ * where each of `shaders` ends in the blob they and `code` make together.
+ */
+export function encodeMaterial(value: GfxMaterial, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const lighting = header.revision.subVersion >= 0x17c;
+  w.i32(value.flags);
+  w.f32(value.alphaTestLevel);
+  w.u8(value.alphaLayer);
+  w.u8(value.alphaMode);
+  w.u8(value.shadowCastMode);
+  w.f32(value.bumpLevel);
+  w.f32(value.cosinePower);
+  w.f32(value.reflectionBlur);
+  w.f32(value.refractiveIndex);
+  w.f32(value.refractiveFresnelFalloffPower);
+  w.f32(value.refractiveFresnelMultiplier);
+  w.f32(value.refractiveFresnelOffset);
+  w.f32(value.refractiveFresnelShift);
+  w.u8(value.fuzzLengthAndRefractiveFlag);
+  if (lighting) {
+    w.u8(value.translucencyDensity);
+    w.u8(value.fuzzSwirlAngle);
+    w.u8(value.fuzzSwirlAmplitude);
+    w.u8(value.fuzzLightingBias);
+    w.u8(value.fuzzLightingScale);
+    w.u8(value.iridesenceRoughness);
+  }
+
+  if (value.shaders.length !== 10) throw new SerializerError(`a material with ${value.shaders.length} shaders, not 10`);
+  let end = 0;
+  for (const shader of value.shaders) {
+    end += shader.length;
+    w.i32(end);
+  }
+  w.i32(end + value.code.length);
+  for (const shader of value.shaders) w.bytes(shader);
+  w.bytes(value.code);
+
+  for (let i = 0; i < MAX_TEXTURES; i += 1) w.ref(value.textures[i]);
+  w.i32(value.wrapS.length);
+  for (const v of value.wrapS) w.u8(v);
+  w.i32(value.wrapT.length);
+  for (const v of value.wrapT) w.u8(v);
+  w.i32(value.boxes.length);
+  for (const box of value.boxes) {
+    w.i32(box.type);
+    w.i32(box.params.length);
+    for (const p of box.params) w.u32(p);
+    w.vector4([box.x, box.y, box.w, box.h]);
+    w.i32(box.subType);
+    writeAnimation(w, box.anim);
+    writeAnimation(w, box.anim2);
+  }
+  w.i32(value.wires.length);
+  for (const wire of value.wires) {
+    w.s32(wire.boxFrom);
+    w.s32(wire.boxTo);
+    w.u8(wire.portFrom);
+    w.u8(wire.portTo);
+    const swizzle = new Uint8Array(5);
+    for (let i = 0; i < Math.min(5, wire.swizzle.length); i += 1) swizzle[i] = wire.swizzle.charCodeAt(i);
+    w.bytes(swizzle);
+  }
+  w.i32(value.soundEnum);
+  w.i32(value.parameterAnimations.length);
+  for (const a of value.parameterAnimations) writeAnimation(w, a);
+  return w.done();
 }
 
 /* ------------------------------------------------------------- summary */

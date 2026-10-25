@@ -56,11 +56,12 @@ Java's one serializer writes every resource it reads, from its fields. Here a le
 streaming chunk are written back from the bytes they were read from, with a few edits (*Writing a
 level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
-- **A world from its values**: `PWorld` has no part writer (every other part has one, *Parts
-  written from their values* in level-files.md); it stays its bytes on the tape.
-- **Any other resource written** from its values: a mesh, a texture, a profile, an adventure…
-  Their dependencies can be rewritten in place, and `hashinate` is ported (*Dependencies
-  rewritten*, level-files.md).
+Every part, Thing, level, plan and resource this library reads is now written from its values
+too, byte for byte on the game's files (level-files.md, *Parts written from their values*,
+*Levels and plans written from their values*, *Resources written from their values*). Left:
+- **An image to a texture**: cwlib's `Images.toGTF`/`toTEX` compress an image to DXT with Squish;
+  here a texture is written from levels already in its format.
+- **The Things inside an `ADCb` and a `PRFb`** are written as their bytes, not from their values.
 
 ## Tools
 

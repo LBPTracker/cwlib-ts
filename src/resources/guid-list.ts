@@ -9,6 +9,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface GuidList {
   readonly revision: RevisionInfo;
@@ -22,4 +23,12 @@ export async function readGuidList(bytes: Uint8Array, inflate: Inflate): Promise
   const guids = s.array((self) => self.u32());
   if (s.remaining !== 0) throw new SerializerError(`GLTb read ended ${s.remaining} bytes before the end of its payload`);
   return { revision, guids };
+}
+
+/** `readGuidList`'s mirror: the payload, from the value. */
+export function encodeGuidList(value: GuidList, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.guids.length);
+  for (const guid of value.guids) w.u32(guid);
+  return w.done();
 }

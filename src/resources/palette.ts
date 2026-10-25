@@ -11,6 +11,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface Palette {
   readonly revision: RevisionInfo;
@@ -45,4 +46,21 @@ export async function readPalette(bytes: Uint8Array, inflate: Inflate): Promise<
     throw new SerializerError(`PALb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return { revision, plans, location, description, convertedPlans };
+}
+
+/** `readPalette`'s mirror: the payload, from the value. */
+export function encodePalette(value: Palette, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.plans.length);
+  for (const plan of value.plans) w.ref(plan);
+  w.i32(value.location);
+  w.i32(value.description);
+  if (header.revision.version >= 0x323) {
+    w.i32(value.convertedPlans.length);
+    for (const [a, b] of value.convertedPlans) {
+      w.ref(a, { descriptor: true });
+      w.ref(b, { descriptor: true });
+    }
+  }
+  return w.done();
 }

@@ -21,6 +21,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface ThingRecording {
   readonly revision: RevisionInfo;
@@ -151,4 +152,35 @@ export async function readThingRecording(bytes: Uint8Array, inflate: Inflate): P
   }
   if (s.remaining !== 0) throw new SerializerError(`RECb read ended ${s.remaining} bytes before the end of its payload`);
   return recording;
+}
+
+/**
+ * `readThingRecording`'s mirror: the payload, byte for byte, from the value.
+ * ⚠️ From version 0x3d4 it writes `packed` as it is: the frames are not packed
+ * again from `positions`, `flags` and `angles`, so a recording changed there
+ * must carry new `packed` bytes of its own.
+ */
+export function encodeThingRecording(value: ThingRecording, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version } = header.revision;
+  if (version <= 0x3c3) {
+    const matrices = value.matrices ?? [];
+    w.i32(matrices.length);
+    for (const m of matrices) w.matrix(m);
+  } else if (version <= 0x3d3) {
+    const positions = value.positions ?? [];
+    w.i32(positions.length);
+    for (const p of positions) w.vector3(p);
+    const flags = value.flags ?? new Uint8Array();
+    w.i32(flags.length);
+    w.bytes(flags);
+    const angles = value.angles ?? new Float32Array();
+    w.i32(angles.length);
+    for (const a of angles) w.f32(a);
+  } else {
+    if (!value.packed) throw new SerializerError('a Thing recording from version 0x3d4 needs its packed frames: they are not packed here');
+    w.i32(value.packed.length);
+    w.bytes(value.packed);
+  }
+  return w.done();
 }

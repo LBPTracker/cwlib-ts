@@ -15,7 +15,11 @@
  * as big-endian `u16`s to the end.
  */
 
-import { inflateChunkTable, magicOf, type Inflate } from '../io/resource.ts';
+import { fromHex } from '../io/hex.ts';
+import { inflateChunkTable, magicOf, readDependencies, type Dependency, type Inflate } from '../io/resource.ts';
+import { Writer, dependencyKey, writeDependencyTable, type Deflate, type DependencyOut } from '../io/writer.ts';
+import { floatToHalf } from './animation.ts';
+import { writeChunkTable } from './texture.ts';
 import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { PRIMITIVE_TRIANGLES, PRIMITIVE_TRIANGLE_STRIP } from './mesh.ts';
 import { halfToFloat } from '../io/stream.ts';
@@ -58,6 +62,24 @@ export interface StaticMesh {
   /** `vertexCount * 2` each: two channels of half floats. */
   readonly uvs: [Float32Array, Float32Array];
   readonly primitives: StaticPrimitive[];
+  /**
+   * The index buffer as stored, big-endian `u16`s the primitives' runs index
+   * into (strip restarts `0xffff` included): what `triangles` is made from,
+   * kept so `writeStaticMesh` can write it back.
+   */
+  readonly indices?: Uint16Array;
+  /** `StaticMeshInfo`'s second array, which nothing here uses: kept for `writeStaticMesh`. */
+  readonly unknownStructs?: readonly StaticUnknownStruct[];
+}
+
+/** cwlib's `UnknownStruct` of `StaticMeshInfo` (toolkit `fee22399`), field names its own. */
+export interface StaticUnknownStruct {
+  readonly min: readonly [number, number, number];
+  readonly structIndexA: number;
+  readonly structIndexB: number;
+  readonly max: readonly [number, number, number];
+  readonly firstPrimitive: number;
+  readonly numPrimitives: number;
 }
 
 export class StaticMeshFormatError extends Error {}
@@ -129,17 +151,17 @@ export function readStaticMeshInfo(s: Serializer) {
     numIndices: p.i32(),
     type: p.u8(),
   }));
-  s.array((u) => {
-    u.skipVector3(); // min
-    u.i16(); // structIndexA
-    u.i16(); // structIndexB
-    u.skipVector3(); // max
-    u.i16(); // firstPrimitive
-    u.i16(); // numPrimitives
-  });
+  const unknownStructs = s.array((u): StaticUnknownStruct => ({
+    min: u.vector3(),
+    structIndexA: u.i16(),
+    structIndexB: u.i16(),
+    max: u.vector3(),
+    firstPrimitive: u.i16(),
+    numPrimitives: u.i16(),
+  }));
   const marker = s.u32(true);
   if (marker !== 0x48454c50) throw new StaticMeshFormatError(`the header ends in 0x${marker.toString(16)}, not "HELP"`);
-  return { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw };
+  return { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw, unknownStructs };
 }
 
 export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promise<StaticMesh> {
@@ -154,7 +176,7 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
 
   // The header's `StaticMeshInfo`, read plainly (no compressed integers) from 0x0c.
   const s = new Serializer(bytes.subarray(0x0c, dependencyTableOffset), revision, 0);
-  const { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw } = readStaticMeshInfo(s);
+  const { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw, unknownStructs } = readStaticMeshInfo(s);
 
   // The chunk table, straight after: always compressed.
   const { data, end } = await inflateChunkTable(bytes, 0x0c + s.position, inflate, { error: StaticMeshFormatError });
@@ -197,10 +219,164 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
     }
     return { ...p, triangles: triangles(indices, p.indexStart, p.numIndices, p.type, p.vertexStart) };
   });
-  return { revision, lightmap, risemap, fallmap, vertexCount, positions, normals, tangents, uvs: [uv0, uv1], primitives };
+  const mesh: StaticMesh = {
+    revision, lightmap, risemap, fallmap, vertexCount, positions, normals, tangents, uvs: [uv0, uv1], primitives,
+    indices, unknownStructs,
+  };
+  // The stream and the table as stored, out of sight: what `writeStaticMesh`
+  // writes back wherever the values still decode from them (`STORED`).
+  const stored: StoredMesh = { vertexStream: data.slice(0, vertexStreamSize), dependencies: readDependencies(bytes) };
+  Object.defineProperty(mesh, STORED, { value: stored });
+  return mesh;
 }
 
 /** For the census: one run's raw indices, to test what `vertexStart` is. */
 export { triangles as staticTriangles };
 
 export { SerializerError };
+
+/** A non-enumerable property of a read `StaticMesh`: the stored vertex stream and dependency table. */
+const STORED = Symbol('stored');
+
+/** Resource types of a static mesh's dependencies: its maps' (`TEXTURE`) and its materials' (`GFX_MATERIAL`). */
+const TYPE_TEXTURE = 1;
+const TYPE_MATERIAL = 7;
+
+/** `unpackNormal32`'s inverse, to the nearest step: each component's sign bit and magnitude. */
+function packNormal32(x: number, y: number, z: number): number {
+  const part = (v: number, steps: number, signBit: number): number => {
+    const clamped = Math.max(-1, Math.min(1, v || 0));
+    if (clamped < 0) return (steps - Math.round(-clamped * steps)) | signBit;
+    return Math.round(clamped * steps);
+  };
+  return (part(x, 1023, 0x400) | (part(y, 1023, 0x400) << 11) | (part(z, 511, 0x200) << 22)) >>> 0;
+}
+
+const same = (a: number, b: number): boolean => a === b || (Number.isNaN(a) && Number.isNaN(b));
+
+/**
+ * `readStaticMesh`'s inverse: the whole `SMHb` file from the value -- the
+ * `StaticMeshInfo` header, the chunk table and its chunks, the dependency
+ * table.
+ *
+ * Normals, tangents and UVs are stored packed (10/10/9-bit normals, half
+ * floats) and do not decode back bit for bit, so a mesh that came out of
+ * `readStaticMesh` keeps its stored stream: each packed field is written as
+ * stored while it still decodes to the value, and packed from the value
+ * where it was changed -- as is the word at 20, cwlib's "tangent", which no
+ * value carries. The index buffer is `indices`, the dependency table the one
+ * the file had, or else one made from the maps and the materials.
+ */
+export async function writeStaticMesh(value: StaticMesh, deflate: Deflate): Promise<Uint8Array> {
+  const { revision } = value;
+  const stored = (value as unknown as Record<symbol, StoredMesh | undefined>)[STORED];
+  if (!value.indices) throw new StaticMeshFormatError('a static mesh without its index buffer cannot be written');
+  const indices = value.indices;
+  const n = value.vertexCount;
+
+  // The vertex stream.
+  const keep = stored !== undefined && stored.vertexStream.length === n * 0x20;
+  const stream = keep ? stored.vertexStream.slice() : new Uint8Array(n * 0x20);
+  const d = new DataView(stream.buffer);
+  const scratch = new Float32Array(3);
+  const packed = (at: number, values: Float32Array, v: number): void => {
+    const [x, y, z] = [values[v * 3], values[v * 3 + 1], values[v * 3 + 2]];
+    if (keep) {
+      unpackNormal32(d.getUint32(at, false), scratch, 0);
+      if (same(scratch[0], x) && same(scratch[1], y) && same(scratch[2], z)) return;
+    }
+    d.setUint32(at, packNormal32(x, y, z), false);
+  };
+  const halfAt = (at: number, v: number): void => {
+    if (keep && same(halfToFloat(d.getUint16(at, false)), Math.fround(v))) return;
+    d.setUint16(at, floatToHalf(v), false);
+  };
+  for (let v = 0; v < n; v += 1) {
+    const o = v * 0x20;
+    d.setFloat32(o, value.positions[v * 3], false);
+    d.setFloat32(o + 4, value.positions[v * 3 + 1], false);
+    d.setFloat32(o + 8, value.positions[v * 3 + 2], false);
+    packed(o + 12, value.normals, v);
+    halfAt(o + 16, value.uvs[0][v * 2]);
+    halfAt(o + 18, value.uvs[0][v * 2 + 1]);
+    halfAt(o + 24, value.uvs[1][v * 2]);
+    halfAt(o + 26, value.uvs[1][v * 2 + 1]);
+    packed(o + 28, value.tangents, v);
+  }
+  const payload = new Uint8Array(stream.length + indices.length * 2);
+  payload.set(stream);
+  const pv = new DataView(payload.buffer);
+  for (let i = 0; i < indices.length; i += 1) pv.setUint16(stream.length + i * 2, indices[i], false);
+
+  // `StaticMeshInfo`, plainly.
+  const w = new Writer(revision, 0);
+  w.ref(value.lightmap);
+  w.ref(value.risemap);
+  w.ref(value.fallmap);
+  const unknown = value.unknownStructs ?? [];
+  w.i32(value.primitives.length);
+  w.i32(unknown.length);
+  w.i32(indices.length * 2);
+  w.i32(stream.length);
+  w.i32(value.primitives.length);
+  for (const p of value.primitives) {
+    w.vector4(p.min);
+    w.vector4(p.max);
+    w.ref(p.material);
+    w.i32(p.vertexStart);
+    w.i32(p.indexStart);
+    w.i32(p.numIndices);
+    w.u8(p.type);
+  }
+  w.i32(unknown.length);
+  for (const u of unknown) {
+    w.vector3(u.min);
+    w.i16(u.structIndexA);
+    w.i16(u.structIndexB);
+    w.vector3(u.max);
+    w.i16(u.firstPrimitive);
+    w.i16(u.numPrimitives);
+  }
+  w.u32(0x48454c50, true); // "HELP"
+  const info = w.done();
+
+  let dependencies: DependencyOut[];
+  if (stored) {
+    dependencies = stored.dependencies.map((row) => row.kind === 'guid'
+      ? { guid: row.guid, type: row.type }
+      : { hash: fromHex(row.sha1), type: row.type });
+  } else {
+    const seen = new Map<string, DependencyOut>();
+    const add = (ref: ResourceRef | undefined, type: number): void => {
+      if (!ref) return;
+      const row: DependencyOut = ref.hash ? { hash: ref.hash, type } : { guid: ref.guid, type };
+      const key = dependencyKey(row);
+      if (!seen.has(key)) seen.set(key, row);
+    };
+    add(value.lightmap, TYPE_TEXTURE);
+    add(value.risemap, TYPE_TEXTURE);
+    add(value.fallmap, TYPE_TEXTURE);
+    // ✔ Made so, the table is the game's on 46 of its 47 backdrops, the seven
+    // at 0x335 listing the three maps alone. One at 0x3f4 lists GUID 432587 where
+    // its 21st material names 3501656723. Hence the stored table first.
+    if (revision.version > 0x335) for (const p of value.primitives) add(p.material, TYPE_MATERIAL);
+    dependencies = [...seen.values()];
+  }
+  const table = writeDependencyTable(dependencies);
+  const chunks = await writeChunkTable(payload, deflate);
+
+  const out = new Uint8Array(0x0c + info.length + chunks.length + table.length);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < 4; i += 1) out[i] = 'SMHb'.charCodeAt(i);
+  view.setUint32(4, ((revision.subVersion << 16) | revision.version) >>> 0, false);
+  view.setUint32(8, 0x0c + info.length + chunks.length, false);
+  out.set(info, 0x0c);
+  out.set(chunks, 0x0c + info.length);
+  out.set(table, 0x0c + info.length + chunks.length);
+  return out;
+}
+
+interface StoredMesh {
+  readonly vertexStream: Uint8Array;
+  readonly dependencies: Dependency[];
+}

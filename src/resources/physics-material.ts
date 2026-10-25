@@ -13,6 +13,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** cwlib's `CollideType`: what a Thing collides as, and what it ignores. Bit flags. */
 export const COLLIDE_NONE = 0x0;
@@ -60,6 +61,12 @@ export interface PhysicsMaterial {
   /** Version `0x27b` on. */
   readonly circuitBoard: boolean;
   readonly disableCSG: boolean;
+  /**
+   * The bytes cwlib has no name for, below the versions that dropped them
+   * (`0x13c`, `0x167`, `0x1d3`), in file order: kept so `encodePhysicsMaterial`
+   * writes them back. Absent when the file has none.
+   */
+  readonly unnamed?: readonly Uint8Array[];
 }
 
 /**
@@ -71,22 +78,24 @@ export async function readPhysicsMaterial(bytes: Uint8Array, inflate: Inflate): 
   if (resource.magic !== 'MATb') throw new SerializerError(`not a physics material: "${resource.magic}"`);
   const { version } = revision;
 
+  const unnamed: Uint8Array[] = [];
+  const keep = (n: number): void => { unnamed.push(s.bytes(n)); };
   const traction = s.f32();
   const density = s.f32();
-  if (version < 0x13c) s.skip(2); // two bytes cwlib has no name for
+  if (version < 0x13c) keep(2); // two bytes cwlib has no name for
   const restitution = s.f32();
   const slidingFriction = s.f32();
-  if (version < 0x13c) s.f32(); // unnamed in cwlib
+  if (version < 0x13c) keep(4); // an f32, unnamed in cwlib
   const rollingFriction = s.f32();
-  if (version < 0x13c) s.skip(5); // five unnamed bytes
+  if (version < 0x13c) keep(5); // five unnamed bytes
   const soundEnum = s.i32();
   const grabbable = s.bool();
-  if (version < 0x13c) s.skip(2);
+  if (version < 0x13c) keep(2);
   const gravityMultiplier = s.f32();
   const airResistanceMultiplier = s.f32();
-  if (version < 0x167) s.f32(); // cwlib guesses `breakResistance`
+  if (version < 0x167) keep(4); // an f32 cwlib guesses is `breakResistance`
   const limb = s.bool();
-  if (version < 0x1d3) s.u8(); // cwlib guesses `creativeZone`
+  if (version < 0x1d3) keep(1); // cwlib guesses `creativeZone`
   const shiftGrip = s.bool();
   const collideType = s.i32();
   const collideIgnore = s.i32();
@@ -125,6 +134,60 @@ export async function readPhysicsMaterial(bytes: Uint8Array, inflate: Inflate): 
     gravityMultiplier, airResistanceMultiplier, limb, shiftGrip, collideType, collideIgnore, dissolvable,
     explodable, cuttableByExplosion, breakable, breakMinVel, breakMinForce, explosionMinRadius,
     explosionMaxRadius, explosionMaxVel, explosionMaxAngVel, explosionMaxForce, maxForce, bullet,
-    circuitBoard, disableCSG,
+    circuitBoard, disableCSG, ...(unnamed.length > 0 ? { unnamed } : {}),
   };
+}
+
+/**
+ * `readPhysicsMaterial`'s mirror: the payload, from the value. The unnamed
+ * bytes of an old revision come from `unnamed`, zeros where it is absent.
+ */
+export function encodePhysicsMaterial(value: PhysicsMaterial, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version } = header.revision;
+  let next = 0;
+  const kept = (n: number): void => {
+    const bytes = value.unnamed?.[next];
+    next += 1;
+    w.bytes(bytes && bytes.length === n ? bytes : new Uint8Array(n));
+  };
+  w.f32(value.traction);
+  w.f32(value.density);
+  if (version < 0x13c) kept(2);
+  w.f32(value.restitution);
+  w.f32(value.slidingFriction);
+  if (version < 0x13c) kept(4);
+  w.f32(value.rollingFriction);
+  if (version < 0x13c) kept(5);
+  w.i32(value.soundEnum);
+  w.bool(value.grabbable);
+  if (version < 0x13c) kept(2);
+  w.f32(value.gravityMultiplier);
+  w.f32(value.airResistanceMultiplier);
+  if (version < 0x167) kept(4);
+  w.bool(value.limb);
+  if (version < 0x1d3) kept(1);
+  w.bool(value.shiftGrip);
+  w.i32(value.collideType);
+  w.i32(value.collideIgnore);
+  w.bool(value.dissolvable);
+  w.bool(value.explodable);
+  w.bool(value.cuttableByExplosion);
+  if (version >= 0x167) {
+    w.bool(value.breakable);
+    w.f32(value.breakMinVel);
+    w.f32(value.breakMinForce);
+    w.f32(value.explosionMinRadius);
+    w.f32(value.explosionMaxRadius);
+    w.f32(value.explosionMaxVel);
+    if (version >= 0x168) w.f32(value.explosionMaxAngVel);
+    w.f32(value.explosionMaxForce);
+  }
+  if (version >= 0x13c) w.f32(value.maxForce);
+  if (version >= 0x244) w.bool(value.bullet);
+  if (version >= 0x27b) {
+    w.bool(value.circuitBoard);
+    w.bool(value.disableCSG);
+  }
+  return w.done();
 }

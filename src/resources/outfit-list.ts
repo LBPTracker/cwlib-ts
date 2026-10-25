@@ -11,6 +11,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface Outfit {
   /** The costume pieces' GUIDs. */
@@ -36,4 +37,16 @@ export async function readOutfitList(bytes: Uint8Array, inflate: Inflate): Promi
     throw new SerializerError(`OUTb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return { revision, outfits };
+}
+
+/** `readOutfitList`'s mirror: the payload, from the value. */
+export function encodeOutfitList(value: OutfitList, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.outfits.length);
+  for (const outfit of value.outfits) {
+    w.i32(outfit.components.length);
+    for (const guid of outfit.components) w.guid(guid);
+    w.ref(outfit.outfit, { descriptor: true });
+  }
+  return w.done();
 }

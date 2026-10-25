@@ -28,13 +28,15 @@ import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { onLeerdammer, readThingRef, type PartReader, type Thing } from './thing.ts';
+import type { PartWriteContext } from './write-parts.ts';
 import { lamsKeyId } from '../resources/translation.ts';
-import { Tape } from '../io/tape.ts';
+import { Tape, tapeObjectOf } from '../io/tape.ts';
+import { Writer } from '../io/writer.ts';
 import { toHex } from '../io/hex.ts';
-import { readSlotId, type SlotId } from '../structs/slot.ts';
-import { readNetworkPlayerId } from '../structs/network.ts';
-import { readInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
-import { readInventoryItem } from './parts/poppet-powerup.ts';
+import { readSlotId, writeSlotId, type SlotId } from '../structs/slot.ts';
+import { readNetworkPlayerId, writeNetworkPlayerId } from '../structs/network.ts';
+import { readInventoryItemDetails, writeInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
+import { readInventoryItem, writeInventoryItem, type InventoryItem } from './parts/poppet-powerup.ts';
 
 /**
  * A struct the corpus never actually populates.
@@ -54,9 +56,144 @@ function emptyOnly(s: Serializer, what: string): void {
 }
 
 /** `StreamingID`: a wide string and a type. */
-function readStreamingId(s: Serializer): void {
-  s.wstr();
-  s.i32();
+export interface StreamingId {
+  readonly name: string;
+  readonly type: number;
+}
+
+function readStreamingId(s: Serializer): StreamingId {
+  return { name: s.wstr(), type: s.i32() };
+}
+
+function writeStreamingId(w: Writer, id: StreamingId | undefined): void {
+  w.wstr(id?.name ?? '');
+  w.i32(id?.type ?? 0);
+}
+
+type Vector3 = readonly [number, number, number];
+type Vector4 = readonly [number, number, number, number];
+const ZERO3: Vector3 = [0, 0, 0];
+const ZERO4: Vector4 = [0, 0, 0, 0];
+
+/**
+ * The id each in-stream reference read here had in its file, so a writer names
+ * it the same: the game does not number in first-mention order (`Writer.reference`).
+ */
+const IDS = new WeakMap<object, number>();
+
+/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
+function keepId<T>(s: Serializer, read: (self: Serializer) => T): T | undefined {
+  const at = s.position;
+  const id = s.i32();
+  s.position = at;
+  const value = s.reference(read);
+  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
+  return value;
+}
+
+/**
+ * The bytes a struct was read from and a copy of its value then, by the value,
+ * where its writer in another file does not write every byte back:
+ * `InventoryItemDetails` and an `InventoryItem` around one
+ * (`structs/inventory.ts`), whose creator's `NetworkPlayerID` keeps only the
+ * handle and whose older layouts keep 16 bits of some `i32`s. ⚠️ A stand-in
+ * for those writers keeping what they read: while the value is as it was read
+ * its bytes are written (`writeAsRead`), else its writer's.
+ *
+ * ❗ **Bytes written so name no object to the `Writer`**, and the details of a
+ * level's tutorial items share their creator and creation history by reference
+ * id, the second item naming the first's. So a list is written all as read or
+ * all by its writer (`writeListAsRead`), never mixed: mixed, an object would be
+ * given a body twice.
+ */
+const READ_AS = new WeakMap<object, { readonly bytes: Uint8Array; readonly then: unknown }>();
+
+/** Read a struct and keep its bytes and a copy of it beside it. */
+function readKeepingBytes<T extends object>(s: Serializer, read: (self: Serializer) => T): T {
+  const at = s.position;
+  const value = read(s);
+  READ_AS.set(value, { bytes: s.data.slice(at, s.position), then: structuredClone(value) });
+  return value;
+}
+
+/** Two values alike field for field: plain objects, arrays, typed arrays and primitives. */
+function alike(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
+    if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
+    return a.every((x, i) => x === b[i]);
+  }
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  if (ka.length !== kb.length || Array.isArray(a) !== Array.isArray(b)) return false;
+  return ka.every((k) => alike((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+/** The bytes a struct was read from, while it is as it was read. */
+function bytesAsRead(value: object): Uint8Array | undefined {
+  const kept = READ_AS.get(value);
+  return kept && alike(value, kept.then) ? kept.bytes : undefined;
+}
+
+/** A struct read by `readKeepingBytes`: its bytes as read while it is unchanged, else its writer's. */
+function writeAsRead<T extends object>(w: Writer, value: T, write: (self: Writer, value: T) => void): void {
+  const bytes = bytesAsRead(value);
+  if (bytes) w.bytes(bytes);
+  else write(w, value);
+}
+
+/** A list of such structs: as read when every one is unchanged, else every one by its writer. */
+function writeListAsRead<T extends object>(w: Writer, values: readonly T[] | undefined, write: (self: Writer, value: T) => void): void {
+  const list = values ?? [];
+  const bytes = list.map(bytesAsRead);
+  w.i32(list.length);
+  if (bytes.every((b) => b !== undefined)) for (const b of bytes) w.bytes(b!);
+  else for (const value of list) write(w, value);
+}
+
+/** `InventoryItemDetails`, its bytes kept. */
+export function readDetailsKeepingBytes(s: Serializer): InventoryItemDetails {
+  return readKeepingBytes(s, readInventoryItemDetails);
+}
+
+/** `readDetailsKeepingBytes`' mirror. */
+export function writeDetailsAsRead(w: Writer, details: InventoryItemDetails): void {
+  writeAsRead(w, details, writeInventoryItemDetails);
+}
+
+/** A reference to a struct written from its value, under the key and the id it was read with. */
+function writeKept<T extends object>(w: Writer, value: T | undefined, write: (self: Writer, value: T) => void): void {
+  if (!value) {
+    w.i32(0);
+    return;
+  }
+  w.reference(tapeObjectOf(value) ?? value, () => write(w, value), IDS.get(value));
+}
+
+/** `s.references(read)`, each id kept. */
+function keptReferences<T>(s: Serializer, read: (self: Serializer) => T): (T | undefined)[] {
+  const count = s.i32();
+  if (count < 0) throw new SerializerError(`negative array length ${count}`);
+  const out: (T | undefined)[] = [];
+  for (let i = 0; i < count; i += 1) out.push(keepId(s, read));
+  return out;
+}
+
+function writeKeptReferences<T extends object>(w: Writer, values: readonly (T | undefined)[], write: (self: Writer, value: T) => void): void {
+  w.i32(values.length);
+  for (const value of values) writeKept(w, value, write);
+}
+
+function writeArray<T>(w: Writer, values: readonly T[] | undefined, write: (self: Writer, value: T) => void): void {
+  w.i32(values?.length ?? 0);
+  for (const value of values ?? []) write(w, value);
+}
+
+/** A count and that many Things, by reference. */
+function writeThingList(w: Writer, things: readonly (Thing | undefined)[] | undefined, ctx: PartWriteContext): void {
+  w.i32(things?.length ?? 0);
+  for (const thing of things ?? []) ctx.thing(w, thing);
 }
 
 /**
@@ -67,47 +204,135 @@ function readStreamingId(s: Serializer): void {
  */
 
 /** `StreamingCheckpoint`. */
-function readStreamingCheckpoint(s: Serializer): void {
+export interface StreamingCheckpoint {
+  readonly type?: number;
+  readonly position?: Vector3;
+  readonly startPointName?: StreamingId;
+  readonly slotId?: SlotId;
+  /** subVersion 0x116..0x128: an `s32` cwlib does not name. */
+  readonly unknown?: number;
+}
+
+function readStreamingCheckpoint(s: Serializer): StreamingCheckpoint {
   const { subVersion } = s.revision;
+  const out: { -readonly [K in keyof StreamingCheckpoint]: StreamingCheckpoint[K] } = {};
   if (subVersion > 0x72) {
-    s.i32(); // type
-    s.skipVector3(); // position
+    out.type = s.i32();
+    out.position = s.vector3();
   }
-  if (subVersion > 0xdc) readStreamingId(s); // startPointName
-  if (subVersion >= 0x13b) readSlotId(s); // slotID
-  if (subVersion > 0x115 && subVersion <= 0x128) s.s32();
+  if (subVersion > 0xdc) out.startPointName = readStreamingId(s);
+  if (subVersion >= 0x13b) out.slotId = readSlotId(s);
+  if (subVersion > 0x115 && subVersion <= 0x128) out.unknown = s.s32();
+  return out;
+}
+
+function writeStreamingCheckpoint(w: Writer, v: StreamingCheckpoint): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0x72) {
+    w.i32(v.type ?? 0);
+    w.vector3(v.position ?? ZERO3);
+  }
+  if (subVersion > 0xdc) writeStreamingId(w, v.startPointName);
+  if (subVersion >= 0x13b) writeSlotId(w, v.slotId ?? { type: 0, number: 0 });
+  if (subVersion > 0x115 && subVersion <= 0x128) w.s32(v.unknown ?? 0);
 }
 
 /** `QuestTracker`. */
-function readQuestTracker(s: Serializer): void {
+export interface QuestTracker {
+  readonly position?: Vector3;
+  readonly questId?: StreamingId;
+  readonly objectiveId?: StreamingId;
+  readonly questKey?: number;
+  readonly objectiveKey?: number;
+}
+
+function readQuestTracker(s: Serializer): QuestTracker {
   const { subVersion } = s.revision;
+  const out: { -readonly [K in keyof QuestTracker]: QuestTracker[K] } = {};
   if (subVersion > 0xeb) {
-    s.skipVector3(); // position
-    readStreamingId(s); // questID
+    out.position = s.vector3();
+    out.questId = readStreamingId(s);
   }
-  if (subVersion > 0xf3) readStreamingId(s); // objectiveID
+  if (subVersion > 0xf3) out.objectiveId = readStreamingId(s);
   if (subVersion > 0x140) {
-    s.i32(); // questKey
-    s.i32(); // objectiveKey
+    out.questKey = s.i32();
+    out.objectiveKey = s.i32();
+  }
+  return out;
+}
+
+function writeQuestTracker(w: Writer, v: QuestTracker): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0xeb) {
+    w.vector3(v.position ?? ZERO3);
+    writeStreamingId(w, v.questId);
+  }
+  if (subVersion > 0xf3) writeStreamingId(w, v.objectiveId);
+  if (subVersion > 0x140) {
+    w.i32(v.questKey ?? 0);
+    w.i32(v.objectiveKey ?? 0);
   }
 }
 
 /** `QuestSwitch`. */
-function readQuestSwitch(s: Serializer): void {
+export interface QuestSwitch {
+  readonly questId?: StreamingId;
+  readonly questAction?: number;
+  readonly questKey?: number;
+  readonly objectiveId?: number;
+}
+
+function readQuestSwitch(s: Serializer): QuestSwitch {
   const { subVersion } = s.revision;
+  const out: { -readonly [K in keyof QuestSwitch]: QuestSwitch[K] } = {};
   if (subVersion > 0x118) {
-    readStreamingId(s); // questID
-    s.i32(); // questAction
+    out.questId = readStreamingId(s);
+    out.questAction = s.i32();
   }
-  if (subVersion > 0x140) s.i32(); // questKey
-  if (subVersion > 0x17a) s.i32(); // objectiveID
+  if (subVersion > 0x140) out.questKey = s.i32();
+  if (subVersion > 0x17a) out.objectiveId = s.i32();
+  return out;
+}
+
+function writeQuestSwitch(w: Writer, v: QuestSwitch): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0x118) {
+    writeStreamingId(w, v.questId);
+    w.i32(v.questAction ?? 0);
+  }
+  if (subVersion > 0x140) w.i32(v.questKey ?? 0);
+  if (subVersion > 0x17a) w.i32(v.objectiveId ?? 0);
 }
 
 /** `CollectableData`: empty below version 0x1c2. */
-function readCollectableData(s: Serializer): void {
-  if (s.revision.version < 0x1c2) return;
-  s.resource(true); // plan
-  s.s32(); // source
+export interface CollectableData {
+  readonly plan?: ResourceRef;
+  readonly source?: number;
+}
+
+function readCollectableData(s: Serializer): CollectableData {
+  if (s.revision.version < 0x1c2) return {};
+  return { plan: s.resource(true), source: s.s32() };
+}
+
+function writeCollectableData(w: Writer, v: CollectableData): void {
+  if (w.revision.version < 0x1c2) return;
+  w.ref(v.plan, { descriptor: true });
+  w.s32(v.source ?? 0);
+}
+
+/** The four lists a `ChunkFile` and a `StreamingIsland` share. */
+export interface StreamingLists {
+  readonly checkpoints?: readonly StreamingCheckpoint[];
+  readonly questTrackers?: readonly QuestTracker[];
+  readonly questSwitches?: readonly QuestSwitch[];
+  readonly collectables?: readonly CollectableData[];
+}
+
+/** The GUIDs and hashes a chunk depends on, from subVersion 0x16a. */
+export interface DependencyLists {
+  readonly guids?: readonly number[];
+  readonly hashes?: readonly Uint8Array[];
 }
 
 /**
@@ -124,6 +349,21 @@ export interface ChunkPlacement {
 /** The chunk files each stream has read so far, collected for `readLevel` to hand out. */
 const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
 
+/** `ChunkFile`, every field: what `writeChunkFile` writes back. */
+export interface ChunkFile extends StreamingLists, DependencyLists {
+  /** From subVersion 0x131 a bare SHA-1; from 0x73 a descriptor. */
+  readonly chunkHash?: Uint8Array;
+  readonly chunkDescriptor?: ResourceRef;
+  /** From subVersion 0xde: descriptors, each with its type inline. */
+  readonly userResources?: readonly { readonly ref?: ResourceRef; readonly type: number }[];
+  readonly min?: Vector3;
+  readonly max?: Vector3;
+  readonly hasObjectSaver?: boolean;
+  readonly deleteObjectSavers?: boolean;
+  readonly deleteOtherThings?: boolean;
+  readonly antiStreaming?: boolean;
+}
+
 /**
  * `ChunkFile`: one streamed piece of a level, and where it sits.
  *
@@ -138,99 +378,285 @@ const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
  * file it names, which `readChunk` reads. Question 26 in
  * `steering/answered-questions.md` has how following the hash was settled.
  */
-function readChunkFile(s: Serializer): void {
+function readChunkFile(s: Serializer): ChunkFile {
   const { subVersion } = s.revision;
+  const out: { -readonly [K in keyof ChunkFile]: ChunkFile[K] } = {};
   let sha1 = '';
   if (subVersion > 0x130) {
     const start = s.position;
     const hash = s.sha1();
     s.tape?.mark('chunkHash', start, s.position, { guid: 0, hash });
     sha1 = toHex(hash);
+    out.chunkHash = hash.slice();
   }
   else if (subVersion >= 0x73) {
     const ref = s.resource(true); // chunkHash, as a descriptor
     if (ref?.hash) sha1 = toHex(ref.hash);
+    out.chunkDescriptor = ref;
   }
-  readStreamingLists(s);
+  Object.assign(out, readStreamingLists(s));
   if (subVersion >= 0xde) {
     // `userResources`: descriptors that carry their type inline.
     const resources = s.count();
-    for (let i = 0; i < resources; i += 1) s.resource(true, true, false);
+    const list: { ref?: ResourceRef; type: number }[] = [];
+    for (let i = 0; i < resources; i += 1) {
+      const ref = s.resource(true, false, false);
+      list.push({ ref, type: s.i32() });
+    }
+    out.userResources = list;
   }
   if (subVersion > 0x72) {
     const min = s.vector3();
     const max = s.vector3();
-    const list = chunkFiles.get(s) ?? [];
-    list.push({ sha1, min, max });
-    chunkFiles.set(s, list);
+    out.min = min;
+    out.max = max;
+    const placed = chunkFiles.get(s) ?? [];
+    placed.push({ sha1, min, max });
+    chunkFiles.set(s, placed);
   }
   if (subVersion > 0x10d) {
-    s.bool(); // hasObjectSaver
-    s.bool(); // deleteObjectSavers
-    s.bool(); // deleteOtherThings
+    out.hasObjectSaver = s.bool();
+    out.deleteObjectSavers = s.bool();
+    out.deleteOtherThings = s.bool();
   }
-  if (subVersion > 0x133) s.bool(); // antiStreaming
-  readDependencyLists(s); // the GUIDs and hashes this chunk depends on
+  if (subVersion > 0x133) out.antiStreaming = s.bool();
+  Object.assign(out, readDependencyLists(s)); // the GUIDs and hashes this chunk depends on
+  return out;
+}
+
+function writeChunkFile(w: Writer, v: ChunkFile): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0x130) w.sha1(v.chunkHash ?? new Uint8Array(20));
+  else if (subVersion >= 0x73) w.ref(v.chunkDescriptor, { descriptor: true });
+  writeStreamingLists(w, v);
+  if (subVersion >= 0xde) {
+    writeArray(w, v.userResources, (self, r) => {
+      self.ref(r.ref, { descriptor: true, classPointer: false });
+      self.i32(r.type);
+    });
+  }
+  if (subVersion > 0x72) {
+    w.vector3(v.min ?? ZERO3);
+    w.vector3(v.max ?? ZERO3);
+  }
+  if (subVersion > 0x10d) {
+    w.bool(v.hasObjectSaver ?? false);
+    w.bool(v.deleteObjectSavers ?? false);
+    w.bool(v.deleteOtherThings ?? false);
+  }
+  if (subVersion > 0x133) w.bool(v.antiStreaming ?? false);
+  writeDependencyLists(w, v);
+}
+
+/** `LevelData`, every field. */
+export interface LevelData {
+  readonly slot: SlotId;
+  readonly type: number;
+  /** Absent on a type-2 LevelData, which has no list. */
+  readonly chunkFiles?: readonly (ChunkFile | undefined)[];
+  readonly offset: Vector3;
+  readonly min: Vector3;
+  readonly max: Vector3;
+  readonly parent?: LevelData;
+  /** subVersion 0x1ac on. */
+  readonly farcGuid?: number;
 }
 
 /** `LevelData`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
-function readLevelData(s: Serializer): void {
-  readSlotId(s);
+function readLevelData(s: Serializer): LevelData {
+  const slot = readSlotId(s);
   const type = s.i32();
   // ❗ **A type-2 LevelData has no chunk list**: its type is followed straight
   // by the offset. Not in cwlib, whose reader fails on these files too; measured
   // on LBP3 PS4's own story levels, where a second LevelData of type 2 follows
   // the main one and the walk ends right only without the list
   // (steering/level-files.md, *Streaming levels*).
-  if (type !== 2) s.references(readChunkFile);
-  s.skipVector3(); // offset
-  s.skipVector3(); // min
-  s.skipVector3(); // max
-  s.reference(readLevelData); // parent
+  const files = type !== 2 ? keptReferences(s, readChunkFile) : undefined;
+  const offset = s.vector3();
+  const min = s.vector3();
+  const max = s.vector3();
+  const parent = keepId(s, readLevelData);
   // ⚠️ The gate was in this comment and not in the code for a month: LBP3's own
   // story levels are subVersion 0x1ab, one below it, and every one of them
   // failed a Thing marker 100 KB later (steering/answered-questions.md).
-  if (s.revision.subVersion >= 0x1ac) s.guid(); // farcGuid
+  const farcGuid = s.revision.subVersion >= 0x1ac ? s.guid() : undefined;
+  return { slot, type, ...(files ? { chunkFiles: files } : {}), offset, min, max, parent, farcGuid };
+}
+
+function writeLevelData(w: Writer, v: LevelData): void {
+  writeSlotId(w, v.slot);
+  w.i32(v.type);
+  if (v.type !== 2) writeKeptReferences(w, v.chunkFiles ?? [], writeChunkFile);
+  w.vector3(v.offset);
+  w.vector3(v.min);
+  w.vector3(v.max);
+  writeKept(w, v.parent, writeLevelData);
+  if (w.revision.subVersion >= 0x1ac) w.guid(v.farcGuid ?? 0);
+}
+
+/** `StreamingManager`, every field. */
+export interface StreamingManager {
+  readonly levels: readonly (LevelData | undefined)[];
+  readonly numIslands: number;
+  readonly numPendingIslands?: number;
+  readonly fartDesc?: ResourceRef;
+  readonly startingPointPosition: Vector3;
+  readonly streamingZoneShape?: number;
+  readonly streamingZoneSize?: number;
+  readonly numInUsePlans?: number;
+  readonly maintainIslandsCount?: number;
 }
 
 /** `StreamingManager`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
-function readStreamingManager(s: Serializer): void {
+function readStreamingManager(s: Serializer): StreamingManager {
   emptyOnly(s, 'StreamingManager.editingThingsList');
   const count = s.count();
-  for (let i = 0; i < count; i += 1) s.reference(readLevelData);
+  const levels: (LevelData | undefined)[] = [];
+  for (let i = 0; i < count; i += 1) levels.push(keepId(s, readLevelData));
   const { subVersion } = s.revision;
-  s.i32(); // numIslands
-  if (subVersion > 0x1ff) s.i32(); // numPendingIslands
-  s.resource(true); // fartDesc, a descriptor
-  s.skipVector3(); // startingPointPosition
+  const numIslands = s.i32();
+  const numPendingIslands = subVersion > 0x1ff ? s.i32() : undefined;
+  const fartDesc = s.resource(true); // a descriptor
+  const startingPointPosition = s.vector3();
+  const out: { -readonly [K in keyof StreamingManager]: StreamingManager[K] } = {
+    levels, numIslands, numPendingIslands, fartDesc, startingPointPosition,
+  };
   // ⚠️ From subVersion 0x160, as cwlib has it: below, the walk read three integers out
   // of what follows (`stitchem_manor.bin` at 0x130, `game_outro.bin` at 0x151), which
   // showed only once `readLevel` read to the end.
   if (subVersion >= 0x160) {
-    s.i32(); // streamingZoneShape
-    s.i32(); // streamingZoneSize
-    s.i32(); // numInUsePlans
-    if (subVersion >= 0x1a9) s.i32(); // maintainIslandsCount
+    out.streamingZoneShape = s.i32();
+    out.streamingZoneSize = s.i32();
+    out.numInUsePlans = s.i32();
+    if (subVersion >= 0x1a9) out.maintainIslandsCount = s.i32();
+  }
+  return out;
+}
+
+function writeStreamingManager(w: Writer, v: StreamingManager): void {
+  const { subVersion } = w.revision;
+  w.i32(0); // editingThingsList, empty
+  writeKeptReferences(w, v.levels, writeLevelData);
+  w.i32(v.numIslands);
+  if (subVersion > 0x1ff) w.i32(v.numPendingIslands ?? 0);
+  w.ref(v.fartDesc, { descriptor: true });
+  w.vector3(v.startingPointPosition);
+  if (subVersion >= 0x160) {
+    w.i32(v.streamingZoneShape ?? 0);
+    w.i32(v.streamingZoneSize ?? 0);
+    w.i32(v.numInUsePlans ?? 0);
+    if (subVersion >= 0x1a9) w.i32(v.maintainIslandsCount ?? 0);
   }
 }
 
+/**
+ * The four lists and the dependency lists a `ChunkFile` and a
+ * `StreamingIsland` share, under cwlib's `ChunkFile` gates: below `0x16a` an
+ * island ends after its collectables (the `0x12c` story chunks).
+ */
+function readStreamingLists(s: Serializer): StreamingLists {
+  const { subVersion } = s.revision;
+  const out: { -readonly [K in keyof StreamingLists]: StreamingLists[K] } = {};
+  if (subVersion > 0x72) out.checkpoints = s.array(readStreamingCheckpoint);
+  if (subVersion > 0xeb) out.questTrackers = s.array(readQuestTracker);
+  if (subVersion > 0x118) out.questSwitches = s.array(readQuestSwitch);
+  if (subVersion > 0x11d) out.collectables = s.array(readCollectableData);
+  return out;
+}
+
+function writeStreamingLists(w: Writer, v: StreamingLists): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0x72) writeArray(w, v.checkpoints, writeStreamingCheckpoint);
+  if (subVersion > 0xeb) writeArray(w, v.questTrackers, writeQuestTracker);
+  if (subVersion > 0x118) writeArray(w, v.questSwitches, writeQuestSwitch);
+  if (subVersion > 0x11d) writeArray(w, v.collectables, writeCollectableData);
+}
+
+function readDependencyLists(s: Serializer): DependencyLists {
+  if (s.revision.subVersion <= 0x169) return {};
+  const guidCount = s.count();
+  const guids: number[] = [];
+  for (let i = 0; i < guidCount; i += 1) guids.push(s.guid());
+  const hashCount = s.count();
+  const hashes: Uint8Array[] = [];
+  for (let i = 0; i < hashCount; i += 1) hashes.push(s.sha1().slice());
+  return { guids, hashes };
+}
+
+function writeDependencyLists(w: Writer, v: DependencyLists): void {
+  if (w.revision.subVersion <= 0x169) return;
+  writeArray(w, v.guids, (self, guid) => self.guid(guid));
+  writeArray(w, v.hashes, (self, hash) => self.sha1(hash));
+}
+
+/** `EggLink`, inline in `PWorld`'s reward lists. */
+export interface WorldEggLink {
+  /** Below version 0x160 a `GlobalThingDescriptor`: a level's descriptor and a Thing's UID in it. */
+  readonly level?: ResourceRef;
+  readonly uid?: number;
+  /** From version 0x160. */
+  readonly plan?: ResourceRef;
+  /** Versions 0x160..0x196. */
+  readonly details?: InventoryItemDetails;
+  /** Versions 0x208..0x229: a bool cwlib does not name. */
+  readonly unknown?: boolean;
+  readonly shareable?: boolean;
+  /** Above version 0x3e0: whether a painting follows, and the painting -- a flag can stand before a null one. */
+  readonly hasPainting?: boolean;
+  readonly painting?: ResourceRef;
+}
+
 /** `EggLink`, inline in `PWorld`'s reward lists: a plan, a bool, and an optional painting. */
-function readEggLink(s: Serializer): void {
+function readEggLink(s: Serializer): WorldEggLink {
   const { version } = s.revision;
+  const out: { -readonly [K in keyof WorldEggLink]: WorldEggLink[K] } = {};
   if (version < 0x160) {
-    s.resource(true, false, false); // item: a GlobalThingDescriptor's level
-    s.i32(); // and the Thing's UID in it
-  } else s.resource(false, false, false); // plan
-  if (version > 0x15f && version < 0x197) readInventoryItemDetails(s); // details
-  if (version > 0x207 && version < 0x22a) s.bool();
-  if (version > 0x23b) s.bool(); // shareable
-  if (version > 0x3e0 && s.bool()) s.resource(true); // painting, behind hasPainting
+    out.level = s.resource(true, false, false); // item: a GlobalThingDescriptor's level
+    out.uid = s.i32(); // and the Thing's UID in it
+  } else out.plan = s.resource(false, false, false); // plan
+  if (version > 0x15f && version < 0x197) out.details = readDetailsKeepingBytes(s);
+  if (version > 0x207 && version < 0x22a) out.unknown = s.bool();
+  if (version > 0x23b) out.shareable = s.bool();
+  if (version > 0x3e0) {
+    out.hasPainting = s.bool();
+    if (out.hasPainting) out.painting = s.resource(true);
+  }
+  return out;
+}
+
+function writeEggLink(w: Writer, v: WorldEggLink): void {
+  const { version } = w.revision;
+  if (version < 0x160) {
+    w.ref(v.level, { descriptor: true, classPointer: false });
+    w.i32(v.uid ?? 0);
+  } else w.ref(v.plan, { classPointer: false });
+  if (version > 0x15f && version < 0x197) {
+    if (!v.details) throw new SerializerError('an EggLink at this version needs its inventory details');
+    writeDetailsAsRead(w, v.details);
+  }
+  if (version > 0x207 && version < 0x22a) w.bool(v.unknown ?? false);
+  if (version > 0x23b) w.bool(v.shareable ?? false);
+  if (version > 0x3e0) {
+    const has = v.hasPainting ?? v.painting !== undefined;
+    w.bool(has);
+    if (has) w.ref(v.painting, { descriptor: true });
+  }
 }
 
 /** `KeyLink`: a slot, and below version 0x16f an `i32` cwlib does not name. */
-function readKeyLink(s: Serializer): void {
-  readSlotId(s);
-  if (s.revision.version < 0x16f) s.i32();
+export interface KeyLink {
+  readonly slot: SlotId;
+  readonly unknown?: number;
+}
+
+function readKeyLink(s: Serializer): KeyLink {
+  const slot = readSlotId(s);
+  return s.revision.version < 0x16f ? { slot, unknown: s.i32() } : { slot };
+}
+
+function writeKeyLink(w: Writer, v: KeyLink): void {
+  writeSlotId(w, v.slot);
+  if (w.revision.version < 0x16f) w.i32(v.unknown ?? 0);
 }
 
 /** LEERDAMMER's revisions for the water: `LD_WATER_WAVE` and `LD_WATER_BITS` in cwlib's `Revisions`. */
@@ -239,44 +665,288 @@ const LD_WATER_WAVE = 0x4;
 const LD_WATER_BITS = 0x7;
 
 /** `GlobalSettings`: five factors, and on the Vita from its revision 0x78 `nonLinearFog`. */
-function readGlobalSettings(s: Serializer): void {
-  for (let i = 0; i < 5; i += 1) s.f32();
-  if (vitaRevision(s.revision) >= 0x78) s.bool(); // nonLinearFog
+export interface GlobalSettings {
+  readonly factors: readonly number[];
+  readonly nonLinearFog?: boolean;
+}
+
+function readGlobalSettings(s: Serializer): GlobalSettings {
+  const factors = [s.f32(), s.f32(), s.f32(), s.f32(), s.f32()];
+  return vitaRevision(s.revision) >= 0x78 ? { factors, nonLinearFog: s.bool() } : { factors };
+}
+
+function writeGlobalSettings(w: Writer, v: GlobalSettings | undefined): void {
+  for (let i = 0; i < 5; i += 1) w.f32(v?.factors[i] ?? 0);
+  if (vitaRevision(w.revision) >= 0x78) w.bool(v?.nonLinearFog ?? false);
+}
+
+/** `MoveCursor`, every field. */
+export interface MoveCursor {
+  readonly selectionFrame?: number;
+  readonly switchThing?: Thing;
+  readonly selection?: Thing;
+  readonly localPosition: Vector4;
+  readonly localAngle: number;
+  /** Below version 0x3c2, two vectors cwlib does not name, and one more after `moveGrabbing`. */
+  readonly old?: readonly [Vector4, Vector4];
+  readonly moveAngle: Vector4;
+  /** Above version 0x3c1: lastRCStart, lastRCDir, currRCStart, currRCDir. */
+  readonly rays?: readonly Vector4[];
+  readonly lastRoll?: number;
+  readonly currRoll?: number;
+  readonly prevMoveGrabbing: boolean;
+  readonly moveGrabbing: boolean;
+  readonly oldAfter?: Vector4;
+  /** `zMovePos`, or the old layout's trailing float. */
+  readonly zMovePos: number;
+  readonly globalCursorPlayer?: number;
+  readonly cursorPlayerThing?: Thing;
+  readonly globalCursorPanel?: number;
+  readonly thingUnderCursor?: number;
+  readonly thingUnderCursorChangedWhileDown?: boolean;
+  readonly lastTouchPanel?: number;
+  readonly lastTouchId?: number;
 }
 
 /** `MoveCursor`, in `PWorld` only below subVersion 0x118. */
-function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>): MoveCursor {
   const { version } = s.revision;
-  if (version > 0x3c1) s.i32(); // selectionFrame
-  readThingRef(s, readers); // switchThing
-  readThingRef(s, readers); // selection
-  s.skipVector4(); // localPosition
-  s.f32(); // localAngle
-  if (version < 0x3c2) {
-    s.skipVector4();
-    s.skipVector4();
-  }
-  s.skipVector4(); // moveAngle
+  const selectionFrame = version > 0x3c1 ? s.i32() : undefined;
+  const switchThing = readThingRef(s, readers);
+  const selection = readThingRef(s, readers);
+  const localPosition = s.vector4();
+  const localAngle = s.f32();
+  const old = version < 0x3c2 ? [s.vector4(), s.vector4()] as const : undefined;
+  const moveAngle = s.vector4();
+  let rays: Vector4[] | undefined;
+  let lastRoll: number | undefined;
+  let currRoll: number | undefined;
   if (version > 0x3c1) {
-    for (let i = 0; i < 4; i += 1) s.skipVector4(); // lastRCStart, lastRCDir, currRCStart, currRCDir
-    s.f32(); // lastRoll
-    s.f32(); // currRoll
+    rays = [s.vector4(), s.vector4(), s.vector4(), s.vector4()];
+    lastRoll = s.f32();
+    currRoll = s.f32();
   }
-  s.bool(); // prevMoveGrabbing
-  s.bool(); // moveGrabbing
-  if (version < 0x3c2) s.skipVector4();
-  s.f32(); // zMovePos, or the old layout's trailing float
+  const prevMoveGrabbing = s.bool();
+  const moveGrabbing = s.bool();
+  const oldAfter = version < 0x3c2 ? s.vector4() : undefined;
+  const zMovePos = s.f32();
+  const out: { -readonly [K in keyof MoveCursor]: MoveCursor[K] } = {
+    selectionFrame, switchThing, selection, localPosition, localAngle, old, moveAngle, rays, lastRoll, currRoll,
+    prevMoveGrabbing, moveGrabbing, oldAfter, zMovePos,
+  };
   const vita = vitaRevision(s.revision);
-  if (vita >= 0x1b) s.i32(); // globalCursorPlayer
-  if (vita >= 0x42) readThingRef(s, readers); // cursorPlayerThing
-  if (vita >= 0x6d) s.s32(); // globalCursorPanel
+  if (vita >= 0x1b) out.globalCursorPlayer = s.i32();
+  if (vita >= 0x42) out.cursorPlayerThing = readThingRef(s, readers);
+  if (vita >= 0x6d) out.globalCursorPanel = s.s32();
   if (vita >= 0x82) {
-    s.i32(); // thingUnderCursor
-    s.bool(); // thingUnderCursorChangedWhileDown
-    s.i32(); // lastTouchPanel
-    s.s32(); // lastTouchID
+    out.thingUnderCursor = s.i32();
+    out.thingUnderCursorChangedWhileDown = s.bool();
+    out.lastTouchPanel = s.i32();
+    out.lastTouchId = s.s32();
+  }
+  return out;
+}
+
+function writeMoveCursor(w: Writer, v: MoveCursor, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  if (version > 0x3c1) w.i32(v.selectionFrame ?? 0);
+  ctx.thing(w, v.switchThing);
+  ctx.thing(w, v.selection);
+  w.vector4(v.localPosition);
+  w.f32(v.localAngle);
+  if (version < 0x3c2) {
+    w.vector4(v.old?.[0] ?? ZERO4);
+    w.vector4(v.old?.[1] ?? ZERO4);
+  }
+  w.vector4(v.moveAngle);
+  if (version > 0x3c1) {
+    for (let i = 0; i < 4; i += 1) w.vector4(v.rays?.[i] ?? ZERO4);
+    w.f32(v.lastRoll ?? 0);
+    w.f32(v.currRoll ?? 0);
+  }
+  w.bool(v.prevMoveGrabbing);
+  w.bool(v.moveGrabbing);
+  if (version < 0x3c2) w.vector4(v.oldAfter ?? ZERO4);
+  w.f32(v.zMovePos);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x1b) w.i32(v.globalCursorPlayer ?? 0);
+  if (vita >= 0x42) ctx.thing(w, v.cursorPlayerThing);
+  if (vita >= 0x6d) w.s32(v.globalCursorPanel ?? 0);
+  if (vita >= 0x82) {
+    w.i32(v.thingUnderCursor ?? 0);
+    w.bool(v.thingUnderCursorChangedWhileDown ?? false);
+    w.i32(v.lastTouchPanel ?? 0);
+    w.s32(v.lastTouchId ?? 0);
   }
 }
+
+/** `EditorSelection`: a name and its Things. */
+export interface EditorSelection {
+  readonly name: string;
+  readonly things: readonly (Thing | undefined)[];
+}
+
+/** A trophy tier of the Vita's world: its rewards and unlocks. */
+export interface VitaTrophyTier {
+  readonly rewards: readonly WorldEggLink[];
+  readonly unlocks: readonly KeyLink[];
+}
+
+/**
+ * `PWorld` after `things`, every field `readWorldTail` reads, each present
+ * where its gate is open. Named as cwlib names them; the few it does not name
+ * are `unknown…` after the version they sit at.
+ */
+export interface WorldTail {
+  maxVel?: number;
+  maxAVel?: number;
+  frame?: number;
+  simFrame?: number;
+  frameLevelStarted?: number;
+  thingUIDCounter?: number;
+  randy?: number;
+  /** Below version 0x1a4: six floats and an `i32`, and below 0x14b a list of Things. */
+  old1a4?: { readonly floats: readonly number[]; readonly int: number; readonly things?: readonly (Thing | undefined)[] };
+  selections?: readonly (EditorSelection | undefined)[];
+  backdrop?: Thing;
+  backdropNew?: Thing;
+  backdropTimer?: number;
+  lbp2NightDaySwapped?: number;
+  isPaused?: boolean;
+  lightingFactor?: number;
+  colorCorrectionFactor?: number;
+  fogFactor?: number;
+  fogTintFactor?: number;
+  darknessFactor?: number;
+  nonLinearFog?: boolean;
+  completeRewards?: readonly WorldEggLink[];
+  collectRewards?: readonly WorldEggLink[];
+  aceRewards?: readonly WorldEggLink[];
+  areRewardsShareable?: boolean;
+  scoreboardLevelLinkSlot?: SlotId;
+  /** The complete, collect and ace unlocks. */
+  unlocks?: readonly (readonly KeyLink[])[];
+  vitaUnlocks?: readonly WorldEggLink[];
+  vitaRewards?: readonly WorldEggLink[];
+  timeRequired?: number;
+  /** Gold, silver, bronze. */
+  trophyTiers?: readonly VitaTrophyTier[];
+  trophyConditionTypes?: readonly number[];
+  trophyRequirements?: readonly { readonly score: number; readonly time: number; readonly livesLost: number }[];
+  /** enableAcing, and the gold, silver and bronze trophies. */
+  trophyFlags?: readonly boolean[];
+  enforceMinMaxPlayers?: boolean;
+  /** Versions 0x16f..0x1be: three `i32`s. */
+  old16f?: readonly number[];
+  spawnsPerPlayer?: number;
+  deathCount?: number;
+  maxNumPlayers?: number;
+  dissolvingThings?: readonly (Thing | undefined)[];
+  oldDissolvingThings?: readonly (Thing | undefined)[];
+  isTutorialLevel?: boolean;
+  everSpawned?: boolean;
+  spawnFailureCount?: number;
+  targetGlobalSettings?: GlobalSettings;
+  fromGlobalSettings?: GlobalSettings;
+  globalSettingsBlendFactor?: number;
+  hasLevelLightingBeenSetup?: boolean;
+  globalSettingsThingUID?: number;
+  cameraSettings?: readonly number[];
+  waterLevel?: number;
+  fromWaterLevel?: number;
+  targetWaterLevel?: number;
+  /** Current, from, target. */
+  waterWaveMagnitude?: readonly number[];
+  gravity?: readonly number[];
+  currGlobalSettingsBlendFactors?: readonly number[];
+  globalSettingsThingUIDs?: readonly number[];
+  globalSettingsThingPriority?: readonly number[];
+  waterColor?: number;
+  waterBrightness?: number;
+  waterTint?: number;
+  fromWaterTintColor?: Vector4;
+  targetWaterTint?: number;
+  waterMurkiness?: readonly number[];
+  waterBits?: readonly number[];
+  waterDrainSoundsEnabled?: boolean;
+  currWaterDrainSoundsEnabled?: boolean;
+  waterCausticsEnabled?: boolean;
+  currWaterCausticsEnabled?: boolean;
+  /** The water's main and hint colours, each current, from, target. */
+  waterColors?: readonly number[];
+  /** subVersion 0xf8..0x188: a bool cwlib does not name. */
+  unknownF8?: boolean;
+  backdropEnabled?: boolean;
+  currBackdropEnabled?: boolean;
+  currWavePos?: number;
+  /** Versions 0x289..0x29b: a float and a bool. */
+  old289?: { readonly float: number; readonly bool: boolean };
+  gameMode?: number;
+  gameModeRequested?: number;
+  nextSackbotPlayerNumber?: number;
+  cutscene?: {
+    readonly state: number;
+    readonly currentCutSceneCamera?: Thing;
+    readonly timeInCurrentCamera: number;
+    readonly endCountdown: number;
+    readonly transitionStage: number;
+    readonly old?: readonly { readonly bool: boolean; readonly a: Vector3; readonly float: number; readonly b: Vector3 }[];
+    readonly currentCameraTweaking?: boolean;
+  };
+  audio?: {
+    readonly reverb: number;
+    readonly unknown347?: number;
+    readonly volumes: readonly number[];
+    readonly sfxReverbSend?: number;
+    readonly dialogueReverbSend?: number;
+    /** musicReverbSend and the three low-pass filters. */
+    readonly sends347?: readonly number[];
+    readonly highPass?: readonly number[];
+    readonly ambianceTrack?: string;
+  };
+  backdropPlan?: ResourceRef;
+  backdropNewPlan?: ResourceRef;
+  subLevel?: boolean;
+  scoreLocked?: boolean;
+  debugTimeInLevel?: number;
+  useEvenNewerCheckpointCode?: boolean;
+  moveCursors?: readonly MoveCursor[];
+  globalTouchCursor?: number;
+  sharedScreenOld?: boolean;
+  singlePlayer?: boolean;
+  minPlayers?: number;
+  maxPlayers?: number;
+  moveRecommended?: boolean;
+  portraitMode?: boolean;
+  fixInvalidInOutMoverContacts?: boolean;
+  vitaPlayerCount?: number;
+  sharedScreen?: boolean;
+  disableHUD?: boolean;
+  disableShadows?: boolean;
+  flipBackground?: boolean;
+  mpSeparateScreen?: boolean;
+  continueMusic?: boolean;
+  broadcastMicroChipEntries?: readonly { readonly sourceMicrochip?: Thing; readonly clonedMicrochip?: Thing }[];
+  manualJumpDown?: number;
+  /** subVersion 0x98..0xe4 and 0xc3..0xe4: three lists of Things cwlib does not name. */
+  old98a?: readonly (Thing | undefined)[];
+  oldC3?: readonly (Thing | undefined)[];
+  old98b?: readonly (Thing | undefined)[];
+  deferredDestroys?: readonly (Thing | undefined)[];
+  /** globalDofFront, globalDofBack, globalDofSackTrack. */
+  globalDof?: readonly number[];
+  enableSackpocket?: boolean;
+  showQuestLog?: boolean;
+  scoreboardUnlockLevelSlot?: SlotId;
+  progressBoardLevelLinkStartPoint?: string;
+  isLBP3World?: boolean;
+}
+
+const floats = (s: Serializer, n: number): number[] => Array.from({ length: n }, () => s.f32());
+const writeFloats = (w: Writer, values: readonly number[] | undefined, n: number): void => {
+  for (let i = 0; i < n; i += 1) w.f32(values?.[i] ?? 0);
+};
+const NO_SLOT: SlotId = { type: 0, number: 0 };
 
 /**
  * `PWorld` after `things`: cwlib's `PWorld.serialize` (`d6a2ef8`) gate for gate,
@@ -293,222 +963,461 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
  * Thing's `POS` began at `maxVel` and the island failed a Thing marker 8 bytes
  * on (`e864d09e`: `WORLD` 10335..17233, the marker at 17241).
  */
-function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): WorldTail {
   const { version, subVersion } = s.revision;
   const vita = vitaRevision(s.revision);
   const leerdammer = s.revision.branchId === LEERDAMMER;
-  const things = (): void => {
+  const t: WorldTail = {};
+  const things = (): (Thing | undefined)[] => {
     const count = s.count();
-    for (let i = 0; i < count; i += 1) readThingRef(s, readers);
+    const out: (Thing | undefined)[] = [];
+    for (let i = 0; i < count; i += 1) out.push(readThingRef(s, readers));
+    return out;
   };
-  s.f32(); // maxVel
-  s.f32(); // maxAVel
-  s.s32(); // frame
-  if (version >= 0x2e2) s.s32(); // simFrame
-  if (version >= 0x377) s.i32(); // frameLevelStarted
-  s.i32(); // thingUIDCounter
-  if (version < 0x32d) s.i32(); // randy
+  t.maxVel = s.f32();
+  t.maxAVel = s.f32();
+  t.frame = s.s32();
+  if (version >= 0x2e2) t.simFrame = s.s32();
+  if (version >= 0x377) t.frameLevelStarted = s.i32();
+  t.thingUIDCounter = s.i32();
+  if (version < 0x32d) t.randy = s.i32();
   if (version < 0x1a4) {
-    for (let i = 0; i < 6; i += 1) s.f32();
-    s.i32();
-    if (version < 0x14b) s.array((self) => readThingRef(self, readers));
+    const f = floats(s, 6);
+    const int = s.i32();
+    t.old1a4 = version < 0x14b ? { floats: f, int, things: s.array((self) => readThingRef(self, readers)) } : { floats: f, int };
   }
   // cwlib skips the next four on its own toolkit branch from its scene graph on; no game file is that.
-  s.references((self) => {
-    self.str(); // EditorSelection.name
-    things(); // EditorSelection.things
-  }); // selections
-  readThingRef(s, readers); // backdrop
-  readThingRef(s, readers); // backdropNew
-  s.f32(); // backdropTimer
-  if (version >= 0x3a3) s.s32(); // lbp2NightDaySwapped
-  if (version >= 0x14a) s.bool(); // isPaused
+  t.selections = keptReferences(s, (self): EditorSelection => ({ name: self.str(), things: things() }));
+  t.backdrop = readThingRef(s, readers);
+  t.backdropNew = readThingRef(s, readers);
+  t.backdropTimer = s.f32();
+  if (version >= 0x3a3) t.lbp2NightDaySwapped = s.s32();
+  if (version >= 0x14a) t.isPaused = s.bool();
   if (version >= 0x152) {
-    s.f32(); // lightingFactor
-    s.f32(); // colorCorrectionFactor
+    t.lightingFactor = s.f32();
+    t.colorCorrectionFactor = s.f32();
     if (version >= 0x196) {
-      s.f32(); // fogFactor
-      s.f32(); // fogTintFactor
-      s.f32(); // darknessFactor
-      if (vita >= 0x78) s.bool(); // nonLinearFog
+      t.fogFactor = s.f32();
+      t.fogTintFactor = s.f32();
+      t.darknessFactor = s.f32();
+      if (vita >= 0x78) t.nonLinearFog = s.bool();
     }
   }
   if (version >= 0x16f) {
-    s.array(readEggLink); // completeRewards
-    s.array(readEggLink); // collectRewards
-    s.array(readEggLink); // aceRewards
-    if (version >= 0x208) s.bool(); // areRewardsShareable
-    if (version >= 0x35e) readSlotId(s); // scoreboardLevelLinkSlot
-    for (let i = 0; i < 3; i += 1) s.array(readKeyLink); // complete, collect and ace unlocks
+    t.completeRewards = s.array(readEggLink);
+    t.collectRewards = s.array(readEggLink);
+    t.aceRewards = s.array(readEggLink);
+    if (version >= 0x208) t.areRewardsShareable = s.bool();
+    if (version >= 0x35e) t.scoreboardLevelLinkSlot = readSlotId(s);
+    t.unlocks = [s.array(readKeyLink), s.array(readKeyLink), s.array(readKeyLink)];
   }
   if (vita >= 0x22 && vita < 0x25) {
-    s.array(readEggLink); // unlocks
-    s.array(readEggLink); // rewards
-    s.s32(); // timeRequired
+    t.vitaUnlocks = s.array(readEggLink);
+    t.vitaRewards = s.array(readEggLink);
+    t.timeRequired = s.s32();
   }
   if (vita >= 0x25) {
-    for (let i = 0; i < 3; i += 1) {
-      s.array(readEggLink); // gold, silver, bronze rewards
-      s.array(readKeyLink); // and unlocks
-    }
-    for (let i = 0; i < 3; i += 1) s.i8(); // gold, silver, bronze trophy condition types
-    for (let i = 0; i < 3; i += 1) {
-      s.s32(); // score required
-      s.f32(); // time required
-      s.s32(); // lives lost required
-    }
+    const tiers: VitaTrophyTier[] = [];
+    for (let i = 0; i < 3; i += 1) tiers.push({ rewards: s.array(readEggLink), unlocks: s.array(readKeyLink) });
+    t.trophyTiers = tiers;
+    t.trophyConditionTypes = [s.i8(), s.i8(), s.i8()];
+    const requirements = [];
+    for (let i = 0; i < 3; i += 1) requirements.push({ score: s.s32(), time: s.f32(), livesLost: s.s32() });
+    t.trophyRequirements = requirements;
   }
-  if (vita >= 0x3d) for (let i = 0; i < 4; i += 1) s.bool(); // enableAcing, gold, silver, bronze trophy
-  if (vita >= 0x4c) s.bool(); // enforceMinMaxPlayers
-  if (version > 0x16e && version < 0x1bf) for (let i = 0; i < 3; i += 1) s.i32();
+  if (vita >= 0x3d) t.trophyFlags = [s.bool(), s.bool(), s.bool(), s.bool()];
+  if (vita >= 0x4c) t.enforceMinMaxPlayers = s.bool();
+  if (version > 0x16e && version < 0x1bf) t.old16f = [s.i32(), s.i32(), s.i32()];
   // ❗ cwlib stops here, "CGameCamera serialization unsupported", and so does this.
-  if (version > 0x1a3 && version < 0x1d1) return;
-  if (version > 0x1bd && version < 0x213) s.i32(); // SpawnsPerPlayer
-  if (version >= 0x1c2 && version < 0x36e) s.i32(); // deathCount
-  if (version >= 0x1c4) s.s32(); // maxNumPlayers
+  if (version > 0x1a3 && version < 0x1d1) return t;
+  if (version > 0x1bd && version < 0x213) t.spawnsPerPlayer = s.i32();
+  if (version >= 0x1c2 && version < 0x36e) t.deathCount = s.i32();
+  if (version >= 0x1c4) t.maxNumPlayers = s.s32();
   if (version >= 0x1db) {
-    things(); // dissolvingThings
-    things(); // oldDissolvingThings
+    t.dissolvingThings = things();
+    t.oldDissolvingThings = things();
   }
-  if (version >= 0x1de && version < 0x345) s.bool(); // isTutorialLevel
+  if (version >= 0x1de && version < 0x345) t.isTutorialLevel = s.bool();
   if (version >= 0x22e) {
-    s.bool(); // everSpawned
-    s.s32(); // spawnFailureCount
+    t.everSpawned = s.bool();
+    t.spawnFailureCount = s.s32();
   }
   if (version >= 0x25a) {
-    readGlobalSettings(s); // targetGlobalSettings
-    readGlobalSettings(s); // fromGlobalSettings
-    s.f32(); // globalSettingsBlendFactor
-    s.bool(); // hasLevelLightingBeenSetup
-    s.s32(); // globalSettingsThingUID
+    t.targetGlobalSettings = readGlobalSettings(s);
+    t.fromGlobalSettings = readGlobalSettings(s);
+    t.globalSettingsBlendFactor = s.f32();
+    t.hasLevelLightingBeenSetup = s.bool();
+    t.globalSettingsThingUID = s.s32();
   }
   // `CameraSettings`: four multipliers, and two pitch ones above subVersion 0x36.
-  if (version >= 0x370) for (let i = 0; i < (subVersion > 0x36 ? 6 : 4); i += 1) s.f32();
+  if (version >= 0x370) t.cameraSettings = floats(s, subVersion > 0x36 ? 6 : 4);
   if (version >= 0x26f) {
-    s.f32(); // waterLevel
-    if (version >= 0x278 || onLeerdammer(s.revision, LD_WATER_WAVE)) s.f32(); // fromWaterLevel
-    s.f32(); // targetWaterLevel
+    t.waterLevel = s.f32();
+    if (version >= 0x278 || onLeerdammer(s.revision, LD_WATER_WAVE)) t.fromWaterLevel = s.f32();
+    t.targetWaterLevel = s.f32();
   }
-  if (version >= 0x270) for (let i = 0; i < 3; i += 1) s.f32(); // waterWaveMagnitude: current, from, target
+  if (version >= 0x270) t.waterWaveMagnitude = floats(s, 3);
   if (version >= 0x26f) {
-    for (let i = 0; i < 3; i += 1) s.f32(); // gravity: current, from, target
-    s.array((self) => self.f32()); // currGlobalSettingsBlendFactors
-    s.array((self) => self.i32()); // globalSettingsThingUIDs
-    if (version >= 0x270) s.array((self) => self.i32()); // globalSettingsThingPriority
+    t.gravity = floats(s, 3);
+    t.currGlobalSettingsBlendFactors = s.array((self) => self.f32());
+    t.globalSettingsThingUIDs = s.array((self) => self.i32());
+    if (version >= 0x270) t.globalSettingsThingPriority = s.array((self) => self.i32());
   }
   if (vita >= 0x2d) {
-    s.s32(); // waterColor
-    s.f32(); // waterBrightness
+    t.waterColor = s.s32();
+    t.waterBrightness = s.f32();
   } else if (version >= 0x289 || leerdammer) {
-    s.f32(); // waterTint
-    s.skipVector4(); // fromWaterTintColor
-    s.f32(); // targetWaterTint
+    t.waterTint = s.f32();
+    t.fromWaterTintColor = s.vector4();
+    t.targetWaterTint = s.f32();
   }
-  if (version >= 0x289 || leerdammer) for (let i = 0; i < 3; i += 1) s.f32(); // waterMurkiness: current, from, target
-  if (version >= 0x2b4 || onLeerdammer(s.revision, LD_WATER_BITS)) for (let i = 0; i < 3; i += 1) s.f32(); // waterBits
+  if (version >= 0x289 || leerdammer) t.waterMurkiness = floats(s, 3);
+  if (version >= 0x2b4 || onLeerdammer(s.revision, LD_WATER_BITS)) t.waterBits = floats(s, 3);
   if (version >= 0x34e) {
-    s.bool(); // waterDrainSoundsEnabled
-    s.bool(); // currWaterDrainSoundsEnabled
+    t.waterDrainSoundsEnabled = s.bool();
+    t.currWaterDrainSoundsEnabled = s.bool();
   }
   if (subVersion >= 0xe8) {
-    s.bool(); // waterCausticsEnabled
-    s.bool(); // currWaterCausticsEnabled
+    t.waterCausticsEnabled = s.bool();
+    t.currWaterCausticsEnabled = s.bool();
   }
-  if (subVersion >= 0xf8) for (let i = 0; i < 9; i += 1) s.s32(); // water main and hint colours: each current, from, target
-  if (subVersion >= 0xf8 && subVersion < 0x189) s.bool();
+  if (subVersion >= 0xf8) t.waterColors = Array.from({ length: 9 }, () => s.s32());
+  if (subVersion >= 0xf8 && subVersion < 0x189) t.unknownF8 = s.bool();
   if (subVersion >= 0x182) {
-    s.bool(); // backdropEnabled
-    s.bool(); // currBackdropEnabled
+    t.backdropEnabled = s.bool();
+    t.currBackdropEnabled = s.bool();
   }
-  if (version >= 0x29c || onLeerdammer(s.revision, LD_WATER_WAVE)) s.f32(); // currWavePos
+  if (version >= 0x29c || onLeerdammer(s.revision, LD_WATER_WAVE)) t.currWavePos = s.f32();
   if ((version > 0x288 && version < 0x29c) || (leerdammer && !onLeerdammer(s.revision, LD_WATER_WAVE))) {
-    s.f32();
-    s.bool();
+    t.old289 = { float: s.f32(), bool: s.bool() };
   }
   // `CBreadLoaf`, which cwlib refuses when present.
   if (version > 0x281 && version < 0x287 && s.i32() !== 0) throw new SerializerError('PWorld carries a CBreadLoaf, which cwlib does not read either');
-  if (version >= 0x2a3) s.i32(); // gameMode
-  if (subVersion >= 0x218) s.i32(); // gameModeRequested
-  if (version >= 0x2b0) s.s32(); // nextSackbotPlayerNumber
+  if (version >= 0x2a3) t.gameMode = s.i32();
+  if (subVersion >= 0x218) t.gameModeRequested = s.i32();
+  if (version >= 0x2b0) t.nextSackbotPlayerNumber = s.s32();
   if (version > 0x2d3 && version < 0x2f3) throw new SerializerError(`PWorld at 0x${version.toString(16)} holds a structure cwlib does not read either`);
   if (version >= 0x2ee) {
     // `CutsceneCameraManager`.
-    s.i32(); // state
-    readThingRef(s, readers); // currentCutSceneCamera
-    s.s32(); // timeInCurrentCamera
-    s.s32(); // endCountdown
-    s.f32(); // transitionStage
+    const state = s.i32();
+    const currentCutSceneCamera = readThingRef(s, readers);
+    const timeInCurrentCamera = s.s32();
+    const endCountdown = s.s32();
+    const transitionStage = s.f32();
+    let old: { bool: boolean; a: Vector3; float: number; b: Vector3 }[] | undefined;
     if (version > 0x2ef && version < 0x36e) {
-      for (let i = 0; i < 2; i += 1) {
-        s.bool();
-        s.skipVector3();
-        s.f32();
-        s.skipVector3();
-      }
+      old = [];
+      for (let i = 0; i < 2; i += 1) old.push({ bool: s.bool(), a: s.vector3(), float: s.f32(), b: s.vector3() });
     }
-    if (version >= 0x3a0) s.bool(); // currentCameraTweaking
+    const currentCameraTweaking = version >= 0x3a0 ? s.bool() : undefined;
+    t.cutscene = { state, currentCutSceneCamera, timeInCurrentCamera, endCountdown, transitionStage, old, currentCameraTweaking };
   }
   if (version >= 0x30c) {
     // `GlobalAudioSettings`.
-    s.s32(); // reverb
-    if (version < 0x347) s.f32();
-    for (let i = 0; i < 4; i += 1) s.f32(); // music, sfx, background, dialogue volumes
+    const reverb = s.s32();
+    const unknown347 = version < 0x347 ? s.f32() : undefined;
+    const volumes = floats(s, 4); // music, sfx, background, dialogue volumes
+    let sfxReverbSend: number | undefined;
+    let dialogueReverbSend: number | undefined;
     if (version >= 0x342) {
-      s.f32(); // sfxReverbSend
-      s.f32(); // dialogueReverbSend
+      sfxReverbSend = s.f32();
+      dialogueReverbSend = s.f32();
     }
-    if (version >= 0x347) for (let i = 0; i < 4; i += 1) s.f32(); // musicReverbSend and the three low-pass filters
-    if (subVersion >= 0xd8) for (let i = 0; i < 3; i += 1) s.f32(); // high-pass filters
-    if (subVersion >= 0xe2) s.str(); // ambianceTrack
+    const sends347 = version >= 0x347 ? floats(s, 4) : undefined;
+    const highPass = subVersion >= 0xd8 ? floats(s, 3) : undefined;
+    const ambianceTrack = subVersion >= 0xe2 ? s.str() : undefined;
+    t.audio = { reverb, unknown347, volumes, sfxReverbSend, dialogueReverbSend, sends347, highPass, ambianceTrack };
   }
   if (version >= 0x321) {
-    s.resource(true); // backdropPlan
-    s.resource(true); // backdropNewPlan
+    t.backdropPlan = s.resource(true);
+    t.backdropNewPlan = s.resource(true);
   }
-  if (version >= 0x352) s.bool(); // subLevel
-  if (version >= 0x38a) s.bool(); // scoreLocked
-  if (version >= 0x38b) s.s32(); // debugTimeInLevel
-  if (version >= 0x3ac) s.bool(); // useEvenNewerCheckpointCode
-  if (version >= 0x3bd && subVersion <= 0x117) s.array((self) => readMoveCursor(self, readers)); // moveCursors
-  if (vita >= 0x8) s.i32(); // globalTouchCursor
-  if (vita >= 0xa && vita < 0x28) s.bool(); // sharedScreen
-  if (subVersion > 0x215) s.bool(); // singlePlayer
+  if (version >= 0x352) t.subLevel = s.bool();
+  if (version >= 0x38a) t.scoreLocked = s.bool();
+  if (version >= 0x38b) t.debugTimeInLevel = s.s32();
+  if (version >= 0x3ac) t.useEvenNewerCheckpointCode = s.bool();
+  if (version >= 0x3bd && subVersion <= 0x117) t.moveCursors = s.array((self) => readMoveCursor(self, readers));
+  if (vita >= 0x8) t.globalTouchCursor = s.i32();
+  if (vita >= 0xa && vita < 0x28) t.sharedScreenOld = s.bool();
+  if (subVersion > 0x215) t.singlePlayer = s.bool();
   if (version >= 0x3d0) {
-    s.u8(); // minPlayers
-    s.u8(); // maxPlayers
-    s.bool(); // moveRecommended
+    t.minPlayers = s.u8();
+    t.maxPlayers = s.u8();
+    t.moveRecommended = s.bool();
   }
   if (vita >= 0) {
     // The Vita's world ends here, with its own flags (cwlib returns).
-    if (vita >= 0x18) s.bool(); // portraitMode
-    if (version >= 0x3dd) s.bool(); // fixInvalidInOutMoverContacts
-    if (vita >= 0x28 && vita < 0x47) s.s32(); // a player count: sharedScreen above 1
-    if (vita >= 0x47) s.bool(); // sharedScreen
-    if (vita >= 0x39) s.bool(); // disableHUD
-    if (vita >= 0x52) s.bool(); // disableShadows
-    if (vita >= 0x3b) s.bool(); // flipBackground
-    if (vita >= 0x4f) s.bool(); // mpSeparateScreen
+    if (vita >= 0x18) t.portraitMode = s.bool();
+    if (version >= 0x3dd) t.fixInvalidInOutMoverContacts = s.bool();
+    if (vita >= 0x28 && vita < 0x47) t.vitaPlayerCount = s.s32(); // sharedScreen above 1
+    if (vita >= 0x47) t.sharedScreen = s.bool();
+    if (vita >= 0x39) t.disableHUD = s.bool();
+    if (vita >= 0x52) t.disableShadows = s.bool();
+    if (vita >= 0x3b) t.flipBackground = s.bool();
+    if (vita >= 0x4f) t.mpSeparateScreen = s.bool();
+    return t;
+  }
+  if (version >= 0x3dd) t.fixInvalidInOutMoverContacts = s.bool();
+  if (version >= 0x3f1) t.continueMusic = s.bool();
+  if (subVersion >= 0x2f) {
+    t.broadcastMicroChipEntries = s.array((self) => ({
+      sourceMicrochip: readThingRef(self, readers),
+      clonedMicrochip: readThingRef(self, readers),
+    }));
+  }
+  if (subVersion >= 0x5d) t.manualJumpDown = s.i32();
+  if (subVersion >= 0x98 && subVersion < 0xe5) t.old98a = things();
+  if (subVersion >= 0xc3 && subVersion < 0xe5) t.oldC3 = things();
+  if (subVersion >= 0x98 && subVersion < 0xe5) t.old98b = things();
+  if (subVersion >= 0xe5) t.deferredDestroys = things();
+  if (subVersion >= 0xcf) t.globalDof = floats(s, 3);
+  if (subVersion >= 0xda) t.enableSackpocket = s.bool();
+  if (subVersion >= 0x170) t.showQuestLog = s.bool();
+  if (subVersion >= 0x11d) t.scoreboardUnlockLevelSlot = readSlotId(s);
+  if (subVersion >= 0x154) t.progressBoardLevelLinkStartPoint = s.wstr();
+  if (subVersion >= 0x15e) t.isLBP3World = s.bool();
+  return t;
+}
+
+/** `readWorldTail`'s mirror. */
+function writeWorldTail(w: Writer, t: WorldTail, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const vita = vitaRevision(w.revision);
+  const leerdammer = w.revision.branchId === LEERDAMMER;
+  const things = (list: readonly (Thing | undefined)[] | undefined): void => writeThingList(w, list, ctx);
+  const eggLinks = (list: readonly WorldEggLink[] | undefined): void => writeArray(w, list, writeEggLink);
+  const keyLinks = (list: readonly KeyLink[] | undefined): void => writeArray(w, list, writeKeyLink);
+  w.f32(t.maxVel ?? 0);
+  w.f32(t.maxAVel ?? 0);
+  w.s32(t.frame ?? 0);
+  if (version >= 0x2e2) w.s32(t.simFrame ?? 0);
+  if (version >= 0x377) w.i32(t.frameLevelStarted ?? 0);
+  w.i32(t.thingUIDCounter ?? 0);
+  if (version < 0x32d) w.i32(t.randy ?? 0);
+  if (version < 0x1a4) {
+    writeFloats(w, t.old1a4?.floats, 6);
+    w.i32(t.old1a4?.int ?? 0);
+    if (version < 0x14b) things(t.old1a4?.things);
+  }
+  writeKeptReferences(w, t.selections ?? [], (self, selection) => {
+    self.str(selection.name);
+    things(selection.things);
+  });
+  ctx.thing(w, t.backdrop);
+  ctx.thing(w, t.backdropNew);
+  w.f32(t.backdropTimer ?? 0);
+  if (version >= 0x3a3) w.s32(t.lbp2NightDaySwapped ?? 0);
+  if (version >= 0x14a) w.bool(t.isPaused ?? false);
+  if (version >= 0x152) {
+    w.f32(t.lightingFactor ?? 0);
+    w.f32(t.colorCorrectionFactor ?? 0);
+    if (version >= 0x196) {
+      w.f32(t.fogFactor ?? 0);
+      w.f32(t.fogTintFactor ?? 0);
+      w.f32(t.darknessFactor ?? 0);
+      if (vita >= 0x78) w.bool(t.nonLinearFog ?? false);
+    }
+  }
+  if (version >= 0x16f) {
+    eggLinks(t.completeRewards);
+    eggLinks(t.collectRewards);
+    eggLinks(t.aceRewards);
+    if (version >= 0x208) w.bool(t.areRewardsShareable ?? false);
+    if (version >= 0x35e) writeSlotId(w, t.scoreboardLevelLinkSlot ?? NO_SLOT);
+    for (let i = 0; i < 3; i += 1) keyLinks(t.unlocks?.[i]);
+  }
+  if (vita >= 0x22 && vita < 0x25) {
+    eggLinks(t.vitaUnlocks);
+    eggLinks(t.vitaRewards);
+    w.s32(t.timeRequired ?? 0);
+  }
+  if (vita >= 0x25) {
+    for (let i = 0; i < 3; i += 1) {
+      eggLinks(t.trophyTiers?.[i]?.rewards);
+      keyLinks(t.trophyTiers?.[i]?.unlocks);
+    }
+    for (let i = 0; i < 3; i += 1) w.i8(t.trophyConditionTypes?.[i] ?? 0);
+    for (let i = 0; i < 3; i += 1) {
+      const r = t.trophyRequirements?.[i];
+      w.s32(r?.score ?? 0);
+      w.f32(r?.time ?? 0);
+      w.s32(r?.livesLost ?? 0);
+    }
+  }
+  if (vita >= 0x3d) for (let i = 0; i < 4; i += 1) w.bool(t.trophyFlags?.[i] ?? false);
+  if (vita >= 0x4c) w.bool(t.enforceMinMaxPlayers ?? false);
+  if (version > 0x16e && version < 0x1bf) for (let i = 0; i < 3; i += 1) w.i32(t.old16f?.[i] ?? 0);
+  if (version > 0x1a3 && version < 0x1d1) return;
+  if (version > 0x1bd && version < 0x213) w.i32(t.spawnsPerPlayer ?? 0);
+  if (version >= 0x1c2 && version < 0x36e) w.i32(t.deathCount ?? 0);
+  if (version >= 0x1c4) w.s32(t.maxNumPlayers ?? 0);
+  if (version >= 0x1db) {
+    things(t.dissolvingThings);
+    things(t.oldDissolvingThings);
+  }
+  if (version >= 0x1de && version < 0x345) w.bool(t.isTutorialLevel ?? false);
+  if (version >= 0x22e) {
+    w.bool(t.everSpawned ?? false);
+    w.s32(t.spawnFailureCount ?? 0);
+  }
+  if (version >= 0x25a) {
+    writeGlobalSettings(w, t.targetGlobalSettings);
+    writeGlobalSettings(w, t.fromGlobalSettings);
+    w.f32(t.globalSettingsBlendFactor ?? 0);
+    w.bool(t.hasLevelLightingBeenSetup ?? false);
+    w.s32(t.globalSettingsThingUID ?? 0);
+  }
+  if (version >= 0x370) writeFloats(w, t.cameraSettings, subVersion > 0x36 ? 6 : 4);
+  if (version >= 0x26f) {
+    w.f32(t.waterLevel ?? 0);
+    if (version >= 0x278 || onLeerdammer(w.revision, LD_WATER_WAVE)) w.f32(t.fromWaterLevel ?? 0);
+    w.f32(t.targetWaterLevel ?? 0);
+  }
+  if (version >= 0x270) writeFloats(w, t.waterWaveMagnitude, 3);
+  if (version >= 0x26f) {
+    writeFloats(w, t.gravity, 3);
+    writeArray(w, t.currGlobalSettingsBlendFactors, (self, v) => self.f32(v));
+    writeArray(w, t.globalSettingsThingUIDs, (self, v) => self.i32(v));
+    if (version >= 0x270) writeArray(w, t.globalSettingsThingPriority, (self, v) => self.i32(v));
+  }
+  if (vita >= 0x2d) {
+    w.s32(t.waterColor ?? 0);
+    w.f32(t.waterBrightness ?? 0);
+  } else if (version >= 0x289 || leerdammer) {
+    w.f32(t.waterTint ?? 0);
+    w.vector4(t.fromWaterTintColor ?? ZERO4);
+    w.f32(t.targetWaterTint ?? 0);
+  }
+  if (version >= 0x289 || leerdammer) writeFloats(w, t.waterMurkiness, 3);
+  if (version >= 0x2b4 || onLeerdammer(w.revision, LD_WATER_BITS)) writeFloats(w, t.waterBits, 3);
+  if (version >= 0x34e) {
+    w.bool(t.waterDrainSoundsEnabled ?? false);
+    w.bool(t.currWaterDrainSoundsEnabled ?? false);
+  }
+  if (subVersion >= 0xe8) {
+    w.bool(t.waterCausticsEnabled ?? false);
+    w.bool(t.currWaterCausticsEnabled ?? false);
+  }
+  if (subVersion >= 0xf8) for (let i = 0; i < 9; i += 1) w.s32(t.waterColors?.[i] ?? 0);
+  if (subVersion >= 0xf8 && subVersion < 0x189) w.bool(t.unknownF8 ?? false);
+  if (subVersion >= 0x182) {
+    w.bool(t.backdropEnabled ?? false);
+    w.bool(t.currBackdropEnabled ?? false);
+  }
+  if (version >= 0x29c || onLeerdammer(w.revision, LD_WATER_WAVE)) w.f32(t.currWavePos ?? 0);
+  if ((version > 0x288 && version < 0x29c) || (leerdammer && !onLeerdammer(w.revision, LD_WATER_WAVE))) {
+    w.f32(t.old289?.float ?? 0);
+    w.bool(t.old289?.bool ?? false);
+  }
+  if (version > 0x281 && version < 0x287) w.i32(0); // no `CBreadLoaf`
+  if (version >= 0x2a3) w.i32(t.gameMode ?? 0);
+  if (subVersion >= 0x218) w.i32(t.gameModeRequested ?? 0);
+  if (version >= 0x2b0) w.s32(t.nextSackbotPlayerNumber ?? 0);
+  if (version > 0x2d3 && version < 0x2f3) throw new SerializerError(`PWorld at 0x${version.toString(16)} holds a structure cwlib does not write either`);
+  if (version >= 0x2ee) {
+    const c = t.cutscene;
+    w.i32(c?.state ?? 0);
+    ctx.thing(w, c?.currentCutSceneCamera);
+    w.s32(c?.timeInCurrentCamera ?? 0);
+    w.s32(c?.endCountdown ?? 0);
+    w.f32(c?.transitionStage ?? 0);
+    if (version > 0x2ef && version < 0x36e) {
+      for (let i = 0; i < 2; i += 1) {
+        const o = c?.old?.[i];
+        w.bool(o?.bool ?? false);
+        w.vector3(o?.a ?? ZERO3);
+        w.f32(o?.float ?? 0);
+        w.vector3(o?.b ?? ZERO3);
+      }
+    }
+    if (version >= 0x3a0) w.bool(c?.currentCameraTweaking ?? false);
+  }
+  if (version >= 0x30c) {
+    const a = t.audio;
+    w.s32(a?.reverb ?? 0);
+    if (version < 0x347) w.f32(a?.unknown347 ?? 0);
+    writeFloats(w, a?.volumes, 4);
+    if (version >= 0x342) {
+      w.f32(a?.sfxReverbSend ?? 0);
+      w.f32(a?.dialogueReverbSend ?? 0);
+    }
+    if (version >= 0x347) writeFloats(w, a?.sends347, 4);
+    if (subVersion >= 0xd8) writeFloats(w, a?.highPass, 3);
+    if (subVersion >= 0xe2) w.str(a?.ambianceTrack ?? '');
+  }
+  if (version >= 0x321) {
+    w.ref(t.backdropPlan, { descriptor: true });
+    w.ref(t.backdropNewPlan, { descriptor: true });
+  }
+  if (version >= 0x352) w.bool(t.subLevel ?? false);
+  if (version >= 0x38a) w.bool(t.scoreLocked ?? false);
+  if (version >= 0x38b) w.s32(t.debugTimeInLevel ?? 0);
+  if (version >= 0x3ac) w.bool(t.useEvenNewerCheckpointCode ?? false);
+  if (version >= 0x3bd && subVersion <= 0x117) writeArray(w, t.moveCursors, (self, v) => writeMoveCursor(self, v, ctx));
+  if (vita >= 0x8) w.i32(t.globalTouchCursor ?? 0);
+  if (vita >= 0xa && vita < 0x28) w.bool(t.sharedScreenOld ?? false);
+  if (subVersion > 0x215) w.bool(t.singlePlayer ?? false);
+  if (version >= 0x3d0) {
+    w.u8(t.minPlayers ?? 0);
+    w.u8(t.maxPlayers ?? 0);
+    w.bool(t.moveRecommended ?? false);
+  }
+  if (vita >= 0) {
+    if (vita >= 0x18) w.bool(t.portraitMode ?? false);
+    if (version >= 0x3dd) w.bool(t.fixInvalidInOutMoverContacts ?? false);
+    if (vita >= 0x28 && vita < 0x47) w.s32(t.vitaPlayerCount ?? 0);
+    if (vita >= 0x47) w.bool(t.sharedScreen ?? false);
+    if (vita >= 0x39) w.bool(t.disableHUD ?? false);
+    if (vita >= 0x52) w.bool(t.disableShadows ?? false);
+    if (vita >= 0x3b) w.bool(t.flipBackground ?? false);
+    if (vita >= 0x4f) w.bool(t.mpSeparateScreen ?? false);
     return;
   }
-  if (version >= 0x3dd) s.bool(); // fixInvalidInOutMoverContacts
-  if (version >= 0x3f1) s.bool(); // continueMusic
+  if (version >= 0x3dd) w.bool(t.fixInvalidInOutMoverContacts ?? false);
+  if (version >= 0x3f1) w.bool(t.continueMusic ?? false);
   if (subVersion >= 0x2f) {
-    s.array((self) => {
-      readThingRef(self, readers); // sourceMicrochip
-      readThingRef(self, readers); // clonedMicrochip
-    }); // broadcastMicroChipEntries
+    writeArray(w, t.broadcastMicroChipEntries, (self, e) => {
+      ctx.thing(self, e.sourceMicrochip);
+      ctx.thing(self, e.clonedMicrochip);
+    });
   }
-  if (subVersion >= 0x5d) s.i32(); // manualJumpDown
-  if (subVersion >= 0x98 && subVersion < 0xe5) things();
-  if (subVersion >= 0xc3 && subVersion < 0xe5) things();
-  if (subVersion >= 0x98 && subVersion < 0xe5) things();
-  if (subVersion >= 0xe5) things(); // deferredDestroys
-  if (subVersion >= 0xcf) for (let i = 0; i < 3; i += 1) s.f32(); // globalDofFront, globalDofBack, globalDofSackTrack
-  if (subVersion >= 0xda) s.bool(); // enableSackpocket
-  if (subVersion >= 0x170) s.bool(); // showQuestLog
-  if (subVersion >= 0x11d) readSlotId(s); // scoreboardUnlockLevelSlot
-  if (subVersion >= 0x154) s.wstr(); // progressBoardLevelLinkStartPoint
-  if (subVersion >= 0x15e) s.bool(); // isLBP3World
+  if (subVersion >= 0x5d) w.i32(t.manualJumpDown ?? 0);
+  if (subVersion >= 0x98 && subVersion < 0xe5) things(t.old98a);
+  if (subVersion >= 0xc3 && subVersion < 0xe5) things(t.oldC3);
+  if (subVersion >= 0x98 && subVersion < 0xe5) things(t.old98b);
+  if (subVersion >= 0xe5) things(t.deferredDestroys);
+  if (subVersion >= 0xcf) writeFloats(w, t.globalDof, 3);
+  if (subVersion >= 0xda) w.bool(t.enableSackpocket ?? false);
+  if (subVersion >= 0x170) w.bool(t.showQuestLog ?? false);
+  if (subVersion >= 0x11d) writeSlotId(w, t.scoreboardUnlockLevelSlot ?? NO_SLOT);
+  if (subVersion >= 0x154) w.wstr(t.progressBoardLevelLinkStartPoint ?? '');
+  if (subVersion >= 0x15e) w.bool(t.isLBP3World ?? false);
+}
+
+/** `PWorld` before its Things, its Things as the list holds them, and its tail. */
+export interface WorldFields {
+  readonly backdropOffset?: Vector3;
+  /** subVersion 0x72..0x73: three floats and two bytes cwlib does not name. */
+  readonly old72?: { readonly floats: readonly number[]; readonly a: number; readonly b: number };
+  readonly backdropOffsetZAuto?: boolean;
+  readonly overrideBackdropAmbience?: string;
+  /** Below version 0x14b. */
+  readonly materials?: readonly (ResourceRef | undefined)[];
+  readonly streamingManager?: StreamingManager;
+  /** The list as read, null entries and all; the part's value leaves those out. */
+  readonly things: readonly (Thing | undefined)[];
+  tail?: WorldTail;
+}
+
+/**
+ * `thing.parts.get('WORLD')`: the world's Things, as it always was, with the
+ * rest of `PWorld` on it as a **non-enumerable** `world` -- the way `PosPart`
+ * carries its bone -- so a writer has every field and a consumer sees the array.
+ */
+export type WorldPart = Thing[] & { readonly world?: WorldFields };
+
+function withWorld(things: Thing[], world: WorldFields): WorldPart {
+  return Object.defineProperty(things, 'world', { value: world, enumerable: false }) as WorldPart;
 }
 
 /**
@@ -519,34 +1428,51 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
  * omitted rather than left as dead code. `readLevel`'s outermost
  * world passes `tail` false and reads the tail itself, once it holds the Things.
  */
-function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): Thing[] {
+function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): WorldPart {
   const { version, subVersion } = s.revision;
-  if (subVersion >= 0x6d) {
-    s.f32(); // backdropOffsetX
-    s.f32(); // backdropOffsetY
-    s.f32(); // backdropOffsetZ
-  }
-  if (subVersion >= 0x72 && subVersion <= 0x73) {
-    for (let i = 0; i < 3; i += 1) s.f32();
-    s.u8();
-    s.u8();
-  }
-  if (subVersion >= 0x70) s.bool(); // backdropOffsetZAuto
-  if (subVersion >= 0xe2) s.str(); // overrideBackdropAmbience
-  if (version < 0x14b) s.array((self) => self.resource()); // materials
-  if (subVersion >= 0x3f) s.reference(readStreamingManager);
+  const fields: { -readonly [K in keyof WorldFields]: WorldFields[K] } = { things: [] };
+  if (subVersion >= 0x6d) fields.backdropOffset = s.vector3();
+  if (subVersion >= 0x72 && subVersion <= 0x73) fields.old72 = { floats: floats(s, 3), a: s.u8(), b: s.u8() };
+  if (subVersion >= 0x70) fields.backdropOffsetZAuto = s.bool();
+  if (subVersion >= 0xe2) fields.overrideBackdropAmbience = s.str();
+  if (version < 0x14b) fields.materials = s.array((self) => self.resource());
+  if (subVersion >= 0x3f) fields.streamingManager = keepId(s, readStreamingManager);
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather
   // than the empty placeholder `reference` would register.
   const things = s.list('things', (self) => readThingRef(self, readers));
-  if (tail) readWorldTail(s, readers);
+  fields.things = things;
+  if (tail) fields.tail = readWorldTail(s, readers);
   // ⚠️ **Only the OUTERMOST world's Things are the level's.** `readLevel` keeps
   // the first world's and reads the others as any part. A level can carry a second
   // world Thing deeper in the graph -- one turned up inside a `CREATURE` in
   // `5576f758` from the public archive, uid -1 with no parent, the same shape as
   // the level's own world -- and throwing there would have returned that inner
   // world's Things as if they were the level's.
-  return things.filter((t): t is Thing => t !== undefined);
+  return withWorld(things.filter((t): t is Thing => t !== undefined), fields);
+}
+
+/**
+ * `readWorld`'s mirror, the `WORLD` part's writer: every field `PWorld` reads,
+ * from the `world` the reader put on the array. ⚠️ An array with no `world` --
+ * Things gathered afresh -- writes them with every other field at its default,
+ * which is no world the game made.
+ */
+export function writeWorld(w: Writer, value: WorldPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const f: WorldFields = value.world ?? { things: value };
+  if (subVersion >= 0x6d) w.vector3(f.backdropOffset ?? ZERO3);
+  if (subVersion >= 0x72 && subVersion <= 0x73) {
+    writeFloats(w, f.old72?.floats, 3);
+    w.u8(f.old72?.a ?? 0);
+    w.u8(f.old72?.b ?? 0);
+  }
+  if (subVersion >= 0x70) w.bool(f.backdropOffsetZAuto ?? false);
+  if (subVersion >= 0xe2) w.str(f.overrideBackdropAmbience ?? '');
+  if (version < 0x14b) writeArray(w, f.materials, (self, m) => self.ref(m));
+  if (subVersion >= 0x3f) writeKept(w, f.streamingManager, writeStreamingManager);
+  writeThingList(w, f.things, ctx);
+  writeWorldTail(w, f.tail ?? {}, ctx);
 }
 
 export interface LevelParse {
@@ -578,6 +1504,20 @@ export interface LevelParse {
   readonly unreadTail?: string;
   /** A plan only: what the popit shows of it, absent on a streaming island's plan. */
   readonly inventory?: PlanInventory;
+  /*
+   * What the payload holds besides the Things, kept so it can be written from
+   * its values (`encodeLevel`, `encodePlan` in `encode-things.ts`).
+   */
+  /** A level: `RLevel`'s cross-play hashes, from version 0x3e7. */
+  readonly crossPlayHashes?: readonly Uint8Array[];
+  /** A level: its world Thing, whose `WORLD` part holds `things`. */
+  readonly world?: Thing;
+  /** A level read to its world's end: `RLevel` after the world Thing, as far as it read. */
+  readonly levelTail?: LevelTail;
+  /** A plan: `isUsedForStreaming`, from subVersion 0xcc. */
+  readonly isUsedForStreaming?: boolean;
+  /** A plan: the revision word `RPlan` stores, which the resource's overrules. */
+  readonly planRevision?: number;
 }
 
 /** `RPlan`'s `inventoryData` and the two keys after it. */
@@ -602,14 +1542,14 @@ async function open(
 }
 
 /** The subVersion that put `isUsedForStreaming` at the head of `RPlan`. */
-const STREAMING_PLAN = 0xcc;
+export const STREAMING_PLAN = 0xcc;
 
 /** `Revisions.LAMS_KEYS`, and LEERDAMMER's `LD_LAMS_KEYS`: LAMS keys in place of translation tags. */
-const LAMS_KEYS = 0x2bb;
-const LD_LAMS_KEYS = 0x8;
+export const LAMS_KEYS = 0x2bb;
+export const LD_LAMS_KEYS = 0x8;
 
 /** `Revisions.PLAN_DETAILS`: `RPlan` carries its inventory details from this version. */
-const PLAN_DETAILS = 0x197;
+export const PLAN_DETAILS = 0x197;
 
 /**
  * Read a **plan** (`PLNb`) and return the Things inside it.
@@ -663,7 +1603,7 @@ export function readPlanStream(
   readers: Map<string, PartReader> = partReaders(),
 ): LevelParse {
   const streaming = revision.subVersion >= STREAMING_PLAN ? s.bool() : false;
-  s.i32();
+  const planRevision = s.i32();
   const inner = new Serializer(s.mark('thingData', (self) => self.bytes(self.i32())), revision, flags);
   if (s.tape) {
     inner.tape = new Tape(inner.data);
@@ -675,6 +1615,7 @@ export function readPlanStream(
   // over, as `readLevel` does, and only where nothing installed one already.
   installWorldReader(readers);
   const things = inner.list('things', (self) => readThingRef(self, readers));
+  keepFileIds(inner);
   // ❗ **The array fills the blob exactly, and that is checked.** `thingData`
   // holds the Thing array and nothing else, so bytes left over mean a part
   // reader took the wrong number and the parse is wrong even though it finished.
@@ -694,7 +1635,7 @@ export function readPlanStream(
   let unreadTail: string | undefined = leftover;
   try {
     if (revision.version >= PLAN_DETAILS && !streaming) {
-      const details = readInventoryItemDetails(s);
+      const details = readDetailsKeepingBytes(s);
       // Below `LAMS_KEYS` these are two translation tags, `str`s, and cwlib
       // makes the keys from them: `POPIT_PAGE_COMMUNITY_OBJECTS` closes 380 of
       // the game's plans at 0x26e (`RPlan.java` at `d6a2ef8`).
@@ -711,10 +1652,33 @@ export function readPlanStream(
     unreadTail ??= (error as Error).message;
   }
   return {
-    revision, things,
+    revision, things, planRevision,
+    ...(revision.subVersion >= STREAMING_PLAN ? { isUsedForStreaming: streaming } : {}),
     ...(inventory === undefined ? {} : { inventory }),
     ...(unreadTail === undefined ? {} : { unreadTail }),
   };
+}
+
+/**
+ * Every object a level's or a plan's Things stream referred to, by the object:
+ * the id it had there. ❗ **A writer from values names an object under this id
+ * where the struct's own reader kept none** -- an NPC behaviour's inner structs
+ * (`npc.ts`'s ids are kept on the object before `Serializer.reference` merges it
+ * into its placeholder, so on no object a reader returns), a contact's shape
+ * that no Thing holds (`shape.ts`). `encode-things.ts`'s writer asks it.
+ */
+const FILE_IDS = new WeakMap<object, number>();
+
+/** Enter every object a stream referred to under its id, once the stream is read. */
+function keepFileIds(s: Serializer): void {
+  for (const [id, value] of s.referenced) {
+    if (typeof value === 'object' && value !== null && !FILE_IDS.has(value)) FILE_IDS.set(value, id);
+  }
+}
+
+/** The reference id `value` had in the level or plan it was read from. */
+export function fileIdOf(value: object): number | undefined {
+  return FILE_IDS.get(value);
 }
 
 /** A plan's outer tape → the tape of its `thingData` stream. */
@@ -753,27 +1717,6 @@ function readIsland(s: Serializer, plans: Uint8Array[], bounds: IslandBounds[]):
   plans.push(s.mark('planData', (self) => self.bytes(self.i32())));
   readStreamingLists(s);
   readDependencyLists(s);
-}
-
-/**
- * The four lists and the dependency lists a `ChunkFile` and a
- * `StreamingIsland` share, under cwlib's `ChunkFile` gates: below `0x16a` an
- * island ends after its collectables (the `0x12c` story chunks).
- */
-function readStreamingLists(s: Serializer): void {
-  const { subVersion } = s.revision;
-  if (subVersion > 0x72) s.array(readStreamingCheckpoint);
-  if (subVersion > 0xeb) s.array(readQuestTracker);
-  if (subVersion > 0x118) s.array(readQuestSwitch);
-  if (subVersion > 0x11d) s.array(readCollectableData);
-}
-
-function readDependencyLists(s: Serializer): void {
-  if (s.revision.subVersion <= 0x169) return;
-  const guids = s.count();
-  for (let i = 0; i < guids; i += 1) s.guid();
-  const hashes = s.count();
-  for (let i = 0; i < hashes; i += 1) s.sha1();
 }
 
 /**
@@ -888,9 +1831,11 @@ export function readLevelStream(
 ): LevelParse {
   // `RLevel`: the cross-play hashes came in at 0x3e7, and the corpus straddles
   // that, so the count is only there on the later files.
+  let crossPlayHashes: Uint8Array[] | undefined;
   if (revision.version > 0x3e6) {
     const count = s.count();
-    for (let i = 0; i < count; i += 1) s.sha1();
+    crossPlayHashes = [];
+    for (let i = 0; i < count; i += 1) crossPlayHashes.push(s.sha1().slice());
   }
 
   // ❗ **Installed on the map the part readers already captured, not on a copy.**
@@ -899,25 +1844,34 @@ export function readLevelStream(
   // world Thing anywhere below the first one threw "no reader for part WORLD".
   // That is one of the 43 archive levels, `5576f758`, and it is why this line
   // does not say `new Map(readers)`.
-  let worldThings: Thing[] | undefined;
+  let worldThings: WorldPart | undefined;
   readers.set('WORLD', (self) => {
     if (worldThings) return readWorld(self, readers);
-    worldThings = readWorld(self, readers, false);
-    readWorldTail(self, readers);
-    return worldThings;
+    const things = readWorld(self, readers, false);
+    worldThings = things;
+    things.world!.tail = readWorldTail(self, readers);
+    return things;
   });
 
   let unreadTail: string | undefined;
+  let world: Thing | undefined;
+  let levelTail: LevelTail | undefined;
   try {
-    readThingRef(s, readers);
+    world = readThingRef(s, readers);
     if (!worldThings) throw new SerializerError('the world Thing carried no WORLD part');
-    readLevelTail(s);
+    levelTail = readLevelTail(s);
     if (s.remaining !== 0) unreadTail = `${s.remaining} bytes past RLevel's last field`;
   } catch (error) {
     if (!worldThings) throw error;
     unreadTail = (error as Error).message;
   }
-  const parse = { revision, things: worldThings, chunks: chunkFiles.get(s) ?? [] };
+  keepFileIds(s);
+  const parse: LevelParse = {
+    revision, things: worldThings, chunks: chunkFiles.get(s) ?? [],
+    ...(crossPlayHashes ? { crossPlayHashes } : {}),
+    ...(world ? { world } : {}),
+    ...(levelTail ? { levelTail } : {}),
+  };
   return unreadTail === undefined ? parse : { ...parse, unreadTail };
 }
 
@@ -981,38 +1935,122 @@ export function readAdventureData(s: Serializer): AdventureData {
 }
 
 /**
+ * `readAdventureData`'s mirror. ⚠️ Below subVersion 0xae an item carries four
+ * values the reader drops; they are written 0, as cwlib writes them -- no
+ * `RLevel` holds an `AdventureData` that old (it is in one from 0x169).
+ */
+export function writeAdventureData(w: Writer, data: AdventureData): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0xaf) w.i32(data.fixedId);
+  if (subVersion > 0x93) {
+    w.i32(data.itemPuidCounter);
+    writeArray(w, data.items, (self, item) => {
+      self.i32(item.puid);
+      self.ref(item.plan, { descriptor: true });
+      if (subVersion < 0xae) {
+        self.u16(0);
+        self.u8(0);
+        self.f32(0);
+        self.i32(0);
+      }
+      if (subVersion > 0xbe) self.i32(item.flags);
+      if (subVersion > 0xe0) self.i32(item.iconPuid);
+    });
+  }
+  if (subVersion > 0xa6) writeArray(w, data.quests, (self, quest) => self.ref(quest, { descriptor: true }));
+  if (subVersion >= 0xd1) {
+    writeArray(w, data.startPoints, (self, point) => {
+      writeSlotId(self, point.slot);
+      writeArray(self, point.ids, (x, id) => {
+        x.wstr(id.name);
+        x.i32(id.id);
+      });
+    });
+  }
+}
+
+/** `CachedInventoryData`, one per tutorial inventory item. */
+export interface CachedInventoryData {
+  readonly category: number;
+  readonly location: number;
+  /** Above version 0x39d. */
+  readonly cachedToolType?: number;
+  /** U0, U1, V0, V1. */
+  readonly uv?: readonly number[];
+}
+
+/** `RLevel` after its world Thing, every field `readLevelTail` reads. */
+export interface LevelTail {
+  /** `PlayerRecord`, above version 0x213: each player's handle. */
+  readonly playerIds?: readonly string[];
+  /**
+   * Each `NetworkPlayerID` as its bytes, beside the handle read from them:
+   * past the handle its terminator, padding and `opt` and `reserved` blocks
+   * hold data in the game's own levels (the platform, a counter), which
+   * `readNetworkPlayerId` steps over. Written back while the handle is unchanged.
+   */
+  readonly playerIdBytes?: readonly Uint8Array[];
+  readonly playerNumbers?: readonly number[];
+  readonly playerRecordOffset?: number;
+  readonly tutorialInventory?: readonly InventoryItem[];
+  readonly tutorialInventoryData?: readonly CachedInventoryData[];
+  readonly tutorialInventoryActive?: boolean;
+  readonly copiedFromSomeoneElse?: boolean;
+  /** The Vita's, from its revision 0x70. */
+  readonly musicGuid?: number;
+  readonly musicSettingsGuid?: number;
+  readonly musicStemVolumes?: readonly number[];
+  /** subVersion 0x35..0x90 and 0x35..0xb2: two bools cwlib does not name. */
+  readonly unknown35a?: boolean;
+  readonly unknown35b?: boolean;
+  /** subVersion 0xf0: a buffer. */
+  readonly bufferF0?: Uint8Array;
+  readonly savedThroughPusher?: boolean;
+  readonly dceUuid?: Uint8Array;
+  /** subVersion 0x161..0x168: the adventure's shared data, by reference. */
+  readonly adventureSharedData?: ResourceRef;
+  /** subVersion 0x169 on. */
+  readonly adventure?: AdventureData;
+}
+
+/**
  * `RLevel` after its world Thing: cwlib's `resources/RLevel.java`
  * (ennuo/toolkit `d6a2ef8`), gate for gate.
  */
-function readLevelTail(s: Serializer): void {
+function readLevelTail(s: Serializer): LevelTail {
   const { version, subVersion } = s.revision;
+  const t: { -readonly [K in keyof LevelTail]: LevelTail[K] } = {};
   if (version > 0x213) {
     // `PlayerRecord`
-    s.array(readNetworkPlayerId); // playerIDs
-    s.array((self) => self.i32()); // playerNumbers
-    s.i32(); // offset
+    const bytes: Uint8Array[] = [];
+    t.playerIds = s.array((self) => {
+      const at = self.position;
+      const handle = readNetworkPlayerId(self);
+      bytes.push(self.data.slice(at, self.position));
+      return handle;
+    });
+    t.playerIdBytes = bytes;
+    t.playerNumbers = s.array((self) => self.i32());
+    t.playerRecordOffset = s.i32();
   }
-  if (version > 0x347) s.array(readInventoryItem); // tutorialInventory
+  if (version > 0x347) t.tutorialInventory = s.array((self) => readKeepingBytes(self, readInventoryItem));
   if (version > 0x35c) {
-    s.array((self) => {
-      // `CachedInventoryData`
-      self.u32(); // category
-      self.u32(); // location
-      if (version > 0x39d) {
-        self.i32(); // cachedToolType
-        for (let i = 0; i < 4; i += 1) self.u8(); // U0, U1, V0, V1
-      }
-    }); // tutorialInventoryData
+    t.tutorialInventoryData = s.array((self): CachedInventoryData => {
+      const category = self.u32();
+      const location = self.u32();
+      if (version <= 0x39d) return { category, location };
+      return { category, location, cachedToolType: self.i32(), uv: [self.u8(), self.u8(), self.u8(), self.u8()] };
+    });
   }
-  if (version > 0x39b) s.bool(); // tutorialInventoryActive
-  if (version > 0x3b0) s.bool(); // copiedFromSomeoneElse
+  if (version > 0x39b) t.tutorialInventoryActive = s.bool();
+  if (version > 0x3b0) t.copiedFromSomeoneElse = s.bool();
   if (vitaRevision(s.revision) >= 0x70) {
-    s.guid(); // musicGUID
-    s.guid(); // musicSettingsGUID
-    s.array((self) => self.f32()); // musicStemVolumes
+    t.musicGuid = s.guid();
+    t.musicSettingsGuid = s.guid();
+    t.musicStemVolumes = s.array((self) => self.f32());
   }
-  if (subVersion > 0x34 && subVersion < 0x91) s.bool();
-  if (subVersion > 0x34 && subVersion < 0xb3) s.bool();
+  if (subVersion > 0x34 && subVersion < 0x91) t.unknown35a = s.bool();
+  if (subVersion > 0x34 && subVersion < 0xb3) t.unknown35b = s.bool();
   // ❗ **Three reads cwlib does not have, from the game's own loader** (`v0xc51f60` in
   // `eboot-v128.bin`, which tests the head word: steering/level-files.md, *`readLevel`
   // reads to the end*). Only the second is in a file here: the reference, null and one
@@ -1025,14 +2063,74 @@ function readLevelTail(s: Serializer): void {
   if (subVersion >= 0xb0 && subVersion <= 0x125 && s.i32() !== 0) {
     throw new SerializerError('RLevel with a non-null object at subVersion 0xb0..0x125: not ported');
   }
-  if (subVersion === 0xf0) s.bytes(s.count()); // a buffer, as `dceUuid` is
-  if (subVersion > 0x94 && subVersion < 0x12a) s.bool(); // savedThroughPusher
+  if (subVersion === 0xf0) t.bufferF0 = s.bytes(s.count()).slice(); // a buffer, as `dceUuid` is
+  if (subVersion > 0x94 && subVersion < 0x12a) t.savedThroughPusher = s.bool();
   if (subVersion >= 0xf1 && subVersion <= 0xf9) {
     throw new SerializerError(`legacy adventure data at subVersion 0x${subVersion.toString(16)}: cwlib does not read it either`);
   }
-  if (subVersion >= 0xfa) s.bytes(s.count()); // dceUuid
-  if (subVersion >= 0x161 && subVersion < 0x169) s.resource(); // the adventure's shared data
-  if (subVersion >= 0x169) s.reference(readAdventureData);
+  if (subVersion >= 0xfa) t.dceUuid = s.bytes(s.count()).slice();
+  if (subVersion >= 0x161 && subVersion < 0x169) t.adventureSharedData = s.resource();
+  if (subVersion >= 0x169) t.adventure = keepId(s, readAdventureData);
+  return t;
+}
+
+/** The handle a `NetworkPlayerID`'s bytes hold. */
+function playerHandleOf(w: Writer, bytes: Uint8Array): string {
+  return readNetworkPlayerId(new Serializer(bytes, w.revision, w.compressionFlags));
+}
+
+/** `readLevelTail`'s mirror. */
+export function writeLevelTail(w: Writer, t: LevelTail): void {
+  const { version, subVersion } = w.revision;
+  if (version > 0x213) {
+    const ids = t.playerIds ?? [];
+    w.i32(ids.length);
+    ids.forEach((handle, i) => {
+      const bytes = t.playerIdBytes?.[i];
+      if (bytes && playerHandleOf(w, bytes) === handle) w.bytes(bytes);
+      else writeNetworkPlayerId(w, handle);
+    });
+    writeArray(w, t.playerNumbers, (self, n) => self.i32(n));
+    w.i32(t.playerRecordOffset ?? 0);
+  }
+  if (version > 0x347) writeListAsRead(w, t.tutorialInventory, writeInventoryItem);
+  if (version > 0x35c) {
+    writeArray(w, t.tutorialInventoryData, (self, d) => {
+      self.u32(d.category);
+      self.u32(d.location);
+      if (version > 0x39d) {
+        self.i32(d.cachedToolType ?? 0);
+        for (let i = 0; i < 4; i += 1) self.u8(d.uv?.[i] ?? 0);
+      }
+    });
+  }
+  if (version > 0x39b) w.bool(t.tutorialInventoryActive ?? false);
+  if (version > 0x3b0) w.bool(t.copiedFromSomeoneElse ?? false);
+  if (vitaRevision(w.revision) >= 0x70) {
+    w.guid(t.musicGuid ?? 0);
+    w.guid(t.musicSettingsGuid ?? 0);
+    writeArray(w, t.musicStemVolumes, (self, v) => self.f32(v));
+  }
+  if (subVersion > 0x34 && subVersion < 0x91) w.bool(t.unknown35a ?? false);
+  if (subVersion > 0x34 && subVersion < 0xb3) w.bool(t.unknown35b ?? false);
+  if (subVersion >= 0x8e && subVersion <= 0xaf) {
+    throw new SerializerError(`RLevel at subVersion 0x${subVersion.toString(16)}: a struct the game reads there is not ported`);
+  }
+  if (subVersion >= 0xb0 && subVersion <= 0x125) w.i32(0); // the null object
+  if (subVersion === 0xf0) {
+    w.i32(t.bufferF0?.length ?? 0);
+    if (t.bufferF0) w.bytes(t.bufferF0);
+  }
+  if (subVersion > 0x94 && subVersion < 0x12a) w.bool(t.savedThroughPusher ?? false);
+  if (subVersion >= 0xf1 && subVersion <= 0xf9) {
+    throw new SerializerError(`legacy adventure data at subVersion 0x${subVersion.toString(16)}: cwlib does not write it either`);
+  }
+  if (subVersion >= 0xfa) {
+    w.i32(t.dceUuid?.length ?? 0);
+    if (t.dceUuid) w.bytes(t.dceUuid);
+  }
+  if (subVersion >= 0x161 && subVersion < 0x169) w.ref(t.adventureSharedData);
+  if (subVersion >= 0x169) writeKept(w, t.adventure, writeAdventureData);
 }
 
 /** What `readThings` found the file to be. */

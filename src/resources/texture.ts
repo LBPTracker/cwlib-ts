@@ -25,6 +25,7 @@
 
 import { inflateChunkTable, magicOf, type Inflate } from '../io/resource.ts';
 import { latin1 } from '../io/serializer.ts';
+import type { Deflate } from '../io/writer.ts';
 
 /** `CellGcmEnumForGtf`, the low five bits and the `UN` bit of `CellGcmTexture.format`. */
 export const GCM_B8 = 0x81;
@@ -279,10 +280,10 @@ async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
   if (Math.ceil(at / CHAIN_ALIGN) * CHAIN_ALIGN !== data.length) {
     throw new TextureFormatError(`the mip chain is ${at} bytes and the payload ${data.length}`);
   }
-  return {
+  return keepStored<Texture>({
     magic: 'GTF ', format, width: gcm.width, height: gcm.height, depth, mipCount, faces, levels,
     bump: (gcm.flags & 1) !== 0, gcm,
-  };
+  }, data);
 }
 
 const DDSD_MIPMAPCOUNT = 0x20000;
@@ -350,7 +351,7 @@ async function readTex(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
   const tail = dds.length - at;
   const bump = tail === 4 && latin1(dds.subarray(at)) === 'BUMP';
   if (tail !== 0 && !bump) throw new TextureFormatError(`${tail} bytes after the DDS's last mip`);
-  return { magic: 'TEX ', format, width, height, depth: 1, mipCount, faces: 1, levels: [chain], bump };
+  return keepStored<Texture>({ magic: 'TEX ', format, width, height, depth: 1, mipCount, faces: 1, levels: [chain], bump }, dds);
 }
 
 /**
@@ -365,6 +366,226 @@ export async function readTexture(bytes: Uint8Array, inflate: Inflate): Promise<
   if (magic === 'GTF ') return readGtf(bytes, inflate);
   if (magic === 'TEX ') return readTex(bytes, inflate);
   throw new TextureFormatError(`not a texture: magic ${JSON.stringify(magic)}`);
+}
+
+/* ------------------------------------------------------------- writing */
+
+/** A non-enumerable property of a read `Texture`: the payload as it inflated, a GTF's chain or a TEX's DDS. */
+const STORED = Symbol('stored');
+
+function keepStored<T extends object>(value: T, payload: Uint8Array): T {
+  Object.defineProperty(value, STORED, { value: payload });
+  return value;
+}
+
+function storedOf(value: object): Uint8Array | undefined {
+  return (value as Record<symbol, Uint8Array | undefined>)[STORED];
+}
+
+/** Raw chunk size: the game's textures and backdrops are cut here, the last chunk short. */
+const CHUNK_SIZE = 0x8000;
+
+/**
+ * `inflateChunkTable`'s inverse: the `0x0001` flag, the count, a `(compressed,
+ * raw)` pair per chunk of `0x8000` raw bytes, then the chunks. A chunk that
+ * would not shrink is stored as it is, both sizes equal -- 47 of the game's
+ * `TEX `s carry one -- and an empty payload is a table of no chunks. Shared with
+ * `staticmesh.ts`, whose chunk table is the same.
+ */
+export async function writeChunkTable(payload: Uint8Array, deflate: Deflate): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  const raws: number[] = [];
+  for (let at = 0; at < payload.length; at += CHUNK_SIZE) {
+    const raw = payload.subarray(at, Math.min(at + CHUNK_SIZE, payload.length));
+    const deflated = await deflate(raw);
+    chunks.push(deflated.length < raw.length ? deflated : raw);
+    raws.push(raw.length);
+  }
+  if (chunks.length > 0xffff) throw new TextureFormatError(`${chunks.length} chunks, over 0xffff`);
+  let size = 4 + chunks.length * 4;
+  for (const chunk of chunks) size += chunk.length;
+  const out = new Uint8Array(size);
+  const view = new DataView(out.buffer);
+  view.setUint16(0, 1, false);
+  view.setUint16(2, chunks.length, false);
+  let at = 4 + chunks.length * 4;
+  chunks.forEach((chunk, i) => {
+    view.setUint16(4 + i * 4, chunk.length, false);
+    view.setUint16(6 + i * 4, raws[i], false);
+    out.set(chunk, at);
+    at += chunk.length;
+  });
+  return out;
+}
+
+/** A GTF's chain from its levels: `readGtf`'s walk, written. */
+function packGtf(value: Texture, gcm: GcmTexture): Uint8Array {
+  const base = gcm.format & ~GCM_LINEAR;
+  const linear = (gcm.format & GCM_LINEAR) !== 0;
+  const bc = value.format !== 'rgba8';
+  const texel = base === GCM_A8R8G8B8 ? 4 : 1;
+  const faces = gcm.cubemap ? 6 : 1;
+  const mipCount = Math.max(1, gcm.mipmap);
+  const depth = gcm.dimension === 3 ? Math.max(1, gcm.depth) : 1;
+  // Where every level goes, the padding included: the length first.
+  const places: { face: number; mip: number; at: number; w: number; h: number; d: number }[] = [];
+  let at = 0;
+  for (let face = 0; face < faces; face += 1) {
+    const start = at;
+    for (let mip = 0; mip < mipCount; mip += 1) {
+      const w = half(gcm.width, mip);
+      const h = half(gcm.height, mip);
+      const d = half(depth, mip);
+      places.push({ face, mip, at, w, h, d });
+      at += bc ? blocksOf(w) * blocksOf(h) * (value.format === 'bc1' ? 8 : 16) * d : (linear ? gcm.pitch * h * d : w * h * d * texel);
+    }
+    if (faces > 1) at = start + Math.ceil((at - start) / CHAIN_ALIGN) * CHAIN_ALIGN;
+  }
+  const length = Math.ceil(at / CHAIN_ALIGN) * CHAIN_ALIGN;
+  const stored = storedOf(value);
+  // The stored chain is the ground: it holds the padding, and the bytes of a
+  // texel the remap never reads, which no level carries.
+  const out = stored && stored.length === length ? stored.slice() : new Uint8Array(length);
+  const { offset } = remapOffsets(gcm.remap, texel);
+  for (const { face, mip, at: from, w, h, d } of places) {
+    const level = value.levels[face]?.[mip];
+    if (!level) throw new TextureFormatError(`no level ${mip} of face ${face}`);
+    if (bc) {
+      out.set(level.data, from);
+      continue;
+    }
+    if (level.data.length !== w * h * d * 4) throw new TextureFormatError(`level ${mip} of face ${face} is not ${w}x${h}x${d} RGBA8`);
+    const stride = linear ? gcm.pitch : w * texel;
+    const [mx, my, mz] = linear ? mortonTables(0, 0, 0) : mortonTables(log2(w), log2(h), log2(d));
+    let src = 0;
+    for (let z = 0; z < d; z += 1) {
+      for (let y = 0; y < h; y += 1) {
+        const row = linear ? from + (z * h + y) * stride : 0;
+        const yz = linear ? 0 : my[y] | mz[z];
+        for (let x = 0; x < w; x += 1) {
+          const to = linear ? row + x * texel : from + ((mx[x] | yz) >>> 0) * texel;
+          // From A down to R, so where two outputs read one byte R's is kept.
+          for (let c = 3; c >= 0; c -= 1) if (offset[c] >= 0) out[to + offset[c]] = level.data[src + c];
+          src += 4;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** A DDS header for a texture that has none stored: the masks and flags a writer of DDS sets. */
+function ddsHeader(value: Texture): Uint8Array {
+  const out = new Uint8Array(DDS_HEADER);
+  const view = new DataView(out.buffer);
+  const bc = value.format !== 'rgba8';
+  const le = (o: number, v: number): void => view.setUint32(o, v >>> 0, true);
+  out.set([0x44, 0x44, 0x53, 0x20]);
+  le(4, 124);
+  le(8, 0x1 | 0x2 | 0x4 | 0x1000 | (value.mipCount > 1 ? DDSD_MIPMAPCOUNT : 0) | (bc ? 0x80000 : 0x8));
+  le(12, value.height);
+  le(16, value.width);
+  le(20, bc ? blocksOf(value.width) * blocksOf(value.height) * (value.format === 'bc1' ? 8 : 16) : value.width * 4);
+  le(28, value.mipCount);
+  le(76, 32);
+  if (bc) {
+    le(80, DDPF_FOURCC);
+    out.set([...(value.format === 'bc1' ? 'DXT1' : value.format === 'bc2' ? 'DXT3' : 'DXT5')].map((c) => c.charCodeAt(0)), 84);
+  } else {
+    le(80, DDPF_RGB | DDPF_ALPHAPIXELS);
+    le(88, 32);
+    le(92, 0x00ff0000);
+    le(96, 0x0000ff00);
+    le(100, 0x000000ff);
+    le(104, 0xff000000);
+  }
+  le(108, 0x1000 | (value.mipCount > 1 ? 0x400008 : 0));
+  return out;
+}
+
+/** A TEX's DDS from its levels: `readTex`'s walk, written. */
+function packTex(value: Texture): Uint8Array {
+  const chain = value.levels[0] ?? [];
+  const bc = value.format !== 'rgba8';
+  let length = DDS_HEADER;
+  for (let mip = 0; mip < value.mipCount; mip += 1) {
+    const w = half(value.width, mip);
+    const h = half(value.height, mip);
+    length += bc ? blocksOf(w) * blocksOf(h) * (value.format === 'bc1' ? 8 : 16) : w * h * 4;
+  }
+  if (value.bump) length += 4;
+  const stored = storedOf(value);
+  const out = new Uint8Array(length);
+  if (stored && stored.length === length) out.set(stored);
+  else out.set(ddsHeader(value));
+  const view = new DataView(out.buffer);
+  const pf = view.getUint32(80, true);
+  const masks = [view.getUint32(92, true), view.getUint32(96, true), view.getUint32(100, true), pf & DDPF_ALPHAPIXELS ? view.getUint32(104, true) : 0];
+  const shifts = masks.map((m) => (m ? 31 - Math.clz32(m & -m) : -1));
+  const covered = (masks[0] | masks[1] | masks[2] | masks[3]) >>> 0;
+  let at = DDS_HEADER;
+  for (let mip = 0; mip < value.mipCount; mip += 1) {
+    const level = chain[mip];
+    if (!level) throw new TextureFormatError(`no level ${mip}`);
+    if (bc) {
+      out.set(level.data, at);
+      at += level.data.length;
+      continue;
+    }
+    const n = level.width * level.height;
+    for (let i = 0; i < n; i += 1) {
+      // The bits no mask covers stay as stored.
+      let word = view.getUint32(at + i * 4, true) & ~covered;
+      for (let c = 0; c < 4; c += 1) if (shifts[c] >= 0) word |= (level.data[i * 4 + c] << shifts[c]) & masks[c];
+      view.setUint32(at + i * 4, word >>> 0, true);
+    }
+    at += n * 4;
+  }
+  if (value.bump) out.set([0x42, 0x55, 0x4d, 0x50], at);
+  return out;
+}
+
+/**
+ * `readTexture`'s inverse: the whole `GTF ` or `TEX ` file from the value --
+ * the `CellGcmTexture` header of a GTF (`gcm`) or nothing of a TEX, then the
+ * chunk table and its chunks.
+ *
+ * ⚠️ **The levels are written as they are held; nothing is compressed to BC.**
+ * A BC level is its raw blocks and goes back as such, and RGBA8 is swizzled
+ * and remapped back into the stored texel layout; encoding RGBA to DXT is not
+ * done, so a BC texture's levels have to be blocks already. What no level
+ * carries -- the chain's padding, the bytes of a texel the remap never reads,
+ * the DDS header of a TEX -- comes from the payload the texture was read
+ * from, or is zero (a fresh DDS header) on a texture made from nothing.
+ */
+export async function writeTexture(value: Texture, deflate: Deflate): Promise<Uint8Array> {
+  if (value.magic === 'TEX ') {
+    const chunks = await writeChunkTable(packTex(value), deflate);
+    const out = new Uint8Array(4 + chunks.length);
+    out.set([0x54, 0x45, 0x58, 0x20]);
+    out.set(chunks, 4);
+    return out;
+  }
+  const gcm = value.gcm;
+  if (!gcm) throw new TextureFormatError('a GTF texture without its CellGcmTexture header');
+  const chunks = await writeChunkTable(packGtf(value, gcm), deflate);
+  const out = new Uint8Array(GTF_HEADER + chunks.length);
+  const view = new DataView(out.buffer);
+  out.set([0x47, 0x54, 0x46, 0x20]);
+  out[4] = gcm.format;
+  out[5] = gcm.mipmap;
+  out[6] = gcm.dimension;
+  out[7] = gcm.cubemap ? 1 : 0;
+  view.setUint32(8, gcm.remap, false);
+  view.setUint16(12, gcm.width, false);
+  view.setUint16(14, gcm.height, false);
+  view.setUint16(16, gcm.depth, false);
+  out[18] = gcm.location;
+  out[19] = gcm.flags;
+  view.setUint32(20, gcm.pitch, false);
+  view.setUint32(24, gcm.offset, false);
+  out.set(chunks, GTF_HEADER);
+  return out;
 }
 
 /* ------------------------------------------------------------- BC decode */

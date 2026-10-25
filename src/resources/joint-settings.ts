@@ -12,6 +12,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** cwlib's `FCurve`: a curve as three 4-vectors and its type. */
 export interface FCurve {
@@ -80,4 +81,37 @@ export async function readJointSettings(bytes: Uint8Array, inflate: Inflate): Pr
     throw new SerializerError(`JNTb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return out;
+}
+
+function writeFCurve(w: Writer, c: FCurve): void {
+  w.vector4(c.x);
+  w.vector4(c.y);
+  w.vector4(c.p);
+  w.i32(c.type);
+}
+
+/** `readJointSettings`'s mirror: the payload, byte for byte, from the value. */
+export function encodeJointSettings(value: JointSettings, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.bool(value.allowExpand);
+  w.bool(value.allowContract);
+  w.bool(value.contractFreely);
+  w.f32(value.lengthElasticity);
+  w.f32(value.lengthPlasticity);
+  writeFCurve(w, value.lengthFunc);
+  w.f32(value.angleDeviation);
+  w.f32(value.angleElasticity);
+  w.f32(value.anglePlasticity);
+  w.f32(value.angleVelocity);
+  writeFCurve(w, value.angleFunc);
+  w.bool(value.normalizedForces);
+  w.bool(value.dontRotateA);
+  w.bool(value.dontRotateB);
+  w.f32(value.breakResistance);
+  w.ref(value.gfxMaterial);
+  w.f32(value.gfxWidth);
+  w.str(value.eventNameAngle);
+  w.str(value.eventNameLength);
+  w.ref(value.mesh);
+  return w.done();
 }

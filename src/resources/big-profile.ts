@@ -13,9 +13,10 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
-import { readSlot, readSlotId, type Slot, type SlotId } from '../structs/slot.ts';
-import { readInventoryItem, type InventoryItem } from '../things/parts/poppet-powerup.ts';
-import { toHex } from '../io/hex.ts';
+import { readSlot, readSlotId, writeSlot, writeSlotId, type Slot, type SlotId } from '../structs/slot.ts';
+import { readInventoryItem, writeInventoryItem, type InventoryItem } from '../things/parts/poppet-powerup.ts';
+import { fromHex, toHex } from '../io/hex.ts';
+import { Writer } from '../io/writer.ts';
 
 /** cwlib's `Revisions.DATALABELS` and `PRODUCTION_BUILD`, and the Vita's. */
 const DATALABELS = 0x3ef;
@@ -134,4 +135,87 @@ export async function readBigProfile(bytes: Uint8Array, inflate: Inflate): Promi
   out.creatorDataLabels = creatorDataLabels;
   if (s.remaining !== 0) throw new SerializerError(`BPRb read ended ${s.remaining} bytes before the end of its payload`);
   return out;
+}
+
+/** `readDataLabel`'s mirror. */
+export function writeDataLabel(w: Writer, label: DataLabel): void {
+  w.i32(label.labelIndex);
+  w.wstr(label.name);
+}
+
+/** `readStringLookupTable`'s mirror. */
+export function writeStringLookupTable(w: Writer, table: StringLookupTable): void {
+  w.bool(table.unsorted);
+  w.bool(table.sortEnabled);
+  w.intVector(table.rawIndexToSortedIndex);
+  w.i32(table.stringList.length);
+  for (const entry of table.stringList) {
+    w.i32(entry.lamsKeyID);
+    w.wstr(entry.string);
+    w.i32(entry.index);
+  }
+}
+
+function writeChallenge(w: Writer, c: Challenge): void {
+  const vita = vitaRevision(w.revision);
+  w.i32(c.challengeID);
+  w.i32(c.challengeStatus);
+  w.i32(c.levelID);
+  w.i32(c.scoreToBeat);
+  if (vita >= D1_CHALLENGE_LEVEL_TYPE) w.i32(c.levelType ?? 0);
+  if (vita < D1_CHALLENGE_SCORE) return;
+  w.i32(c.myScore ?? 0);
+  w.str(c.networkOnlineID ?? '');
+}
+
+/**
+ * `readBigProfile`'s mirror: the payload, byte for byte, from the value. A
+ * field the revision gates on and the value lacks is written as cwlib's
+ * default. ⚠️ Proven by a round trip only: the game ships no `BPRb`.
+ */
+export function encodeBigProfile(value: BigProfile, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version } = header.revision;
+  const vita = vitaRevision(header.revision);
+  w.i32(value.inventory.length);
+  for (const item of value.inventory) writeInventoryItem(w, item);
+  if (version > 0x3ea) {
+    w.i32(value.vitaCrossDependencyHashes?.length ?? 0);
+    for (const hash of value.vitaCrossDependencyHashes ?? []) w.sha1(fromHex(hash));
+  }
+  const labels = (): void => {
+    w.i32(value.creatorDataLabels?.length ?? 0);
+    for (const label of value.creatorDataLabels ?? []) writeDataLabel(w, label);
+  };
+  if (version >= DATALABELS) labels();
+  writeStringLookupTable(w, value.stringTable);
+  if (version >= PRODUCTION_BUILD) w.bool(value.fromProductionBuild ?? false);
+  w.i32(value.myMoonSlots.length);
+  for (const { id, slot } of value.myMoonSlots) {
+    writeSlotId(w, id);
+    writeSlot(w, slot);
+  }
+  if (vita >= 0) {
+    if (vita >= D1_DATALABELS) labels();
+    if (vita >= D1_NEAR_CHALLENGES) {
+      for (const list of [value.nearMyChallengeDataLog, value.nearMyChallengeDataOpen]) {
+        w.i32(list?.length ?? 0);
+        for (const c of list ?? []) writeChallenge(w, c);
+      }
+    }
+    if (vita >= D1_NEAR_TREASURES) {
+      w.i32(value.nearMyTreasureLog?.length ?? 0);
+      for (const t of value.nearMyTreasureLog ?? []) {
+        w.i32(t.treasureID);
+        w.i32(t.planID);
+        w.i32(t.timestamp);
+      }
+    }
+    if (vita >= D1_DOWNLOADED_SLOTS) {
+      w.i32(value.downloadedSlots?.length ?? 0);
+      for (const id of value.downloadedSlots ?? []) writeSlotId(w, id);
+    }
+    if (vita >= D1_PLANET_DECORATIONS) w.ref(value.planetDecorations, { descriptor: true });
+  }
+  return w.done();
 }

@@ -15,6 +15,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface AnimatedTexture {
   readonly revision: RevisionInfo;
@@ -41,4 +42,15 @@ export async function readAnimatedTexture(bytes: Uint8Array, inflate: Inflate): 
   const loop = s.bool();
   if (s.remaining !== 0) throw new SerializerError(`ATXb read ended ${s.remaining} bytes before the end of its payload`);
   return { revision, texture, frames, frameWidth, frameHeight, loop };
+}
+
+/** `readAnimatedTexture`'s mirror: the payload, from the value. */
+export function encodeAnimatedTexture(value: AnimatedTexture, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.ref(value.texture);
+  w.s32(value.frames);
+  w.s32(value.frameWidth);
+  w.s32(value.frameHeight);
+  w.bool(value.loop);
+  return w.done();
 }

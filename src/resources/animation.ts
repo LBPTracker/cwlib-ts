@@ -14,6 +14,7 @@
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo, type Serializer } from '../io/serializer.ts';
 import { ByteReader, halfToFloat } from '../io/stream.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface AnimBone {
   /** cwlib's `calculateAnimationHash` of the bone's name; matches `MeshBone.animHash`. */
@@ -62,6 +63,20 @@ export interface Animation {
   /** Version `0x3b2` on. cwlib's comment calls it "fat", 4-byte elements; it reads 2 either way. */
   readonly fat: number;
   readonly locators: readonly AnimLocator[];
+  /**
+   * Version `0x378` on: the `4 * locatorKeys` bytes after the bones in the
+   * packed block, which cwlib skips ("short - index? byte, padded to 4") and so
+   * does this reader. Kept as stored so `encodeAnimation` writes them, and the
+   * header's `locatorKeys` count, back; absent is none.
+   */
+  readonly locatorKeyData?: Uint8Array;
+  /**
+   * Version `0x378` on: the zero bytes the block carries past the multiple of
+   * 16 its values are padded to -- 0 or 16, with nothing in the header to say
+   * which (see `unpack`). Kept so the block is written back at its length;
+   * absent is 0.
+   */
+  readonly extraPadding?: number;
 }
 
 function readLocator(s: Serializer): AnimLocator {
@@ -75,14 +90,14 @@ const SCRATCH = new DataView(new ArrayBuffer(4));
 function unpack(block: Uint8Array, head: {
   boneCount: number; rot: number; pos: number; scale: number; morph: number; locatorKeys: number;
   numFrames: number; morphCount: number; fat: boolean;
-}): Omit<Animation, 'revision' | 'numFrames' | 'fps' | 'loopStart' | 'morphCount' | 'posOffset' | 'posScale' | 'fat' | 'locators'> {
+}): Omit<Animation, 'revision' | 'numFrames' | 'fps' | 'loopStart' | 'morphCount' | 'posOffset' | 'posScale' | 'fat' | 'locators'> & { extraPadding: number } {
   const r = new ByteReader(block);
   const bones: AnimBone[] = [];
   for (let i = 0; i < head.boneCount; i += 1) {
     bones.push({ animHash: r.i32(), parent: r.i8(), firstChild: r.i8(), nextSibling: r.i8() });
     r.u8(); // padding
   }
-  r.slice(4 * head.locatorKeys); // cwlib: "short - index? byte, padded to 4" -- skipped
+  const locatorKeyData = r.slice(4 * head.locatorKeys).slice(); // cwlib: "short - index? byte, padded to 4" -- kept, not read
   const rotBonesAnimated = r.slice(head.rot).slice();
   const posBonesAnimated = r.slice(head.pos).slice();
   const scaleBonesAnimated = r.slice(head.scale).slice();
@@ -147,7 +162,10 @@ function unpack(block: Uint8Array, head: {
   if ((block.length !== padded && block.length !== padded + 16) || block.subarray(r.position).some((b) => b !== 0)) {
     throw new SerializerError(`the animation block has ${r.remaining} bytes past its values, not zero padding`);
   }
-  return { bones, rotBonesAnimated, posBonesAnimated, scaleBonesAnimated, morphsAnimated, rotations, positions, scales, morphs };
+  return {
+    bones, rotBonesAnimated, posBonesAnimated, scaleBonesAnimated, morphsAnimated, rotations, positions, scales, morphs,
+    locatorKeyData, extraPadding: block.length - padded,
+  };
 }
 
 /** Read an `ANMb`. Throws on anything else, and unless the walk ends on the payload's last byte. */
@@ -220,4 +238,178 @@ export async function readAnimation(bytes: Uint8Array, inflate: Inflate): Promis
     throw new SerializerError(`ANMb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return out;
+}
+
+/**
+ * The IEEE 754 half float nearest a number, ties to even: `halfToFloat`'s
+ * inverse, exact on every value that came out of it but NaN, whose payload a
+ * number does not carry (written as the quiet NaN `0x7e00`).
+ */
+export function floatToHalf(value: number): number {
+  SCRATCH.setFloat32(0, value, false);
+  const bits = SCRATCH.getUint32(0, false);
+  const sign = (bits >>> 16) & 0x8000;
+  const exponent = (bits >>> 23) & 0xff;
+  let mantissa = bits & 0x7fffff;
+  if (exponent === 0xff) return sign | 0x7c00 | (mantissa ? 0x200 : 0);
+  const e = exponent - 127 + 15;
+  if (e >= 31) return sign | 0x7c00;
+  if (e <= 0) {
+    if (e < -10) return sign;
+    mantissa |= 0x800000;
+    const shift = 14 - e;
+    let half = mantissa >>> shift;
+    const rest = mantissa & ((1 << shift) - 1);
+    const middle = 1 << (shift - 1);
+    if (rest > middle || (rest === middle && (half & 1) !== 0)) half += 1;
+    return sign | half;
+  }
+  let half = (e << 10) | (mantissa >>> 13);
+  const rest = mantissa & 0x1fff;
+  if (rest > 0x1000 || (rest === 0x1000 && (half & 1) !== 0)) half += 1;
+  return sign | half;
+}
+
+/** Big-endian bytes into a buffer that grows: the packed block. */
+class BlockWriter {
+  private buffer = new Uint8Array(0x1000);
+  private view = new DataView(this.buffer.buffer);
+  length = 0;
+
+  private need(n: number): number {
+    if (this.length + n > this.buffer.length) {
+      let size = this.buffer.length * 2;
+      while (size < this.length + n) size *= 2;
+      const grown = new Uint8Array(size);
+      grown.set(this.buffer.subarray(0, this.length));
+      this.buffer = grown;
+      this.view = new DataView(grown.buffer);
+    }
+    const at = this.length;
+    this.length += n;
+    return at;
+  }
+
+  u8(v: number): void { const at = this.need(1); this.buffer[at] = v & 0xff; }
+  u16(v: number): void { const at = this.need(2); this.view.setUint16(at, v & 0xffff, false); }
+  i32(v: number): void { const at = this.need(4); this.view.setInt32(at, v | 0, false); }
+  u32(v: number): void { const at = this.need(4); this.view.setUint32(at, v >>> 0, false); }
+  f32(v: number): void { const at = this.need(4); this.view.setFloat32(at, v, false); }
+  bytes(v: Uint8Array): void { const at = this.need(v.length); this.buffer.set(v, at); }
+  done(): Uint8Array { return this.buffer.slice(0, this.length); }
+}
+
+const isNegative = (w: number): boolean => w < 0 || Object.is(w, -0);
+const component = (v: number): number => Math.max(-0x8000, Math.min(0x7fff, Math.round(v * 0x7fff)));
+
+/** `unpack`'s inverse: the block of a version `0x378` and later animation, from its values. */
+function pack(a: Animation): Uint8Array {
+  const b = new BlockWriter();
+  const fat = a.fat !== 0;
+  for (const bone of a.bones) {
+    b.i32(bone.animHash);
+    b.u8(bone.parent);
+    b.u8(bone.firstChild);
+    b.u8(bone.nextSibling);
+    b.u8(0);
+  }
+  b.bytes(a.locatorKeyData ?? new Uint8Array(0));
+  b.bytes(a.rotBonesAnimated);
+  b.bytes(a.posBonesAnimated);
+  b.bytes(a.scaleBonesAnimated);
+  b.bytes(a.morphsAnimated);
+  if (b.length % 2 !== 0) b.u8(0);
+  const r = a.rotations;
+  for (let i = 0; i < r.length; i += 4) {
+    const sign = isNegative(r[i + 3]) ? 1 : 0;
+    if (fat) {
+      SCRATCH.setFloat32(0, r[i], false);
+      b.u32((SCRATCH.getUint32(0, false) & ~1) | sign);
+      b.f32(r[i + 1]);
+      b.f32(r[i + 2]);
+    } else {
+      b.u16((component(r[i]) & ~1) | sign);
+      b.u16(component(r[i + 1]));
+      b.u16(component(r[i + 2]));
+    }
+  }
+  for (const values of [a.positions, a.scales, a.morphs]) {
+    for (const v of values) {
+      if (fat) b.f32(v);
+      else b.u16(floatToHalf(v));
+    }
+  }
+  const end = Math.ceil(b.length / 16) * 16 + (a.extraPadding ?? 0);
+  while (b.length < end) b.u8(0);
+  return b.done();
+}
+
+/**
+ * `readAnimation`'s inverse: the payload (`loadResource(bytes).data`) from the
+ * value. Rotations are written back from their three stored components and
+ * w's sign, half floats by `floatToHalf` -- both exact on values the reader
+ * made; a rotation replaced by one off the 15-bit grid is rounded onto it.
+ */
+export function encodeAnimation(value: Animation, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const a = value;
+  if (header.revision.version < 0x378) {
+    w.i32(a.bones.length);
+    for (const bone of a.bones) {
+      w.i32(bone.animHash);
+      w.s32(bone.parent);
+      w.s32(bone.firstChild);
+      w.s32(bone.nextSibling);
+    }
+    w.i32(a.numFrames);
+    w.i32(a.fps);
+    w.i32(a.morphCount);
+    for (const list of [a.rotBonesAnimated, a.posBonesAnimated, a.scaleBonesAnimated, a.morphsAnimated]) {
+      w.i32(list.length);
+      for (const v of list) w.i16(v);
+    }
+    // ✔ The w the reader drops from positions and scales is 1.0 in every one
+    // of the game's five animations below 0x378 (`dev/resource-census-write.ts`).
+    const vectors = (flat: Float32Array, width: 3 | 4): void => {
+      w.i32(flat.length / width);
+      for (let i = 0; i < flat.length; i += width) {
+        w.vector4([flat[i], flat[i + 1], flat[i + 2], width === 4 ? flat[i + 3] : 1]);
+      }
+    };
+    vectors(a.rotations, 4);
+    vectors(a.positions, 3);
+    vectors(a.scales, 3);
+    w.i32(a.morphs.length);
+    for (const v of a.morphs) w.f32(v);
+    if (header.revision.version > 0x311) w.u16(0);
+    return w.done();
+  }
+  const keys = a.locatorKeyData?.length ?? 0;
+  if (keys % 4 !== 0) throw new SerializerError(`${keys} bytes of locator keys, not a multiple of 4`);
+  w.i16(a.numFrames);
+  w.i16(a.fps);
+  w.i16(a.loopStart);
+  w.i8(a.morphCount);
+  w.u8(a.bones.length);
+  w.u8(a.rotBonesAnimated.length);
+  w.u8(a.posBonesAnimated.length);
+  w.u8(a.scaleBonesAnimated.length);
+  w.u8(a.morphsAnimated.length);
+  w.u16(keys / 4);
+  if (header.revision.version > 0x38b) {
+    w.vector4(a.posOffset);
+    w.vector4(a.posScale);
+    if (header.revision.version > 0x3b1) w.i8(a.fat);
+  }
+  const block = pack(a);
+  w.i32(block.length);
+  w.bytes(block);
+  w.i32(a.locators.length);
+  for (const l of a.locators) {
+    w.vector3(l.position);
+    w.str(l.name);
+    w.i8(l.looping);
+    w.i8(l.type);
+  }
+  return w.done();
 }

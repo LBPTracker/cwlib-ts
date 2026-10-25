@@ -24,6 +24,7 @@
 
 import type { Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, type RevisionInfo } from '../io/serializer.ts';
+import { Writer, type Deflate } from '../io/writer.ts';
 
 export interface Glyph {
   /** The UTF-16 code unit it draws. */
@@ -115,4 +116,42 @@ export async function glyphBitmap(font: FontFace, glyph: Glyph, inflate: Inflate
     throw new SerializerError(`glyph 0x${glyph.character.toString(16)} inflated to ${bitmap.length} bytes, not ${pixels}`);
   }
   return bitmap;
+}
+
+/**
+ * `readFontFace`'s inverse: the whole `FNTb` file. Nothing in it is
+ * compressed by the file -- a compressed font's glyphs are zlib streams inside
+ * `data`, written back as they are -- so `deflate` is unused, there for the
+ * signature every container writer has. The header's data offset is where the
+ * glyph table ends, and the word after it is 0, as in all 11 of the game's.
+ */
+export async function writeFontFace(value: FontFace, deflate?: Deflate): Promise<Uint8Array> {
+  void deflate;
+  const w = new Writer(value.revision, 0);
+  w.i32(value.glyphIndex.length);
+  for (const head of value.glyphIndex) w.i16(head);
+  w.i32(value.glyphPageUsed.length);
+  for (const page of value.glyphPageUsed) w.i32(page);
+  w.i32(value.glyphs.length);
+  for (const g of value.glyphs) {
+    w.u16(g.character);
+    w.i16(g.advance);
+    w.i8(g.left);
+    w.i8(g.top);
+    w.u8(g.width);
+    w.u8(g.height);
+    w.i32(g.offset);
+    w.i16(g.nextGlyph);
+  }
+  if (value.revision.version > 0x272) w.bool(value.compressed);
+  else if (value.compressed) throw new SerializerError(`a font at 0x${value.revision.version.toString(16)} has no compressed flag to say so`);
+  const table = w.done();
+  const out = new Uint8Array(16 + table.length + value.data.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x464e5462, false);
+  view.setUint32(4, ((value.revision.subVersion << 16) | value.revision.version) >>> 0, false);
+  view.setUint32(8, table.length, false);
+  out.set(table, 16);
+  out.set(value.data, 16 + table.length);
+  return out;
 }

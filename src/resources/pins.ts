@@ -10,6 +10,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface Pin {
   readonly id: number;
@@ -57,4 +58,24 @@ export async function readPins(bytes: Uint8Array, inflate: Inflate): Promise<Pin
     throw new SerializerError(`PINb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return { revision, pins };
+}
+
+/** `readPins`'s mirror: the payload, from the value. */
+export function encodePins(value: Pins, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.pins.length);
+  for (const pin of value.pins) {
+    w.u32(pin.id);
+    w.u32(pin.progressType);
+    w.u32(pin.category);
+    w.u32(pin.titleLamsKey);
+    w.u32(pin.descriptionLamsKey);
+    w.ref(pin.icon, { descriptor: true });
+    w.u32(pin.initialProgressValue);
+    w.u32(pin.targetValue);
+    w.i8(pin.trophyToUnlock);
+    w.i16(pin.behaviourFlags);
+    if (header.revision.version >= 0x3f7) w.i8(pin.trophyToUnlockLBP1);
+  }
+  return w.done();
 }

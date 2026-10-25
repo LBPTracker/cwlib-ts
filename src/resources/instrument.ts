@@ -16,7 +16,10 @@
  * (steering/sequencer-engine-inputs.md, steering/synth-engine.md there).
  */
 
+import { loadResource, type Inflate } from '../io/resource.ts';
+import { COMPRESSED_INTEGERS, type RevisionInfo } from '../io/serializer.ts';
 import { ByteReader } from '../io/stream.ts';
+import { Writer, writeResource, type Deflate } from '../io/writer.ts';
 
 export const MAX_SLOTS = 8;
 /** 8 zones; `[0]` is a constant, `[1..8]` are the bounds. */
@@ -142,4 +145,74 @@ export function usedSlots(
     }
   }
   return out;
+}
+
+/* ------------------------------------------------------------- the file */
+
+/** An `INSb` with the container it came in: what `writeInstrument` needs beside the patch. */
+export interface InstrumentFile extends RInstrument {
+  readonly revision: RevisionInfo;
+  readonly compressionFlags: number;
+}
+
+/** Read a whole `INSb` file: `loadResource`, then `readInstrument` on its payload. */
+export async function readInstrumentFile(bytes: Uint8Array, inflate: Inflate): Promise<InstrumentFile> {
+  const resource = await loadResource(bytes, inflate);
+  if (resource.magic !== 'INSb') throw new InstrumentFormatError(`not an instrument: "${resource.magic}"`);
+  return { ...readInstrument(resource.data), revision: resource.revisionInfo, compressionFlags: resource.compressionFlags };
+}
+
+/** `ResourceType.SAMPLE`, the type every row of an instrument's dependency table has. */
+const DEPENDENCY_SAMPLE = 49;
+
+/**
+ * `readInstrument`'s inverse: the payload, varints whatever the flags say, as
+ * the reader takes them. `fitbpm` goes out twice, as the game's serialiser
+ * writes it.
+ */
+export function encodeInstrument(value: RInstrument): Uint8Array {
+  // The reader's integers are varints regardless of the container's flags.
+  const w = new Writer({ version: 0x3ba, subVersion: 0, branchId: 0, branchRevision: 0 }, COMPRESSED_INTEGERS);
+  const count = (n: number, expected: number, what: string): void => {
+    if (n !== expected) throw new InstrumentFormatError(`${what}: ${n} entries, the format holds ${expected}`);
+    w.uleb128(n);
+  };
+  count(value.slots.length, MAX_SLOTS, 'Samples');
+  for (const slot of value.slots) {
+    w.s32(slot.baseNote);
+    w.f32(slot.baseBpm);
+    w.bool(slot.pitched);
+    w.bool(slot.fitBpm);
+    w.bool(slot.fitBpm);
+    w.f32(slot.fineTune);
+  }
+  count(value.sampleGuids.length, MAX_SLOTS, 'SampleGuids');
+  for (const guid of value.sampleGuids) w.uleb128(guid >>> 0);
+  count(value.splitNotes.length, MAX_SPLITS, 'Splitnotes');
+  for (const note of value.splitNotes) w.s32(note);
+  w.s32(value.numStack);
+  if (value.params.length !== MAX_PARAMS) throw new InstrumentFormatError(`${value.params.length} params, the format holds ${MAX_PARAMS}`);
+  for (const param of value.params) {
+    w.uleb128(2);
+    w.f32(param.x);
+    w.f32(param.y);
+  }
+  count(value.arpeggio.length, MAX_ARPEGGIO, 'Arpeggio');
+  for (const step of value.arpeggio) w.i8(step);
+  w.bool(value.arpeggiate);
+  return w.done();
+}
+
+/**
+ * The whole `INSb` file: the payload in the resource container, under the
+ * revision and flags it was read with, and a dependency table of every
+ * sample GUID once, **in ascending order** -- not slot order: the game's
+ * table is so (`dev/container-census.ts`).
+ */
+export async function writeInstrument(value: InstrumentFile, deflate: Deflate): Promise<Uint8Array> {
+  const guids = [...new Set(value.sampleGuids.filter((g) => g !== 0).map((g) => g >>> 0))].sort((a, b) => a - b);
+  return writeResource({
+    magic: 'INSb', revision: value.revision, compressionFlags: value.compressionFlags,
+    payload: encodeInstrument(value), dependencies: guids.map((guid) => ({ guid, type: DEPENDENCY_SAMPLE })),
+  }, deflate);
 }

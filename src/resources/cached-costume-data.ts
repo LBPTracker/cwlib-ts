@@ -11,6 +11,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo, type Serializer } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface CachedCostume {
   /** The costume piece's plan GUID. */
@@ -61,4 +62,23 @@ export async function readCachedCostumeData(bytes: Uint8Array, inflate: Inflate)
     throw new SerializerError(`CCDb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return { revision, costumes, contentIds };
+}
+
+/** `readCachedCostumeData`'s mirror: the payload, byte for byte, from the value. */
+export function encodeCachedCostumeData(value: CachedCostumeData, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.costumes.length);
+  for (const c of value.costumes) {
+    w.guid(c.plan);
+    w.i32(c.titleKey);
+    w.i32(c.descriptionKey);
+    w.i32(c.type);
+    w.i32(c.subType);
+    w.i32(c.colour);
+    w.guid(c.icon);
+    w.i32(c.value);
+  }
+  w.i32(value.contentIds.length);
+  for (const id of value.contentIds) w.str(id);
+  return w.done();
 }

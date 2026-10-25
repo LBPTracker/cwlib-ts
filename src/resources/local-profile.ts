@@ -14,12 +14,35 @@
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
 import { toHex } from '../io/hex.ts';
-import { readNetworkOnlineId, readNetworkPlayerId } from '../structs/network.ts';
-import { readSlot, readSlotId, type Slot, type SlotId } from '../structs/slot.ts';
+import { fromHex } from '../io/hex.ts';
+import { Writer } from '../io/writer.ts';
+import { readNetworkOnlineId, readNetworkPlayerId, writeNetworkOnlineId, writeNetworkPlayerId } from '../structs/network.ts';
+import { readSlot, readSlotId, writeSlot, writeSlotId, type Slot, type SlotId } from '../structs/slot.ts';
 import { LD_ANY, onLeerdammer } from '../things/thing.ts';
-import { readInventoryItem, type InventoryItem } from '../things/parts/poppet-powerup.ts';
-import { readPlayedLevelData, type PlayedLevelData } from './adventure-create-profile.ts';
-import { readStringLookupTable, type StringLookupTable } from './big-profile.ts';
+import { readInventoryItem, writeInventoryItem, type InventoryItem } from '../things/parts/poppet-powerup.ts';
+import { readPlayedLevelData, writePlayedLevelData, type PlayedLevelData } from './adventure-create-profile.ts';
+import { readStringLookupTable, writeStringLookupTable, type StringLookupTable } from './big-profile.ts';
+
+/**
+ * The id each in-stream reference read here had in its file, so the encoder
+ * names it the same (`Writer.reference`): the game does not number in
+ * first-mention order. An object made afresh has none and is numbered anew.
+ */
+const IDS = new WeakMap<object, number>();
+
+/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
+function keepId<T>(s: Serializer, read: (self: Serializer) => T): T | undefined {
+  const at = s.position;
+  const id = s.i32();
+  s.position = at;
+  const value = s.reference(read);
+  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
+  return value;
+}
+
+function writeRef<T extends object>(w: Writer, value: T | undefined, write: (w: Writer, value: T) => void): void {
+  w.reference(value, write, value && IDS.get(value));
+}
 
 // cwlib's `Revisions`, as `RLocalProfile` and its structs gate on them.
 const LD_SAVEGAME_INFO = 0x3;
@@ -104,7 +127,12 @@ export interface PlayerMetrics {
   readonly gamesWithRandomPlayersCount?: number;
   readonly pointsCollected?: number;
   readonly stats?: readonly bigint[];
+  /** Versions 0x1df--0x2ca: `enemiesKilled`, which cwlib drops. Kept to be written back. */
+  readonly enemiesKilled?: number;
 }
+
+const hasEnemiesKilled = (r: RevisionInfo): boolean =>
+  r.version > 0x1de && r.version < 0x2cb && (!onLeerdammer(r, LD_ANY) || r.branchRevision < LD_REMOVED_ENEMY_STAT);
 
 function readPlayerMetrics(s: Serializer): PlayerMetrics {
   const r = s.revision;
@@ -128,7 +156,7 @@ function readPlayerMetrics(s: Serializer): PlayerMetrics {
   if (head > 0x1f7) out.levelsTaggedCount = s.i32();
   if (head > 0x1c9) out.gamesWithRandomPlayersCount = s.i32();
   // enemiesKilled, which cwlib drops; the LEERDAMMER branch removed it at its revision 0x11.
-  if (head > 0x1de && head < 0x2cb && (!onLeerdammer(r, LD_ANY) || r.branchRevision < LD_REMOVED_ENEMY_STAT)) s.i32();
+  if (hasEnemiesKilled(r)) out.enemiesKilled = s.i32();
   if (head > 0x1de) out.pointsCollected = s.f32();
   if (head >= 0x1ea) out.stats = s.array((x) => x.u64Big());
   return out;
@@ -378,6 +406,19 @@ export interface LocalProfile {
   readonly activityFilterToggled?: readonly number[];
   readonly lastLandingPageFocusItems?: number;
   readonly goPlayCache?: readonly GoPlayCache[];
+  /** Versions 0x256--0x350: an integer cwlib reads and drops. Kept to be written back, as are the rest. */
+  readonly dropped351?: number;
+  /** Version 0x261: a bool after `userSettingCollection` cwlib drops. */
+  readonly dropped261?: boolean;
+  /** The Vita's from its 0x86 and 0x87: dropped by cwlib. */
+  readonly hasSeenCrossCompatInfo?: boolean;
+  readonly wantsCrossCompatDownloadNotification?: boolean;
+  /** The Vita's from its 0x81: dropped by cwlib. */
+  readonly wasTrial?: boolean;
+  /** Read twice where both gates hold (subVersion above 0x37, version above 0x3f3): the first, which the second replaces. */
+  readonly playedLBP2First?: boolean;
+  /** Read twice where both gates hold (subVersion above 0x37, versions 0x3f6--0x3f8): the first, which the second replaces. */
+  readonly lastLegacyImportedProfileHashLBP2First?: readonly string[];
 }
 
 const slotLink = (s: Serializer): { from: SlotId; to: SlotId } => ({ from: readSlotId(s), to: readSlotId(s) });
@@ -456,16 +497,16 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
   }
   if (version > 0x1b4) out.enableMusicInPod = s.bool();
   if (version > 0x1b5) {
-    out.legacyInventoryCollections = s.array((x) => x.reference((y) => ({
-      inventoryViews: y.array((z) => z.reference(readInventoryView)),
+    out.legacyInventoryCollections = s.array((x) => keepId(x, (y) => ({
+      inventoryViews: y.array((z) => keepId(z, readInventoryView)),
       currentPageNumber: y.i32(), collectionID: y.i32(), actionOnItemSelect: y.i32(),
     })));
-    out.legacyInventoryViews = s.array((x) => x.reference(readInventoryView));
+    out.legacyInventoryViews = s.array((x) => keepId(x, readInventoryView));
   }
   if (version > 0x316) {
-    out.inventoryCollections = s.array((x) => x.reference((y) => ({
+    out.inventoryCollections = s.array((x) => keepId(x, (y) => ({
       inventoryCollectionIndex: y.i32(),
-      inventoryPageInstances: y.array((z) => z.reference((w) => ({ inventoryPageTitleKey: w.i32(), desiredSortMode: w.i32() }))),
+      inventoryPageInstances: y.array((z) => keepId(z, (w) => ({ inventoryPageTitleKey: w.i32(), desiredSortMode: w.i32() }))),
       currentPageNumber: y.i32(),
       ...(y.revision.subVersion >= COLLECTION_POPPET_POWERUP ? { poppetPowerupSelection: y.bool() } : {}),
     })));
@@ -481,13 +522,13 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
   if (version > 0x205) out.lbp1VOPlayed = signedVector(s);
   if (version > 0x36b) out.lbp2VOPlayed = signedVector(s);
   if (version > 0x23a) out.subtitleMode = s.s32();
-  if (version > 0x255 && version < 0x351) s.i32();
+  if (version > 0x255 && version < 0x351) out.dropped351 = s.i32();
   if (version > 0x32e) out.pinsAwarded = readPinsAwarded(s);
   if (version > 0x260) {
     out.userSettingPhotoBooth = s.bool();
     if (subVersion > 0x17e) out.userSettingAdvancedEditMode = s.bool();
     out.userSettingCollection = s.bool();
-    if (version === 0x261) s.bool();
+    if (version === 0x261) out.dropped261 = s.bool();
   }
   if (version > 0x2d2 || ldHas(r, LD_THERMOMETER)) out.showThermometer = s.bool();
   if (version > 0x383) out.saveOnlinePlaySettings = s.bool();
@@ -517,8 +558,8 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
     out.hasUsed6Axis = s.bool();
     out.hasUsedMove = s.bool();
   }
-  if (vita >= 0x86) s.bool(); // hasSeenCrossCompatInfo, which cwlib drops
-  if (vita >= 0x87) s.bool(); // wantsCrossCompatDownloadNotification, likewise
+  if (vita >= 0x86) out.hasSeenCrossCompatInfo = s.bool(); // which cwlib drops
+  if (vita >= 0x87) out.wantsCrossCompatDownloadNotification = s.bool(); // likewise
   if (version > 0x3db) {
     out.paintProperties = {
       triggerOverride: s.i32(), stickerSaveSize: s.i32(), angleOverride: s.bool(), uiHidden: s.bool(),
@@ -542,7 +583,7 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
             out.onlineBetaPlayTimeSinceOnline = s.i32();
             out.onlineBetaBootsSinceOnline = s.i32();
           }
-          if (vita >= D1_WAS_TRIAL) s.bool(); // wasTrial, which cwlib drops
+          if (vita >= D1_WAS_TRIAL) out.wasTrial = s.bool(); // which cwlib drops
         }
       }
     }
@@ -564,12 +605,18 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
     out.twitterAccessToken = s.str();
     out.twitterAccessTokenSecret = s.str();
   }
-  if (version > 0x3f3) out.playedLBP2 = s.bool();
+  if (version > 0x3f3) {
+    if (out.playedLBP2 !== undefined) out.playedLBP2First = out.playedLBP2;
+    out.playedLBP2 = s.bool();
+  }
   if (version > 0x3f4) {
     out.createChallengeTutorialSeen = s.bool();
     out.playChallengeTutorialSeen = s.bool();
   }
-  if (version > 0x3f5 && version < 0x3f9) out.lastLegacyImportedProfileHashLBP2 = sha1List(s);
+  if (version > 0x3f5 && version < 0x3f9) {
+    if (out.lastLegacyImportedProfileHashLBP2) out.lastLegacyImportedProfileHashLBP2First = out.lastLegacyImportedProfileHashLBP2;
+    out.lastLegacyImportedProfileHashLBP2 = sha1List(s);
+  }
   if (version > 0x3f7) out.ownedLBP = s.i32();
   if (subVersion > 0xef) out.dceUuidState = s.i32();
   if (subVersion > 0x15b) out.lastPlayedPPP = s.bool();
@@ -598,4 +645,425 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
   }
   if (s.remaining !== 0) throw new SerializerError(`IPRb read ended ${s.remaining} bytes before the end of its payload`);
   return out;
+}
+
+// ---- The write side, `readLocalProfile`'s mirror. ----
+
+const writeSigned = (w: Writer, values: readonly number[] | undefined): void => {
+  w.i32(values?.length ?? 0);
+  for (const v of values ?? []) w.s32(v);
+};
+const writeInts = (w: Writer, values: readonly number[] | undefined): void => {
+  w.i32(values?.length ?? 0);
+  for (const v of values ?? []) w.i32(v);
+};
+const writeSha1List = (w: Writer, hashes: readonly string[] | undefined): void => {
+  w.i32(hashes?.length ?? 0);
+  for (const h of hashes ?? []) w.sha1(fromHex(h));
+};
+const writeSlotLinks = (w: Writer, links: readonly { readonly from: SlotId; readonly to: SlotId }[] | undefined): void => {
+  w.i32(links?.length ?? 0);
+  for (const link of links ?? []) {
+    writeSlotId(w, link.from);
+    writeSlotId(w, link.to);
+  }
+};
+const NO_SLOT: SlotId = { type: 0, number: 0 };
+
+function writePlayerMetrics(w: Writer, m: PlayerMetrics | undefined): void {
+  const r = w.revision;
+  const head = r.version;
+  const v = m ?? {};
+  if (head > 0x16f) {
+    w.i32(v.totalTime ?? 0);
+    w.i32(v.editingTime ?? 0);
+    w.i32(v.playingTime ?? 0);
+    w.i32(v.idlingTime ?? 0);
+  }
+  if (head > 0x183) w.i32(v.multiplayerGamesCount ?? 0);
+  if (vitaRevision(r) >= D1_LEVEL_TIMES_MAP) {
+    w.i32(v.levelTimesMap?.length ?? 0);
+    for (const [level, time] of v.levelTimesMap ?? []) {
+      w.i32(level);
+      w.i32(time);
+    }
+    w.i32(v.totalLevelTime ?? 0);
+  }
+  if (head > 0x1c9) w.f32(v.playLadderPoints ?? 0);
+  if (head > 0x1ab) w.i32(v.storyLevelCompletionCount ?? 0);
+  if (head > 0x1f7) w.i32(v.communityLevelCompletionCount ?? 0);
+  if (head > 0x1ab) w.i32(v.levelCompletionCount ?? 0);
+  if (head > 0x1f7) w.i32(v.levelsTaggedCount ?? 0);
+  if (head > 0x1c9) w.i32(v.gamesWithRandomPlayersCount ?? 0);
+  if (hasEnemiesKilled(r)) w.i32(v.enemiesKilled ?? 0);
+  if (head > 0x1de) w.f32(v.pointsCollected ?? 0);
+  if (head >= 0x1ea) {
+    w.i32(v.stats?.length ?? 0);
+    for (const stat of v.stats ?? []) w.u64Big(stat);
+  }
+}
+
+function writeInventoryView(w: Writer, v: InventoryView): void {
+  w.i32(v.type);
+  w.i32(v.subType);
+  w.wstr(v.title);
+  w.bool(v.heartedOnly);
+  w.i32(v.customID);
+  w.i32(v.currentSortMode);
+  w.i32(v.desiredSortMode);
+}
+
+function writePinsAwarded(w: Writer, p: PinsAwarded | undefined): void {
+  const r = w.revision;
+  const v = p ?? {};
+  if (r.version >= PROFILE_PINS) {
+    w.i32(v.pinAwards?.length ?? 0);
+    for (const a of v.pinAwards ?? []) {
+      w.i32(a.pinID);
+      w.i32(a.awardCount);
+    }
+    w.i32(v.pinProgress?.length ?? 0);
+    for (const a of v.pinProgress ?? []) {
+      w.i32(a.progressType);
+      w.i32(a.progressCount);
+    }
+    w.intVector(v.recentlyAwardedPinIDs ?? []);
+    w.intVector(v.profileDisplayPinIDs ?? []);
+  }
+  if (r.version >= PIN_FLAGS) w.i8(v.pinsFlags ?? 0);
+  if (r.version >= WEEKDAYS_PLAYED_PIN) w.i8(v.weekdaysPlayedBits ?? 0);
+  if (vitaRevision(r) >= D1_MOE_PIN_PROGRESS) w.i32(v.moreOfEverythingPinProgress ?? 0);
+  if (r.subVersion >= SLAPPED_AS_PIN) w.i8(v.slappedAsBits ?? 0);
+  if (r.subVersion >= SIMON_SAYS_PIN) w.i32(v.simonSaysProgress ?? 0);
+}
+
+function writeDataLabelValue(w: Writer, d: DataLabelValue): void {
+  const r = w.revision;
+  writeNetworkOnlineId(w, d.creatorID);
+  w.i32(d.labelIndex);
+  const vita = vitaRevision(r);
+  const floats = (values: readonly number[] | undefined): void => {
+    w.i32(values?.length ?? 0);
+    for (const f of values ?? []) w.f32(f);
+  };
+  const ternary = (): void => {
+    w.i32(d.ternary?.length ?? 0);
+    if (d.ternary) w.bytes(d.ternary);
+  };
+  if (vita >= 0) {
+    if (vita >= D1_LABEL_ANALOGUE_ARRAY) floats(d.analogue);
+    else if (vita >= D1_DATALABELS) w.f32(d.analogue?.[0] ?? 0);
+    if (vita >= D1_LABEL_TERNARY) ternary();
+  } else if (r.version >= DATALABELS) {
+    floats(d.analogue);
+    ternary();
+  }
+}
+
+function writePlayerDataLabels(w: Writer, l: PlayerDataLabels | undefined): void {
+  const r = w.revision;
+  w.i32(l?.values.length ?? 0);
+  for (const v of l?.values ?? []) writeDataLabelValue(w, v);
+  if (vitaRevision(r) >= D1_PROTECTED_LABELS || r.version >= DATALABELS) {
+    w.i32(l?.protectedIds?.length ?? 0);
+    for (const id of l?.protectedIds ?? []) writeNetworkOnlineId(w, id);
+  }
+}
+
+/**
+ * `readLocalProfile`'s mirror: the payload, byte for byte, from the value. A
+ * field the revision gates on and the value lacks is written as cwlib's
+ * default, 0, false or empty. ⚠️ Proven by a round trip only: the game ships no
+ * `IPRb` (`test/write-profiles.test.ts`).
+ */
+export function encodeLocalProfile(value: LocalProfile, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const r = header.revision;
+  const { version, subVersion } = r;
+  const vita = vitaRevision(r);
+  const v = value;
+  if (version < 0x187) return w.done();
+
+  w.i32(v.inventory?.length ?? 0);
+  for (const item of v.inventory ?? []) writeInventoryItem(w, item);
+  writeStringLookupTable(w, v.stringTable ?? { unsorted: false, sortEnabled: false, rawIndexToSortedIndex: [], stringList: [] });
+  if (version >= 0x3b6) w.bool(v.fromProductionBuild ?? false);
+  if (version > 0x1e3) {
+    w.i32(v.lbp1TutorialStates?.length ?? 0);
+    for (const [level, state] of v.lbp1TutorialStates ?? []) {
+      w.i32(level);
+      w.i32(state);
+    }
+  }
+  if (version > 0x265) {
+    writeSigned(w, v.dlcPackViewed);
+    writeSigned(w, v.dlcPackShown);
+  }
+  if (version > 0x1e4) w.i32(v.lbp1MainMenuButtonUnlocks ?? 0);
+  if (version >= 0x16e) {
+    w.i32(v.playedLevelData?.length ?? 0);
+    for (const d of v.playedLevelData ?? []) writePlayedLevelData(w, d);
+  }
+  if (version > 0x379) {
+    w.i32(v.viewedLevelData?.length ?? 0);
+    for (const d of v.viewedLevelData ?? []) {
+      writeSlotId(w, d.slotId);
+      w.s32(d.lastReviewCount);
+      w.s32(d.lastCommentCount);
+      w.s32(d.lastPhotoCount);
+      w.s32(d.lastAuthorPhotoCount);
+      w.s64Big(d.lastStreamEventTimestamp);
+      w.s64Big(d.lastViewedTimestamp);
+    }
+    w.i32(v.viewedPlayerData?.length ?? 0);
+    for (const d of v.viewedPlayerData ?? []) {
+      writeNetworkOnlineId(w, d.onlineId);
+      w.s32(d.lastReviewCount);
+      w.s32(d.lastCommentCount);
+      w.s32(d.lastPhotosByMeCount);
+      w.s32(d.lastPhotosWithMeCount);
+      w.s32(d.lastFavouriteSlotsCount);
+      w.s32(d.lastFavouriteUsersCount);
+      w.s64Big(d.lastStreamEventTimestamp);
+      w.s64Big(d.lastViewedTimestamp);
+    }
+  }
+  if (version > 0x16d) {
+    w.i32(v.oldMyMoonSlots?.length ?? 0);
+    for (const { id, slot } of v.oldMyMoonSlots ?? []) {
+      writeSlotId(w, id);
+      writeSlot(w, slot);
+    }
+  }
+  if (version > 0x20d) w.bool(v.copiedFromAnotherUser ?? false);
+  if (version > 0x267) w.bool(v.fixedUpByDeveloper ?? false);
+  if (version > 0x296 || ldHas(r, LD_SAVEGAME_INFO)) {
+    w.bool(v.showSaveGameInfo ?? false);
+    w.i32(v.totalLevelCount ?? 0);
+  }
+  if (version > 0x393) w.i32(v.lastMmPicksCount ?? 0);
+  if (version > 0x2cb || ldHas(r, LD_NEWS_TIMESTAMP)) w.s64Big(v.lastNewsItemTimestamp ?? 0n);
+  if (version > 0x323) w.s64Big(v.lastStreamEventTimestamp ?? 0n);
+  if (version > 0x2cc || ldHas(r, LD_QUEUE)) w.s64Big(v.lolcatFtwTimestamp ?? 0n);
+  if (version >= 0x328) {
+    w.i32(v.oldTextSearches?.length ?? 0);
+    for (const text of v.oldTextSearches ?? []) w.wstr(text);
+  }
+  writeSlotLinks(w, v.oldDiscoveredLinks);
+  writeSlotLinks(w, v.pendingLinks);
+  writeSlotId(w, v.lastPlayed ?? NO_SLOT);
+  if (version > 0x17d) writeInts(w, v.lbp1VideosPlayed);
+  if (version > 0x36b) writeInts(w, v.lbp2VideosPlayed);
+  if (version > 0x16f) writePlayerMetrics(w, v.currentPlayerMetrics);
+  if (version > 0x1ab) writePlayerMetrics(w, v.lastPostedPlayerMetrics);
+  if (version > 0x1b8) w.i32(v.lbp1GameProgressionStatus ?? 0);
+  if (version > 0x1cf) {
+    w.i32(v.lbp1GameProgressionEventHappenedBits ?? 0);
+    w.i32(v.lbp1GameProgressionEventsExplainedBits ?? 0);
+  }
+  if (version > 0x26c) w.i32(v.demoProgressionStatus ?? 0);
+  if (version > 0x36b) w.i32(v.lbp2GameProgressionFlags ?? 0);
+  if (version >= 0x387) {
+    w.i32(v.pendingInventoryItems?.length ?? 0);
+    for (const item of v.pendingInventoryItems ?? []) writeInventoryItem(w, item);
+  }
+  w.ref(v.podLevel, { descriptor: true });
+  if (version > 0x14f) writeNetworkPlayerId(w, v.playerId ?? '');
+  if (version > 0x296 || ldHas(r, LD_SAVEGAME_INFO)) {
+    writeNetworkPlayerId(w, v.ownerPlayerId ?? '');
+    w.u64Big(v.ownerPsid?.[0] ?? 0n);
+    w.u64Big(v.ownerPsid?.[1] ?? 0n);
+  }
+  if (version > 0x2eb || ldHas(r, LD_OWNER_ID)) w.i32(v.ownerUserId ?? 0);
+  if (version > 0x175) w.sha1(v.eulaAgreed ?? new Uint8Array(20));
+  if (version >= 0x3d5) writeNetworkPlayerId(w, v.acceptingPlayer ?? '');
+  w.ref(v.syncedProfile, { descriptor: true });
+  if (version > 0x1a1) {
+    w.i32(v.voipMutedPlayers?.length ?? 0);
+    for (const id of v.voipMutedPlayers ?? []) writeNetworkPlayerId(w, id);
+    w.bool(v.voipChatPaused ?? false);
+    w.bool(v.enableMusicInPlayMode ?? false);
+  }
+  if (version > 0x1b4) w.bool(v.enableMusicInPod ?? false);
+  if (version > 0x1b5) {
+    w.i32(v.legacyInventoryCollections?.length ?? 0);
+    for (const c of v.legacyInventoryCollections ?? []) {
+      writeRef(w, c, (x, col) => {
+        x.i32(col.inventoryViews.length);
+        for (const view of col.inventoryViews) writeRef(x, view, writeInventoryView);
+        x.i32(col.currentPageNumber);
+        x.i32(col.collectionID);
+        x.i32(col.actionOnItemSelect);
+      });
+    }
+    w.i32(v.legacyInventoryViews?.length ?? 0);
+    for (const view of v.legacyInventoryViews ?? []) writeRef(w, view, writeInventoryView);
+  }
+  if (version > 0x316) {
+    w.i32(v.inventoryCollections?.length ?? 0);
+    for (const c of v.inventoryCollections ?? []) {
+      writeRef(w, c, (x, col) => {
+        x.i32(col.inventoryCollectionIndex);
+        x.i32(col.inventoryPageInstances.length);
+        for (const page of col.inventoryPageInstances) {
+          writeRef(x, page, (y, pg) => {
+            y.i32(pg.inventoryPageTitleKey);
+            y.i32(pg.desiredSortMode);
+          });
+        }
+        x.i32(col.currentPageNumber);
+        if (x.revision.subVersion >= COLLECTION_POPPET_POWERUP) x.bool(col.poppetPowerupSelection ?? false);
+      });
+    }
+  }
+  if (version > 0x1e0) w.ref(v.avatarIcon, { descriptor: true });
+  if (version > 0x23c) w.ref(v.saveIcon, { descriptor: true });
+  if (version > 0x1e5) w.i32(v.lbp1CreateModeVOProgress ?? 0);
+  if (version > 0x1ff) {
+    w.f32(v.gamma ?? 0);
+    w.f32(v.screenSize ?? 0);
+  }
+  if (version > 0x35e) w.bool(v.hasSeenCalibrationScreen ?? false);
+  if (version > 0x205) w.intVector(v.lbp1VOPlayed ?? [], true);
+  if (version > 0x36b) w.intVector(v.lbp2VOPlayed ?? [], true);
+  if (version > 0x23a) w.s32(v.subtitleMode ?? 0);
+  if (version > 0x255 && version < 0x351) w.i32(v.dropped351 ?? 0);
+  if (version > 0x32e) writePinsAwarded(w, v.pinsAwarded);
+  if (version > 0x260) {
+    w.bool(v.userSettingPhotoBooth ?? false);
+    if (subVersion > 0x17e) w.bool(v.userSettingAdvancedEditMode ?? false);
+    w.bool(v.userSettingCollection ?? false);
+    if (version === 0x261) w.bool(v.dropped261 ?? false);
+  }
+  if (version > 0x2d2 || ldHas(r, LD_THERMOMETER)) w.bool(v.showThermometer ?? false);
+  if (version > 0x383) w.bool(v.saveOnlinePlaySettings ?? false);
+  if (version > 0x30d) {
+    w.i32(v.onlinePlayMode ?? 0);
+    w.i32(v.friendJoinRequestMode ?? 0);
+    w.i32(v.nonFriendJoinRequestMode ?? 0);
+  }
+  if (version > 0x352) {
+    writeInts(w, v.lbp2TutorialsPlayed);
+    w.intVector(v.sectionHeadingToggled ?? []);
+  }
+  if (subVersion > 0x20d) {
+    w.i32(v.mysteryPodEventsSeen?.length ?? 0);
+    for (const e of v.mysteryPodEventsSeen ?? []) {
+      w.i32(e.id);
+      w.s32(e.type);
+    }
+  }
+  const twiceLbp2Hashes = subVersion > 0x37 && version > 0x3f5 && version < 0x3f9;
+  if (version > 0x366) writeSha1List(w, v.lastLegacyImportedProfileHashLBP1);
+  if (subVersion > 0x37) {
+    writeSha1List(w, twiceLbp2Hashes ? v.lastLegacyImportedProfileHashLBP2First ?? v.lastLegacyImportedProfileHashLBP2 : v.lastLegacyImportedProfileHashLBP2);
+  }
+  const twicePlayedLbp2 = subVersion > 0x37 && version > 0x3f3;
+  if (version > 0x36b) w.bool(v.playedLBP1 ?? false);
+  if (subVersion > 0x37) w.bool((twicePlayedLbp2 ? v.playedLBP2First ?? v.playedLBP2 : v.playedLBP2) ?? false);
+  if (subVersion > 0x12c) w.bool(v.hasPerformedFirstRun ?? false);
+  if (version > 0x3ae) w.bool(v.lbp2TutorialUnlockButtonUnleashed ?? false);
+  if (version >= 0x28c) w.intVector(v.hiddenCategories ?? []);
+  if (version >= 0x2d2) {
+    w.i32(v.collectedBubbles?.length ?? 0);
+    for (const b of v.collectedBubbles ?? []) {
+      w.ref(b.level, { descriptor: true });
+      w.i32(b.thingUID);
+      w.ref(b.plan, { descriptor: true });
+    }
+  }
+  if (version > 0x2f5 || ldHas(r, LD_WATER_LEVELS)) w.i32(v.numWaterLevelsPlayed ?? 0);
+  if (version > 0x3cf) w.bool(v.autoFilterOn ?? false);
+  if (version > 0x3d2) {
+    w.bool(v.hasUsed6Axis ?? false);
+    w.bool(v.hasUsedMove ?? false);
+  }
+  if (vita >= 0x86) w.bool(v.hasSeenCrossCompatInfo ?? false);
+  if (vita >= 0x87) w.bool(v.wantsCrossCompatDownloadNotification ?? false);
+  if (version > 0x3db) {
+    const p = v.paintProperties;
+    w.i32(p?.triggerOverride ?? 0);
+    w.i32(p?.stickerSaveSize ?? 0);
+    w.bool(p?.angleOverride ?? false);
+    w.bool(p?.uiHidden ?? false);
+    w.ref(p?.lastAutoSave, { descriptor: true });
+    if (version >= PTG_USE_DEFAULT_BACKGROUND) w.bool(p?.useDefaultBackground ?? false);
+  }
+  if (vita >= D1_DATALABELS) {
+    writePlayerDataLabels(w, v.playerDataLabels);
+    if (vita >= D1_3G_CONNECTIVITY) {
+      w.i32(v.total3GUpStream ?? 0);
+      w.i32(v.total3GDownStream ?? 0);
+      if (vita >= D1_TOUCH_CREATE) {
+        w.bool(v.createRearTouchPan ?? false);
+        w.bool(v.createRearTouchPinchZoom ?? false);
+        w.bool(v.createRearTapZoom ?? false);
+        if (vita >= D1_CREATE_WARNING) {
+          w.bool(v.createFrameRateWarningMessages ?? false);
+          if (vita >= D1_CREATE_BETA) {
+            w.s64Big(v.onlineBetaNetworkTimestamp ?? 0n);
+            w.i32(v.onlineBetaPlayTimeSinceOnline ?? 0);
+            w.i32(v.onlineBetaBootsSinceOnline ?? 0);
+          }
+          if (vita >= D1_WAS_TRIAL) w.bool(v.wasTrial ?? false);
+        }
+      }
+    }
+  }
+  if (version > 0x3e2) w.f32(v.distanceMovedWhilstAttracted ?? 0);
+  if (version > 0x3e4) {
+    w.s32(v.beakersUsedPart1 ?? 0);
+    w.s32(v.beakersUsedPart2 ?? 0);
+  }
+  if (version > 0x3eb) w.i32(v.profileFlags ?? 0);
+  if (version > 0x3ee) writePlayerDataLabels(w, v.playerDataLabels);
+  if (version > 0x3f1) {
+    w.intVector(v.goldMedalsAwarded ?? []);
+    w.i8(v.goldMedalStoryArcPins ?? 0);
+  }
+  if (version > 0x3f2) {
+    w.bool(v.twitterEnabled ?? false);
+    w.bool(v.facebookEnabled ?? false);
+    w.str(v.twitterAccessToken ?? '');
+    w.str(v.twitterAccessTokenSecret ?? '');
+  }
+  if (version > 0x3f3) w.bool(v.playedLBP2 ?? false);
+  if (version > 0x3f4) {
+    w.bool(v.createChallengeTutorialSeen ?? false);
+    w.bool(v.playChallengeTutorialSeen ?? false);
+  }
+  if (version > 0x3f5 && version < 0x3f9) writeSha1List(w, v.lastLegacyImportedProfileHashLBP2);
+  if (version > 0x3f7) w.i32(v.ownedLBP ?? 0);
+  if (subVersion > 0xef) w.i32(v.dceUuidState ?? 0);
+  if (subVersion > 0x15b) w.bool(v.lastPlayedPPP ?? false);
+  if (subVersion > 0x20e) {
+    writeSlotId(w, v.lastPlayedPlanet ?? NO_SLOT);
+    w.bool(v.lastPlayedEarthAdv ?? false);
+    w.bool(v.hasSeenDiveInBetaMessage ?? false);
+  }
+  if (subVersion > 0x183) w.i32(v.touchCreateCursorMode ?? 0);
+  if (subVersion > 0x187) w.i8(v.showAdvancedEditModeMessageCounter ?? 0);
+  if (subVersion > 0x194) w.bool(v.showAdventureSaveWarning ?? false);
+  if (subVersion > 0x19f) w.i32(v.totalFramesInEditMode ?? 0);
+  if (subVersion > 0x1a1) {
+    writeSha1List(w, v.onlineTutorialsPlayed);
+    w.i32(v.popitPuzzlesCompleted?.length ?? 0);
+    for (const id of v.popitPuzzlesCompleted ?? []) writeSlotId(w, id);
+  }
+  if (subVersion > 0x1aa) w.bool(v.timesaverNoticeViewed ?? false);
+  if (subVersion > 0x1ad) w.s32(v.questProgressPin ?? 0);
+  if (subVersion > 0x209) w.intVector(v.activityFilterToggled ?? []);
+  if (subVersion > 0x212) w.i32(v.lastLandingPageFocusItems ?? 0);
+  if (subVersion > 0x215) {
+    w.i32(v.goPlayCache?.length ?? 0);
+    for (const c of v.goPlayCache ?? []) {
+      writeSlotId(w, c.levelID);
+      writeSlotId(w, c.planetID);
+      w.i8(c.numBubbleCollected);
+      w.i8(c.awardLevelComplete);
+      w.i8(c.awardCollectAll);
+      w.i8(c.awardAcedLevel);
+    }
+  }
+  return w.done();
 }

@@ -25,6 +25,7 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, latin1, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 
 /** `CellGcmPrimitive`: the two values `RMesh.primitiveType` takes in the game's meshes. */
 export const PRIMITIVE_TRIANGLES = 5;
@@ -58,6 +59,11 @@ export interface MeshPrimitive {
    * the primitives' part of the buffer exactly in all 5,941.
    */
   readonly triangles: Uint16Array;
+  /**
+   * The second `gfxMaterial` a primitive carries below version `0x149`, where it
+   * was removed. Non-enumerable, kept so `encodeMesh` writes it back.
+   */
+  readonly secondMaterial?: ResourceRef;
 }
 
 /** A skeleton bone. */
@@ -78,6 +84,24 @@ export interface MeshBone {
   readonly boundBoxMin: readonly [number, number, number, number];
   readonly boundBoxMax: readonly [number, number, number, number];
   readonly boundSphere: readonly [number, number, number, number];
+  /** What the stream holds that the fields above leave out. Non-enumerable; `encodeMesh` writes it back. */
+  readonly stored?: BoneStored;
+}
+
+/** A bone's fields as stored that `MeshBone` does not return (cwlib's names). */
+export interface BoneStored {
+  /** The 32 name bytes as stored, padding included: written back while they still read as `name`. */
+  readonly name: Uint8Array;
+  readonly obbMin: readonly [number, number, number, number];
+  readonly obbMax: readonly [number, number, number, number];
+  readonly shapeVerts: readonly {
+    readonly localPos: readonly [number, number, number, number];
+    readonly localNormal: readonly [number, number, number, number];
+    readonly boneIndex: number;
+  }[];
+  readonly shapeInfos: readonly { readonly numVerts: number; readonly isPointCloud: number }[];
+  readonly shapeMinZ: number;
+  readonly shapeMaxZ: number;
 }
 
 export interface Mesh {
@@ -130,6 +154,39 @@ export interface Mesh {
   readonly skeletonType: number;
   /** Everything after the bones: mirroring, softbody, implicit shapes, culling (`MeshTail`). */
   readonly tail: MeshTail;
+  /**
+   * The payload's fields and streams as stored, which the values above decode
+   * lossily or not at all. Non-enumerable. `encodeMesh` writes a stream from
+   * here wherever it still decodes to the values -- vertex by vertex, field by
+   * field -- and from the values elsewhere, so an edited or built mesh writes too.
+   */
+  readonly stored?: MeshStored;
+}
+
+/** What `readMesh` keeps of a payload so that `encodeMesh` writes it back byte for byte. */
+export interface MeshStored {
+  readonly vertexCount: number;
+  readonly numIndices: number;
+  readonly numTris: number;
+  readonly morphCount: number;
+  /** All 32 morph name slots, 16 bytes each, padding and unused slots included. */
+  readonly morphNames: Uint8Array;
+  /** From version `0x239`. */
+  readonly minUV?: readonly number[];
+  readonly maxUV?: readonly number[];
+  readonly areaScaleFactor?: number;
+  /** The `streamCount + 2` stream offsets. */
+  readonly streamOffsets: readonly number[];
+  /** Stream 0: positions, and the softbody bytes (13 and 14 returned nowhere). */
+  readonly position: Uint8Array;
+  /** Stream 1: weights, joints, normal, the unexplained pack at 8, tangent. */
+  readonly skin: Uint8Array;
+  readonly morphs: readonly Uint8Array[];
+  readonly attributes: Uint8Array;
+  /** The whole index buffer: the primitives' runs, then the edge list. */
+  readonly indices: Uint8Array;
+  /** From subVersion `0x16b`. */
+  readonly triangleAdjacency?: Uint8Array;
 }
 
 /**
@@ -285,10 +342,10 @@ function triangles(indices: DataView, first: number, count: number, type: number
 
 type Run = Omit<MeshPrimitive, 'triangles'>;
 
-function readPrimitive(s: Serializer): Run {
+function readPrimitive(s: Serializer): Run & { secondMaterial?: ResourceRef } {
   const { version } = s.revision;
   const material = s.resource();
-  if (version < 0x149) s.resource(); // a second gfxMaterial, removed at 0x149
+  const secondMaterial = version < 0x149 ? s.resource() : undefined; // removed at 0x149
   const textureAlternatives = version >= 0x179 ? s.resource() : undefined;
   return {
     material,
@@ -298,12 +355,14 @@ function readPrimitive(s: Serializer): Run {
     firstIndex: s.i32(),
     numIndices: s.i32(),
     region: s.i32(),
+    secondMaterial,
   };
 }
 
 /** `Bone`, which is `AnimBone`'s four fields and then its own. */
 export function readBone(s: Serializer): MeshBone {
-  const name = latin1(s.bytes(32), true);
+  const storedName = s.bytes(32);
+  const name = latin1(storedName, true);
   const flags = s.i32();
   const animHash = s.i32();
   const parent = s.s32();
@@ -311,26 +370,67 @@ export function readBone(s: Serializer): MeshBone {
   const nextSibling = s.s32();
   const skinPose = s.matrix();
   const invSkinPose = s.matrix();
-  s.skipVector4(); // obbMin
-  s.skipVector4(); // obbMax
-  s.array((x) => { // shapeVerts: MeshShapeVertex
-    x.skipVector4(); // localPos
-    x.skipVector4(); // localNormal
-    x.i32(); // boneIndex
-  });
-  s.array((x) => { // shapeInfos: MeshShapeInfo
-    x.i32(); // numVerts
-    x.i32(); // isPointCloud, an intbool
-  });
-  s.f32(); // shapeMinZ
-  s.f32(); // shapeMaxZ
+  const obbMin = s.vector4();
+  const obbMax = s.vector4();
+  // MeshShapeVertex, then MeshShapeInfo (isPointCloud an intbool).
+  const shapeVerts = s.array((x) => ({ localPos: x.vector4(), localNormal: x.vector4(), boneIndex: x.i32() }));
+  const shapeInfos = s.array((x) => ({ numVerts: x.i32(), isPointCloud: x.i32() }));
+  const shapeMinZ = s.f32();
+  const shapeMaxZ = s.f32();
   const boundBoxMin = s.vector4();
   const boundBoxMax = s.vector4();
   const boundSphere = s.vector4();
-  return {
+  const bone: MeshBone = {
     name, flags, animHash, parent, firstChild, nextSibling, skinPose, invSkinPose,
     boundBoxMin, boundBoxMax, boundSphere,
   };
+  const stored: BoneStored = { name: storedName, obbMin, obbMax, shapeVerts, shapeInfos, shapeMinZ, shapeMaxZ };
+  hide(bone, 'stored', stored);
+  return bone;
+}
+
+/** A fixed-size NUL-padded name: the bytes as stored while they still read as `name`. */
+function fixedName(w: Writer, name: string, stored: Uint8Array | undefined, size: number, read: (b: Uint8Array) => string): void {
+  if (stored && stored.length === size && read(stored) === name) {
+    w.bytes(stored);
+    return;
+  }
+  const out = new Uint8Array(size);
+  for (let i = 0; i < Math.min(size, name.length); i += 1) out[i] = name.charCodeAt(i) & 0xff;
+  w.bytes(out);
+}
+
+/** `readBone`'s pair: a bone as `Bone` stores it; a bone built from values writes zero shape fields. */
+export function writeBone(w: Writer, bone: MeshBone): void {
+  const stored = bone.stored;
+  fixedName(w, bone.name, stored?.name, 32, (b) => latin1(b, true));
+  w.i32(bone.flags);
+  w.i32(bone.animHash);
+  w.s32(bone.parent);
+  w.s32(bone.firstChild);
+  w.s32(bone.nextSibling);
+  w.matrix(bone.skinPose);
+  w.matrix(bone.invSkinPose);
+  w.vector4(stored?.obbMin ?? [0, 0, 0, 0]);
+  w.vector4(stored?.obbMax ?? [0, 0, 0, 0]);
+  const shapeVerts = stored?.shapeVerts ?? [];
+  w.i32(shapeVerts.length);
+  for (const v of shapeVerts) {
+    w.vector4(v.localPos);
+    w.vector4(v.localNormal);
+    w.i32(v.boneIndex);
+  }
+  const shapeInfos = stored?.shapeInfos ?? [];
+  w.i32(shapeInfos.length);
+  for (const info of shapeInfos) {
+    w.i32(info.numVerts);
+    w.i32(info.isPointCloud);
+  }
+  w.f32(stored?.shapeMinZ ?? 0);
+  w.f32(stored?.shapeMaxZ ?? 0);
+  w.vector4(bone.boundBoxMin);
+  w.vector4(bone.boundBoxMax);
+  w.vector4(bone.boundSphere);
 }
 
 /** A softbody cluster: cwlib's `SoftbodyCluster`. */
@@ -341,6 +441,8 @@ export interface SoftbodyCluster {
   readonly restDyadicSum: Float32Array;
   /** 81 floats, a 9x9. */
   readonly restQuadraticDyadicSum: Float32Array;
+  /** The 32 name bytes as stored. Non-enumerable; written back while they still read as `name`. */
+  readonly storedName?: Uint8Array;
 }
 
 /** cwlib's `ImplicitEllipsoid`: a collision ellipsoid on a bone. */
@@ -404,6 +506,19 @@ export interface MeshTail {
   readonly implicitBevelSprings: boolean;
   /** The Vita branch's per-vertex colours (`DOUBLE11` at `0x28`); absent elsewhere. */
   readonly vertexColors?: readonly number[];
+  /** Words the tail stores that its values leave out. Non-enumerable; `encodeMesh` writes them back. */
+  readonly stored?: {
+    /** The redundant length in front of each of the four cluster arrays. */
+    readonly clusterLengths: readonly number[];
+    /** `springTrisStripped`'s word and `implicitBevelSprings`'s byte, as stored. */
+    readonly springTrisStripped: number;
+    readonly implicitBevelSprings: number;
+  };
+}
+
+/** Put a field on an object out of sight of enumeration, `deepEqual` and JSON. */
+function hide(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, enumerable: false, writable: true, configurable: true });
 }
 
 /** Everything after the bones, returned; and the primitive and skeleton types among it. */
@@ -416,17 +531,21 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number;
   // SoftbodyClusterData: a count, then four arrays of that many, each with its
   // own redundant length in front.
   const clusters = s.count();
-  s.i32();
+  const clusterLengths = [s.i32()];
   const restCOM = Array.from({ length: clusters }, () => s.vector4());
-  s.i32();
+  clusterLengths.push(s.i32());
   const restDyadicSum = Array.from({ length: clusters }, () => s.matrix());
-  s.i32();
+  clusterLengths.push(s.i32());
   const restQuadratic = Array.from({ length: clusters }, () => Float32Array.from({ length: 81 }, () => s.f32()));
-  s.i32();
-  const names = Array.from({ length: clusters }, () => latin1(s.bytes(0x20)).replace(/\0.*$/s, ''));
-  const softbodyClusters = names.map((name, i) => ({
-    name, restCOM: restCOM[i], restDyadicSum: restDyadicSum[i], restQuadraticDyadicSum: restQuadratic[i],
-  }));
+  clusterLengths.push(s.i32());
+  const storedNames = Array.from({ length: clusters }, () => s.bytes(0x20));
+  const softbodyClusters = storedNames.map((stored, i) => {
+    const cluster: SoftbodyCluster = {
+      name: clusterName(stored), restCOM: restCOM[i], restDyadicSum: restDyadicSum[i], restQuadraticDyadicSum: restQuadratic[i],
+    };
+    hide(cluster, 'storedName', stored);
+    return cluster;
+  });
   const softbodySprings = s.array((x) => ({ a: x.i16(), b: x.i16(), restLengthSq: x.f32() }));
   const softbodyEquivs = s.array((x) => ({ first: x.i16(), count: x.i16() }));
   const mass = Float32Array.from(s.array((x) => x.f32()));
@@ -440,7 +559,8 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number;
   const maxSpringVert = s.i32();
   const minUnalignedSpringVert = s.i32();
   const springyTriIndices = s.array((x) => x.i16());
-  const springTrisStripped = s.i32() !== 0;
+  const storedSpringTrisStripped = s.i32();
+  const springTrisStripped = storedSpringTrisStripped !== 0;
   const softbodyContainingBoundBoxMin = s.vector4();
   const softbodyContainingBoundBoxMax = s.vector4();
   const cullBones = s.array((x) => ({ invSkinPoseMatrix: x.matrix(), boundBoxMin: x.vector4(), boundBoxMax: x.vector4() }));
@@ -448,25 +568,31 @@ function readTail(s: Serializer): { primitiveType: number; skeletonType: number;
   const costumeCategoriesUsed = s.i32();
   const hairMorphs = version >= 0x141 ? s.i32() : 0;
   const bevelVertexCount = s.i32();
-  const implicitBevelSprings = s.bool();
+  const storedImplicitBevelSprings = s.u8();
+  const implicitBevelSprings = storedImplicitBevelSprings !== 0;
   // ⚠️ cwlib's, unmeasured: no mesh in the PS4 FARCs is on the Vita branch.
   const vertexColors = branchId === DOUBLE11 && version === DOUBLE11_HEAD && branchRevision >= 0x28
     ? s.array((x) => x.i32(true))
     : undefined;
   const skeletonType = subVersion >= 0xd6 ? s.u8() : 0;
-  return {
-    primitiveType,
-    skeletonType,
-    tail: {
-      mirrorBones, mirrorBoneFlipTypes, mirrorMorphs, softbodyClusters, softbodySprings, softbodyEquivs, mass,
-      implicitEllipsoids, clusterImplicitEllipsoids, insideImplicitEllipsoids, implicitPlanes,
-      ...(softPhysSettings ? { softPhysSettings } : {}),
-      minSpringVert, maxSpringVert, minUnalignedSpringVert, springyTriIndices, springTrisStripped,
-      softbodyContainingBoundBoxMin, softbodyContainingBoundBoxMax, cullBones, regionIDsToHide,
-      costumeCategoriesUsed, hairMorphs, bevelVertexCount, implicitBevelSprings,
-      ...(vertexColors ? { vertexColors } : {}),
-    },
+  const tail: MeshTail = {
+    mirrorBones, mirrorBoneFlipTypes, mirrorMorphs, softbodyClusters, softbodySprings, softbodyEquivs, mass,
+    implicitEllipsoids, clusterImplicitEllipsoids, insideImplicitEllipsoids, implicitPlanes,
+    ...(softPhysSettings ? { softPhysSettings } : {}),
+    minSpringVert, maxSpringVert, minUnalignedSpringVert, springyTriIndices, springTrisStripped,
+    softbodyContainingBoundBoxMin, softbodyContainingBoundBoxMax, cullBones, regionIDsToHide,
+    costumeCategoriesUsed, hairMorphs, bevelVertexCount, implicitBevelSprings,
+    ...(vertexColors ? { vertexColors } : {}),
   };
+  hide(tail, 'stored', {
+    clusterLengths, springTrisStripped: storedSpringTrisStripped, implicitBevelSprings: storedImplicitBevelSprings,
+  });
+  return { primitiveType, skeletonType, tail };
+}
+
+/** A cluster's name: its 32 bytes up to the first NUL. */
+function clusterName(stored: Uint8Array): string {
+  return latin1(stored).replace(/\0.*$/s, '');
 }
 
 /**
@@ -484,22 +610,25 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   const vertexCount = s.i32();
   const numIndices = s.i32();
   const numEdgeIndices = s.i32();
-  s.i32(); // numTris: the non-degenerate count, on every mesh that draws no run twice
+  const numTris = s.i32(); // the non-degenerate count, on every mesh that draws no run twice
   const streamCount = s.i32();
   const attributeCount = s.i32();
   const morphCount = s.i32();
+  const storedMorphNames = s.bytes(MAX_MORPHS * 0x10);
   const morphNames: string[] = [];
-  for (let i = 0; i < MAX_MORPHS; i += 1) morphNames.push(latin1(s.bytes(0x10), true));
+  for (let i = 0; i < MAX_MORPHS; i += 1) morphNames.push(morphName(storedMorphNames, i));
   morphNames.length = Math.min(morphCount, MAX_MORPHS);
+  let uvRange: Pick<MeshStored, 'minUV' | 'maxUV' | 'areaScaleFactor'> = {};
   if (version >= 0x239) {
     // ⚠️ Not the bounds of any UV channel: values below `minUV` are common.
-    s.array((x) => x.f32()); // minUV
-    s.array((x) => x.f32()); // maxUV
-    s.f32(); // areaScaleFactor
+    const minUV = s.array((x) => x.f32());
+    const maxUV = s.array((x) => x.f32());
+    uvRange = { minUV, maxUV, areaScaleFactor: s.f32() };
   }
   // The streams' offsets: 0, each stream's end, then the last end again --
-  // exactly that in all 5,941, so they are skipped and the sizes assumed.
-  for (let i = 0; i < streamCount + 2; i += 1) s.i32();
+  // exactly that in all 5,941, so the sizes are assumed and these only kept.
+  const streamOffsets: number[] = [];
+  for (let i = 0; i < streamCount + 2; i += 1) streamOffsets.push(s.i32());
   if (streamCount < 2) throw new SerializerError(`a mesh with ${streamCount} vertex streams`);
   const position = s.bytes(vertexCount * VERTEX);
   const skin = s.bytes(vertexCount * VERTEX);
@@ -507,7 +636,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   for (let i = 2; i < streamCount; i += 1) morphStreams.push(s.bytes(vertexCount * VERTEX)); // a morph each
   const attributes = s.bytes(s.i32());
   const indices = s.bytes(s.i32());
-  if (subVersion >= 0x16b) s.skip(s.i32()); // triangleAdjacencyInfos
+  const triangleAdjacency = subVersion >= 0x16b ? s.bytes(s.i32()) : undefined; // triangleAdjacencyInfos
   const runs = s.array(readPrimitive);
   const bones = s.array(readBone);
   const { primitiveType, skeletonType, tail } = readTail(s);
@@ -583,7 +712,10 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
     if (run.firstIndex < 0 || run.numIndices < 0 || run.firstIndex + run.numIndices > numIndices) {
       throw new SerializerError(`primitive ${run.firstIndex}+${run.numIndices} runs past ${numIndices} indices`);
     }
-    return { ...run, triangles: triangles(iv, run.firstIndex, run.numIndices, primitiveType) };
+    const { secondMaterial, ...rest } = run;
+    const primitive: MeshPrimitive = { ...rest, triangles: triangles(iv, run.firstIndex, run.numIndices, primitiveType) };
+    if (secondMaterial) hide(primitive, 'secondMaterial', secondMaterial);
+    return primitive;
   });
 
   const morphs = morphStreams.map((stream, m): MeshMorph => {
@@ -600,8 +732,352 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
     return { name: morphNames[m] ?? '', offsets, normals: morphNormals };
   });
 
-  return {
+  const mesh: Mesh = {
     revision, vertexCount, positions, normals, tangents, softbodyWeights, softbodyClusterIndices, uvs, joints, weights,
     primitives, bones, primitiveType, morphNames, morphs, skeletonType, tail,
   };
+  const stored: MeshStored = {
+    vertexCount, numIndices, numTris, morphCount, morphNames: storedMorphNames, ...uvRange, streamOffsets,
+    position, skin, morphs: morphStreams, attributes, indices, ...(triangleAdjacency ? { triangleAdjacency } : {}),
+  };
+  hide(mesh, 'stored', stored);
+  return mesh;
+}
+
+/** Morph name slot `i` of the 32 stored, up to its first NUL. */
+function morphName(stored: Uint8Array, i: number): string {
+  return latin1(stored.subarray(i * 0x10, (i + 1) * 0x10), true);
+}
+
+/** Below zero, -0 included: the packs store its sign. */
+const negative = (value: number): boolean => value < 0 || Object.is(value, -0);
+
+/** `unpackNormal`'s inverse: x in 11 bits and y in 10 with their signs after, z's sign in bit 23. */
+function packNormal(x: number, y: number, z: number): number {
+  const field = (value: number, bits: number): number => {
+    const max = (1 << bits) - 1;
+    const m = Math.min(max, Math.round(Math.abs(value) * max) || 0);
+    // A negative component counts down from the sign bit: -(2^bits - field) / max.
+    return value < 0 && m > 0 ? (1 << bits) | ((1 << bits) - m) : m;
+  };
+  return field(x, 11) | (field(y, 10) << 12) | (negative(z) ? 1 << 23 : 0);
+}
+
+/** `unpackNormal32`'s inverse: x and y in 10 bits with a sign after each, z in 9 with its sign in bit 31. */
+function packNormal32(x: number, y: number, z: number): number {
+  const field = (value: number, max: number): [number, number] => {
+    const m = Math.min(max, Math.round(Math.abs(value) * max) || 0);
+    return negative(value) ? [max - m, 1] : [m, 0];
+  };
+  const [fx, sx] = field(x, 1023);
+  const [fy, sy] = field(y, 1023);
+  const [fz, sz] = field(z, 511);
+  return (fx | (sx << 10) | (fy << 11) | (sy << 21) | (fz << 22) | (sz << 31)) >>> 0;
+}
+
+const scratch = new Float32Array(3);
+
+/** Does the stored triple at `at` still decode to `values[to..to+2]`? */
+function sameTriple(values: Float32Array, to: number): boolean {
+  return Object.is(scratch[0], values[to]) && Object.is(scratch[1], values[to + 1]) && Object.is(scratch[2], values[to + 2]);
+}
+
+/** A stored stream of `size` bytes to start from, if there is one of that size; else zeros. */
+function base(stored: Uint8Array | undefined, size: number): { out: Uint8Array; view: DataView; kept: boolean } {
+  const kept = stored !== undefined && stored.length === size;
+  const out = kept ? stored.slice() : new Uint8Array(size);
+  return { out, view: new DataView(out.buffer), kept };
+}
+
+/** A float at `at`, rewritten only where the stored one is not `value` (a stored NaN keeps its bits). */
+function putF32(view: DataView, at: number, value: number, kept: boolean): void {
+  if (!kept || !Object.is(view.getFloat32(at, false), value)) view.setFloat32(at, value, false);
+}
+
+const byte = (value: number): number => Math.max(0, Math.min(0xff, Math.round(value * 0xff) || 0));
+
+/** Stream 0 from the values, over the stored one where there is one. */
+function encodePositions(mesh: Mesh): Uint8Array {
+  const n = mesh.vertexCount;
+  const { out, view, kept } = base(mesh.stored?.position, n * VERTEX);
+  for (let v = 0; v < n; v += 1) {
+    const at = v * VERTEX;
+    for (let k = 0; k < 3; k += 1) putF32(view, at + k * 4, mesh.positions[v * 3 + k], kept);
+    const cluster = mesh.softbodyClusterIndices[v];
+    if (!kept || out[at + 12] >> 1 !== cluster) out[at + 12] = ((cluster << 1) | (out[at + 12] & 1)) & 0xff;
+    const weight = mesh.softbodyWeights[v];
+    if (!kept || Math.fround(out[at + 15] / 0xff) !== weight) out[at + 15] = byte(weight);
+  }
+  return out;
+}
+
+/** Stream 1 from the values, over the stored one where there is one. */
+function encodeSkin(mesh: Mesh): Uint8Array {
+  const n = mesh.vertexCount;
+  const { out, kept } = base(mesh.stored?.skin, n * VERTEX);
+  const { weights, joints, normals, tangents } = mesh;
+  for (let v = 0; v < n; v += 1) {
+    const at = v * VERTEX;
+    // The fourth weight is the remainder and is not stored.
+    if (
+      !kept || Math.fround(out[at + 2] / 0xff) !== weights[v * 4] || Math.fround(out[at + 1] / 0xff) !== weights[v * 4 + 1]
+      || Math.fround(out[at] / 0xff) !== weights[v * 4 + 2]
+    ) {
+      out[at + 2] = byte(weights[v * 4]);
+      out[at + 1] = byte(weights[v * 4 + 1]);
+      out[at] = byte(weights[v * 4 + 2]);
+    }
+    out[at + 3] = joints[v * 4];
+    out[at + 7] = joints[v * 4 + 1];
+    out[at + 11] = joints[v * 4 + 2];
+    out[at + 15] = joints[v * 4 + 3];
+    for (const [to, values] of [[4, normals], [12, tangents]] as const) {
+      if (kept) {
+        unpackNormal(out, at + to, scratch, 0);
+        if (sameTriple(values, v * 3)) continue;
+      }
+      const packed = packNormal(values[v * 3], values[v * 3 + 1], values[v * 3 + 2]);
+      out[at + to] = (packed >> 16) & 0xff;
+      out[at + to + 1] = (packed >> 8) & 0xff;
+      out[at + to + 2] = packed & 0xff;
+    }
+  }
+  return out;
+}
+
+/** A morph's stream from its values, over the stored one where there is one. */
+function encodeMorph(mesh: Mesh, morph: MeshMorph, stored: Uint8Array | undefined): Uint8Array {
+  const n = mesh.vertexCount;
+  const { view, out, kept } = base(stored, n * VERTEX);
+  for (let v = 0; v < n; v += 1) {
+    const at = v * VERTEX;
+    for (let k = 0; k < 3; k += 1) putF32(view, at + k * 4, morph.offsets[v * 3 + k], kept);
+    if (kept) {
+      unpackNormal32(view.getUint32(at + 12, false), scratch, 0);
+      if (sameTriple(morph.normals, v * 3)) continue;
+    }
+    view.setUint32(at + 12, packNormal32(morph.normals[v * 3], morph.normals[v * 3 + 1], morph.normals[v * 3 + 2]), false);
+  }
+  return out;
+}
+
+/** The UV channels, interleaved per vertex, over the stored ones where they are the same shape. */
+function encodeAttributes(mesh: Mesh): Uint8Array {
+  const n = mesh.vertexCount;
+  const channels = mesh.uvs.length;
+  const { view, out, kept } = base(mesh.stored?.attributes, n * channels * 8);
+  for (let c = 0; c < channels; c += 1) {
+    const uv = mesh.uvs[c];
+    for (let v = 0; v < n; v += 1) {
+      const at = (v * channels + c) * 8;
+      putF32(view, at, uv[v * 2], kept);
+      putF32(view, at + 4, uv[v * 2 + 1], kept);
+    }
+  }
+  return out;
+}
+
+function sameIndices(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * The index buffer, the primitives' runs as written and the triangle count:
+ * the stored buffer where every primitive's run still unrolls to its triangles,
+ * else built from the triangles -- a list as it stands, or under a strip mesh
+ * each triangle a strip of its own, `0xffff` between, which unrolls to it.
+ * The stored edge list is kept while the vertex count is; a built one has none.
+ */
+function encodeIndices(mesh: Mesh): { indices: Uint8Array; numIndices: number; numTris: number; runs: { firstIndex: number; numIndices: number }[] } {
+  const stored = mesh.stored;
+  if (stored) {
+    const view = new DataView(stored.indices.buffer, stored.indices.byteOffset, stored.indices.byteLength);
+    const same = mesh.primitives.every((p) => p.firstIndex >= 0 && p.numIndices >= 0
+      && p.firstIndex + p.numIndices <= stored.numIndices
+      && sameIndices(triangles(view, p.firstIndex, p.numIndices, mesh.primitiveType), p.triangles));
+    if (same) {
+      return {
+        indices: stored.indices, numIndices: stored.numIndices, numTris: stored.numTris,
+        runs: mesh.primitives.map((p) => ({ firstIndex: p.firstIndex, numIndices: p.numIndices })),
+      };
+    }
+  }
+  const strip = mesh.primitiveType === PRIMITIVE_TRIANGLE_STRIP;
+  const buffer: number[] = [];
+  const seen = new Map<Uint16Array, { firstIndex: number; numIndices: number }>();
+  let numTris = 0;
+  const runs = mesh.primitives.map((p) => {
+    const again = seen.get(p.triangles);
+    if (again) return again;
+    const firstIndex = buffer.length;
+    const t = p.triangles;
+    for (let i = 0; i + 2 < t.length; i += 3) {
+      if (strip && i > 0) buffer.push(0xffff);
+      buffer.push(t[i], t[i + 1], t[i + 2]);
+      numTris += 1;
+    }
+    const run = { firstIndex, numIndices: buffer.length - firstIndex };
+    seen.set(p.triangles, run);
+    return run;
+  });
+  const numIndices = buffer.length;
+  if (stored && stored.vertexCount === mesh.vertexCount) {
+    const view = new DataView(stored.indices.buffer, stored.indices.byteOffset, stored.indices.byteLength);
+    for (let i = stored.numIndices; i < stored.indices.length / 2; i += 1) buffer.push(view.getUint16(i * 2, false));
+  }
+  const indices = new Uint8Array(buffer.length * 2);
+  const view = new DataView(indices.buffer);
+  buffer.forEach((index, i) => view.setUint16(i * 2, index, false));
+  return { indices, numIndices, numTris, runs };
+}
+
+function writeTail(w: Writer, mesh: Mesh): void {
+  const { version, subVersion, branchId, branchRevision } = w.revision;
+  const t = mesh.tail;
+  const list = <T>(values: readonly T[], write: (value: T) => void): void => {
+    w.i32(values.length);
+    for (const value of values) write(value);
+  };
+  list(t.mirrorBones, (v) => w.i16(v));
+  list(t.mirrorBoneFlipTypes, (v) => w.u8(v));
+  list(t.mirrorMorphs, (v) => w.i16(v));
+  w.u8(mesh.primitiveType);
+  const clusters = t.softbodyClusters;
+  const lengths = t.stored?.clusterLengths;
+  const length = (i: number): number => (lengths && lengths.length === 4 ? lengths[i] : clusters.length);
+  w.i32(clusters.length);
+  w.i32(length(0));
+  for (const c of clusters) w.vector4(c.restCOM);
+  w.i32(length(1));
+  for (const c of clusters) w.matrix(c.restDyadicSum);
+  w.i32(length(2));
+  for (const c of clusters) for (let i = 0; i < 81; i += 1) w.f32(c.restQuadraticDyadicSum[i] ?? 0);
+  w.i32(length(3));
+  for (const c of clusters) fixedName(w, c.name, c.storedName, 0x20, clusterName);
+  list(t.softbodySprings, (v) => {
+    w.i16(v.a);
+    w.i16(v.b);
+    w.f32(v.restLengthSq);
+  });
+  list(t.softbodyEquivs, (v) => {
+    w.i16(v.first);
+    w.i16(v.count);
+  });
+  list(Array.from(t.mass), (v) => w.f32(v));
+  const ellipsoid = (v: ImplicitEllipsoid): void => {
+    w.matrix(v.transform);
+    w.i32(v.parentBone);
+    w.i32(v.affectWorldOnly);
+  };
+  list(t.implicitEllipsoids, ellipsoid);
+  list(t.clusterImplicitEllipsoids, (v) => w.matrix(v));
+  list(t.insideImplicitEllipsoids, ellipsoid);
+  list(t.implicitPlanes, (v) => {
+    w.vector4(v.planeNormal);
+    w.vector4(v.pointInPlane);
+    w.i32(v.parentBone);
+  });
+  w.ref(t.softPhysSettings);
+  w.i32(t.minSpringVert);
+  w.i32(t.maxSpringVert);
+  w.i32(t.minUnalignedSpringVert);
+  list(t.springyTriIndices, (v) => w.i16(v));
+  const stripped = t.stored?.springTrisStripped;
+  w.i32(stripped !== undefined && (stripped !== 0) === t.springTrisStripped ? stripped : t.springTrisStripped ? 1 : 0);
+  w.vector4(t.softbodyContainingBoundBoxMin);
+  w.vector4(t.softbodyContainingBoundBoxMax);
+  list(t.cullBones, (v) => {
+    w.matrix(v.invSkinPoseMatrix);
+    w.vector4(v.boundBoxMin);
+    w.vector4(v.boundBoxMax);
+  });
+  w.intVector(t.regionIDsToHide);
+  w.i32(t.costumeCategoriesUsed);
+  if (version >= 0x141) w.i32(t.hairMorphs);
+  w.i32(t.bevelVertexCount);
+  const bevel = t.stored?.implicitBevelSprings;
+  w.u8(bevel !== undefined && (bevel !== 0) === t.implicitBevelSprings ? bevel : t.implicitBevelSprings ? 1 : 0);
+  if (branchId === DOUBLE11 && version === DOUBLE11_HEAD && branchRevision >= 0x28) {
+    list(t.vertexColors ?? [], (v) => w.i32(v, true));
+  }
+  if (subVersion >= 0xd6) w.u8(mesh.skeletonType);
+}
+
+/**
+ * Write an `RMesh`'s payload -- what `loadResource(...).data` holds -- from the
+ * value `readMesh` returned: its every read mirrored, in order, under the same
+ * revision gates. What the value decodes lossily or leaves out comes from
+ * `Mesh.stored` (and the bones', clusters', primitives' and tail's hidden
+ * fields) wherever it still decodes to the value; a mesh built or edited from
+ * values writes from them, the fields nothing returns as zeros.
+ */
+export function encodeMesh(mesh: Mesh, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version, subVersion } = header.revision;
+  const stored = mesh.stored;
+  const n = mesh.vertexCount;
+  const morphCount = stored && Math.min(stored.morphCount, MAX_MORPHS) === mesh.morphNames.length
+    ? stored.morphCount
+    : mesh.morphNames.length;
+  const streamCount = 2 + mesh.morphs.length;
+  const { indices, numIndices, numTris, runs } = encodeIndices(mesh);
+
+  w.i32(n);
+  w.i32(numIndices);
+  w.i32(indices.length / 2 - numIndices);
+  w.i32(numTris);
+  w.i32(streamCount);
+  w.i32(mesh.uvs.length);
+  w.i32(morphCount);
+  const names = stored?.morphNames.length === MAX_MORPHS * 0x10 ? stored.morphNames.slice() : new Uint8Array(MAX_MORPHS * 0x10);
+  mesh.morphNames.slice(0, MAX_MORPHS).forEach((name, i) => {
+    if (morphName(names, i) === name) return;
+    const slot = names.subarray(i * 0x10, (i + 1) * 0x10);
+    slot.fill(0);
+    for (let k = 0; k < Math.min(0x10, name.length); k += 1) slot[k] = name.charCodeAt(k) & 0xff;
+  });
+  w.bytes(names);
+  if (version >= 0x239) {
+    const minUV = stored?.minUV ?? [];
+    const maxUV = stored?.maxUV ?? [];
+    w.i32(minUV.length);
+    for (const v of minUV) w.f32(v);
+    w.i32(maxUV.length);
+    for (const v of maxUV) w.f32(v);
+    w.f32(stored?.areaScaleFactor ?? 1);
+  }
+  const offsets = stored && stored.vertexCount === n && stored.streamOffsets.length === streamCount + 2
+    ? stored.streamOffsets
+    : [0, ...Array.from({ length: streamCount }, (_, i) => (i + 1) * n * VERTEX), streamCount * n * VERTEX];
+  for (const offset of offsets) w.i32(offset);
+  w.bytes(encodePositions(mesh));
+  w.bytes(encodeSkin(mesh));
+  mesh.morphs.forEach((morph, i) => w.bytes(encodeMorph(mesh, morph, stored?.morphs[i])));
+  const attributes = encodeAttributes(mesh);
+  w.i32(attributes.length);
+  w.bytes(attributes);
+  w.i32(indices.length);
+  w.bytes(indices);
+  if (subVersion >= 0x16b) {
+    const adjacency = stored?.triangleAdjacency ?? new Uint8Array(0);
+    w.i32(adjacency.length);
+    w.bytes(adjacency);
+  }
+  w.i32(mesh.primitives.length);
+  mesh.primitives.forEach((p, i) => {
+    w.ref(p.material);
+    if (version < 0x149) w.ref(p.secondMaterial);
+    if (version >= 0x179) w.ref(p.textureAlternatives);
+    w.i32(p.minVert);
+    w.i32(p.maxVert);
+    w.i32(runs[i].firstIndex);
+    w.i32(runs[i].numIndices);
+    w.i32(p.region);
+  });
+  w.i32(mesh.bones.length);
+  for (const bone of mesh.bones) writeBone(w, bone);
+  writeTail(w, mesh);
+  return w.done();
 }

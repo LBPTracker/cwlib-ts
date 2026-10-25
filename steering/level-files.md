@@ -311,8 +311,9 @@ Thing a part it lacks (its mask bit, its parts revision raised, the part in decl
 ✔ **Every part of every Thing of the game writes back from its value byte for byte**
 (`dev/part-census.ts`, 2026-10-25): **3,309,707 parts of 54 kinds** in the 22,744 levels and plans
 of the install's FARCs and the 01.28 update's — 854,265 `POS`, 374,497 `SHAPE`, 291,828 `SWITCH`,
-274,337 `GENERATED_MESH`, 254,044 `GROUP`, down to 5 `YELLOWHEAD`. `WORLD` and the Vita's own
-`VITA_27`/`VITA_28` have no writer and stay their bytes on the tape.
+274,337 `GENERATED_MESH`, 254,044 `GROUP`, down to 5 `YELLOWHEAD` — and 610 `WORLD`s, whose value is
+the world's Things with every other field on it out of sight (`WorldPart`). The Vita's own
+`VITA_27`/`VITA_28` have no writer: their readers keep nothing, and they are written as their bytes.
 
 - ❗ **A shared struct is keyed on its tape object.** A switch's output, an NPC's behaviour, a
   script's layout is named by more than one Thing; the tape writes it under its tape object
@@ -330,6 +331,43 @@ of the install's FARCs and the 01.28 update's — 854,265 `POS`, 374,497 `SHAPE`
   as `0x0d` or `0x48` (an NPC's jump flag, a switch's and key's `hideInPlayMode`, a metadata's
   `referencable`), a microchip's name with its apostrophes bare, a group creator's padding, a NaN
   in a creature's retired float. Row 56 of *Where we deliberately differ*.
+
+## Levels and plans written from their values — `encode-things.ts`
+
+`encodeLevel` and `encodePlan` write a whole payload from what `readLevel` and `readPlan` return,
+with no tape: the cross-play hashes, the world Thing and the level's tail; the plan's revision word,
+its Thing array in a stream of its own, its inventory details and keys. A Thing is written from its
+header fields (`Thing.createdBy`, `partsRevision`, `partsMask`, its file id… kept by `fillThing`)
+and its parts through their writers. ✔ **All 22,140 plans and 604 levels of the install and the
+update that read whole come back byte for byte** (`dev/things-encode-census.ts`, 2026-10-26).
+
+## Resources written from their values
+
+Every resource reader has an encoder beside it — `encodeMaterial` beside `readMaterial`, returning
+the payload — or, for a container of its own, a writer of the whole file (`writeTexture`,
+`writeStaticMesh`, `writeFontFace`, `writeInstrument`). ✔ Over the install and the 01.28 update
+(`dev/resource-census-write.ts`, `dev/container-census.ts`, 2026-10-26), **every file comes back**:
+
+| type | files |
+|---|---|
+| `GTF ` / `TEX ` | 38,712 / 3,038 |
+| `GMTb` | 13,555 |
+| `MSHb` | 7,525 |
+| `ANMb` | 2,687 |
+| `FSHb` | 853 |
+| `BEVb`, `PALb`, `RECb`, `MATb`, `INSb`, `QSTb`, `OUTb`, `SMHb` | 291, 188, 91, 90, 86, 81, 79, 58 |
+| `ATXb`, `PRFb`, `FNTb`, `PCKb`, `JNTb`, `SLTb`, `ADCb`, `ADSb`, `VOPb`, `CCDb`, `GLTb`, `PINb`, `TUTb` | 24, 17, 16, 12, 9, 7, 5, 5, 4, 2, 2, 2, 2 |
+
+A payload is compared byte for byte; a chunked container by its header, chunk sizes, inflated data
+and dependency table, its zlib streams being this machine's. `IPRb`, `BPRb` and `DLCb` have no
+file here and are checked by round trip alone (`test/write-profiles.test.ts`).
+
+- ❗ **What a reader decodes lossily is kept as stored.** A mesh's packed normals and tangents, its
+  half-float UVs, a strip index buffer, a texture's padding and DDS header, a static mesh's index
+  buffer: each is written as stored while it still decodes to the value, and encoded from the value
+  where the value changed — so an edited or built mesh writes too (`Mesh.stored`, non-enumerable).
+- ⚠️ A texture is written from its levels as held; an image is not compressed to DXT (*Tools* in
+  java-parity.md). An `ADCb`'s and a `PRFb`'s Things are written as the bytes read.
 
 ## Dependencies rewritten — `replaceDependency` and `hashinate`
 

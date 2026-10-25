@@ -44,6 +44,9 @@
  */
 
 import { Serializer, SerializerError, vitaRevision } from '../io/serializer.ts';
+import type { Writer } from '../io/writer.ts';
+import type { PartWriteContext, PartWriter } from './write-parts.ts';
+import { tapeObjectOf } from '../io/tape.ts';
 
 /**
  * cwlib `Branch.LEERDAMMER` and the two of its revisions this reader needs.
@@ -230,6 +233,38 @@ export interface Thing {
   extraFlags: number;
   /** Part name → whatever its reader returned. */
   readonly parts: Map<string, unknown>;
+  /*
+   * The rest of the header, as read, so a Thing can be written from its values
+   * (`writeThing`). Absent on a Thing made afresh, which writes the defaults.
+   */
+  /** The reference id the Thing had in its file, so it is written back under it (`Writer.reference`). */
+  id?: number;
+  /** Below version 0x1fd, the world Thing it names first. */
+  world?: Thing;
+  /** From version 0x1c7. */
+  oldEmitter?: Thing;
+  /** Between 0x1a6 and 0x1bb, the `PJoint`s listed on the Thing, and their reference ids. */
+  joints?: unknown[];
+  jointIds?: number[];
+  /** From version 0x214. */
+  createdBy?: number;
+  changedBy?: number;
+  /** Below version 0x341: above 0x21a, and from 0x2f2. */
+  isStamping?: boolean;
+  hidden?: boolean;
+  /** The parts revision as stored -- at 0x13c, 7 short of the one the parts are read by. */
+  partsRevision?: number;
+  /** The part mask as stored, where the Thing has one. */
+  partsMask?: bigint;
+  /** Each part's reference id, by name: 0 for a part declared and null. */
+  partIds?: Map<string, number>;
+  /**
+   * The body of a part whose reader keeps no value, as its bytes, by name:
+   * `VITA_27` and `VITA_28` (`parts/vita.ts`), which have no writer. Kept only
+   * where the body met no object first, so the ids in it name objects written
+   * before it (`writeThing`).
+   */
+  partBytes?: Map<string, Uint8Array>;
 }
 
 /**
@@ -261,7 +296,23 @@ export function readThingRef(
   s: Serializer,
   readers: ReadonlyMap<string, PartReader>,
 ): Thing | undefined {
-  return s.referenceInto(emptyThing, (self, thing) => fillThing(self, thing, readers));
+  const at = s.position;
+  return s.referenceInto(emptyThing, (self, thing) => {
+    // The id, read again from where the reference began: only for a Thing met first here.
+    const end = self.position;
+    self.position = at;
+    thing.id = self.i32();
+    self.position = end;
+    fillThing(self, thing, readers);
+  });
+}
+
+/** The id the next reference holds, without consuming it. */
+function peekId(s: Serializer): number {
+  const at = s.position;
+  const id = s.i32();
+  s.position = at;
+  return id;
 }
 
 /**
@@ -317,7 +368,7 @@ function fillThing(
   // the game's plans at 0x1a7..0x1f8 read their first part 40 bytes late.
   if (version < 0x1fd) {
     s.label('world');
-    readThingRef(s, readers);
+    thing.world = readThingRef(s, readers);
   }
   if (version >= 0x27f) {
     thing.uid = s.i32();
@@ -330,20 +381,28 @@ function fillThing(
   }
   s.label('groupHead');
   thing.groupHead = readThingRef(s, readers);
-  if (version >= 0x1c7) readThingRef(s, readers); // oldEmitter
+  if (version >= 0x1c7) thing.oldEmitter = readThingRef(s, readers);
   // Between 0x1a6 and 0x1bb, joints listed on the Thing: references to `PJoint`s.
   if (version >= 0x1a6 && version < 0x1bc) {
     const joint = readers.get('JOINT');
-    s.references((self) => {
-      if (!joint) throw new UnimplementedPartError('JOINT');
-      return joint(self, thing);
-    });
+    // `s.references`, with each id kept.
+    const count = s.i32();
+    if (count < 0) throw new SerializerError(`negative array length ${count}`);
+    thing.joints = [];
+    thing.jointIds = [];
+    for (let i = 0; i < count; i += 1) {
+      thing.jointIds.push(peekId(s));
+      thing.joints.push(s.reference((self) => {
+        if (!joint) throw new UnimplementedPartError('JOINT');
+        return joint(self, thing);
+      }));
+    }
   }
 
   // `isToolkit()` is false for anything the game wrote.
   if (version >= 0x214) {
-    s.i16(); // createdBy
-    s.i16(); // changedBy
+    thing.createdBy = s.i16();
+    thing.changedBy = s.i16();
   }
 
   if (version >= 0x341) {
@@ -352,9 +411,9 @@ function fillThing(
     thing.flags = vitaRevision(s.revision) >= 0x62 ? s.i16() : s.u8();
     if (subVersion >= 0x110) thing.extraFlags = s.u8();
   } else {
-    if (version > 0x21a) s.bool(); // isStamping
+    if (version > 0x21a) thing.isStamping = s.bool();
     if (version >= 0x254) thing.planGuid = s.guid();
-    if (version >= 0x2f2) s.bool(); // hidden
+    if (version >= 0x2f2) thing.hidden = s.bool();
   }
 
   // ⚠️ **The parts revision comes first: how far the parts table had got when
@@ -370,7 +429,8 @@ function fillThing(
   // `PartHistory.STREAMING_HINT` is 0x3f, `CONTROLINATOR` 0x2f.
   // cwlib: "I have no idea why they did this" -- at 0x13c the stored revision is 7 short.
   // Both marked on a tape, so a part can be added to the Thing (`addPart` in `write-level.ts`).
-  const partsRevision = s.mark('partsRevision', (self) => self.s32()) + (version === 0x13c ? 7 : 0);
+  thing.partsRevision = s.mark('partsRevision', (self) => self.s32());
+  const partsRevision = thing.partsRevision + (version === 0x13c ? 7 : 0);
   // The part mask. `u64` here is a varint when the stream is compressed, and a
   // part index can be as high as 0x35, so this really does need 64 bits.
   //
@@ -385,6 +445,9 @@ function fillThing(
   // was garbage anyway, so nothing was read at all.
   const masked = version >= 0x297 || onLeerdammer(s.revision, LD_RESOURCES);
   const mask = masked ? s.mark('partsMask', (self) => self.u64Big()) : -1n;
+  if (masked) thing.partsMask = mask;
+  const partIds = new Map<string, number>();
+  thing.partIds = partIds;
   // `mask` can exceed 2^53, so it is read as a BigInt -- and then split once
   // into two 32-bit halves, so the test below is a shift rather than a BigInt
   // allocated per part per Thing. `1 << bit` alone would wrap at 32.
@@ -414,14 +477,149 @@ function fillThing(
     // to: this file has data for a part nothing here can read. A part that is
     // merely *declared* costs nothing and is skipped.
     s.label(part.name);
+    partIds.set(part.name, peekId(s));
+    let bodyStart = -1;
+    let known = 0;
     const value = s.reference((self) => {
       if (!read) throw new UnimplementedPartError(part.name);
+      bodyStart = self.position;
+      known = self.referenced.size;
       return read(self, thing);
     });
+    // A body whose reader keeps nothing -- the Vita's two parts -- is kept as
+    // its bytes, where it met no object first: then every id in it names one
+    // written before it, and the bytes can stand in a stream written from values.
+    if (value === undefined && bodyStart >= 0 && s.referenced.size === known) {
+      (thing.partBytes ??= new Map()).set(part.name, s.data.slice(bodyStart, s.position));
+    }
     trace?.(part.name, partStart, s.position);
     thing.parts.set(part.name, value);
+    if (typeof value === 'object' && value !== null && !PART_OF.has(value)) PART_OF.set(value, { name: part.name, id: partIds.get(part.name)! });
   }
 
   trace?.(`THING ${thing.uid}`, thingStart, s.position);
   return thing;
+}
+
+/**
+ * `fillThing`'s mirror: a Thing written from its values, the header as it was
+ * read and each part through its writer, in declaration order under the mask.
+ *
+ * A Thing read from a file writes what it read: its parts revision and mask as
+ * stored, each part under its own reference id (`partIds`). A Thing made afresh
+ * has neither, and gets the parts revision of the newest part the table knows
+ * and the mask of the parts it holds.
+ *
+ * ⚠️ A part's value is the key its reference is written under, `tapeObjectOf`
+ * first, as the part writers key the structs they share; a part whose value is
+ * not an object -- a name, a count -- gets a key of its own, so it is never
+ * taken for another mention.
+ */
+export function writeThing(
+  w: Writer,
+  thing: Thing,
+  ctx: PartWriteContext,
+  writers: ReadonlyMap<string, PartWriter>,
+): void {
+  const { version, subVersion } = w.revision;
+  if (version >= 0x2a1 || onLeerdammer(w.revision, LD_TEST_MARKER)) w.u8(0xaa);
+  if (version < 0x1fd) ctx.thing(w, thing.world);
+  if (version >= 0x27f) {
+    w.i32(thing.uid);
+    ctx.thing(w, thing.parent);
+  } else {
+    ctx.thing(w, thing.parent);
+    w.i32(thing.uid);
+  }
+  ctx.thing(w, thing.groupHead);
+  if (version >= 0x1c7) ctx.thing(w, thing.oldEmitter);
+  if (version >= 0x1a6 && version < 0x1bc) {
+    const joints = thing.joints ?? [];
+    const joint = writers.get('JOINT');
+    w.i32(joints.length);
+    joints.forEach((value, i) => writePartReference(w, 'JOINT', value, thing.jointIds?.[i], joint, ctx));
+  }
+  if (version >= 0x214) {
+    w.i16(thing.createdBy ?? 0);
+    w.i16(thing.changedBy ?? 0);
+  }
+  if (version >= 0x341) {
+    if (version >= 0x254) w.guid(thing.planGuid);
+    if (vitaRevision(w.revision) >= 0x62) w.i16(thing.flags);
+    else w.u8(thing.flags);
+    if (subVersion >= 0x110) w.u8(thing.extraFlags);
+  } else {
+    if (version > 0x21a) w.bool(thing.isStamping ?? false);
+    if (version >= 0x254) w.guid(thing.planGuid);
+    if (version >= 0x2f2) w.bool(thing.hidden ?? false);
+  }
+
+  const vita = vitaRevision(w.revision) >= 0;
+  const nameOf = (part: (typeof PARTS)[number]): string => (vita && VITA_PARTS[part.name]) || part.name;
+  // cwlib: at 0x13c the stored revision is 7 short (`fillThing`).
+  const short = version === 0x13c ? 7 : 0;
+  const stored = thing.partsRevision ?? Math.max(0, ...PARTS.map((p) => (thing.parts.has(nameOf(p)) ? p.since : 0))) - short;
+  const partsRevision = stored + short;
+  w.s32(stored);
+  const masked = version >= 0x297 || onLeerdammer(w.revision, LD_RESOURCES);
+  const bits = PART_BITS[(subVersion < CREATOR_ANIM_GONE ? 0 : 2) + (partsRevision < CREATOR_ANIM_SINCE ? 0 : 1)]!;
+  let mask = thing.partsMask;
+  if (mask === undefined) {
+    mask = masked ? 0n : -1n;
+    if (masked) for (const { part, bit } of bits) if (thing.parts.has(nameOf(part))) mask |= 1n << BigInt(bit);
+  }
+  if (masked) w.u64Big(mask);
+  for (const { part, bit } of bits) {
+    if (partsRevision < part.since) continue;
+    if (part.until !== undefined && version >= part.until) continue;
+    if (((mask >> BigInt(bit)) & 1n) === 0n) continue;
+    const name = nameOf(part);
+    const bytes = thing.partBytes?.get(name);
+    const write = writers.get(name) ?? (bytes && ((self: Writer) => self.bytes(bytes)));
+    writePartReference(w, name, thing.parts.get(name), thing.partIds?.get(name), write || undefined, ctx);
+  }
+}
+
+/**
+ * Each part value a Thing read holds, by the value: its part's name and its
+ * reference id. A part another part names -- a contact's `PShape` -- is written
+ * by `writeNamedPart` under the same id and key as its Thing writes it.
+ */
+const PART_OF = new WeakMap<object, { readonly name: string; readonly id: number }>();
+
+/** The part a value was read as, where it was. */
+export function partOf(value: unknown): { readonly name: string; readonly id: number } | undefined {
+  return typeof value === 'object' && value !== null ? PART_OF.get(value) : undefined;
+}
+
+/**
+ * A reference to a part value from somewhere other than its Thing -- a
+ * contact's shape -- written as its Thing writes it: the same key, the same id,
+ * its body at whichever mention comes first. False when the value is no part read.
+ */
+export function writeNamedPart(w: Writer, value: object, ctx: PartWriteContext, writers: ReadonlyMap<string, PartWriter>): boolean {
+  const part = PART_OF.get(value);
+  if (!part) return false;
+  writePartReference(w, part.name, value, part.id, writers.get(part.name), ctx);
+  return true;
+}
+
+/** One part's reference: null for an id of 0 or no value, else its body at its first mention. */
+function writePartReference(
+  w: Writer,
+  name: string,
+  value: unknown,
+  id: number | undefined,
+  write: PartWriter | undefined,
+  ctx: PartWriteContext,
+): void {
+  if (id === 0 || (value === undefined && id === undefined)) {
+    w.i32(0);
+    return;
+  }
+  const key = typeof value === 'object' && value !== null ? tapeObjectOf(value) ?? value : {};
+  w.reference(key, (self) => {
+    if (!write) throw new UnimplementedPartError(name);
+    write(self, value as never, ctx);
+  }, id);
 }

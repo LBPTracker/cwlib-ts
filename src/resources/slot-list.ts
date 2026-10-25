@@ -10,7 +10,8 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, type RevisionInfo } from '../io/serializer.ts';
-import { readSlot, type Slot } from '../structs/slot.ts';
+import { readSlot, writeSlot, type Slot } from '../structs/slot.ts';
+import { Writer } from '../io/writer.ts';
 
 export interface SlotList {
   readonly revision: RevisionInfo;
@@ -29,4 +30,13 @@ export async function readSlotList(bytes: Uint8Array, inflate: Inflate): Promise
     throw new SerializerError(`SLTb read ended ${s.remaining} bytes before the end of its payload`);
   }
   return { revision, slots, fromProductionBuild };
+}
+
+/** `readSlotList`'s mirror: the payload, byte for byte, from the value. */
+export function encodeSlotList(value: SlotList, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  w.i32(value.slots.length);
+  for (const slot of value.slots) writeSlot(w, slot);
+  if (header.revision.version >= 0x3b6) w.bool(value.fromProductionBuild);
+  return w.done();
 }

@@ -15,7 +15,8 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
-import { readNetworkPlayerId } from '../structs/network.ts';
+import { readNetworkPlayerId, writeNetworkPlayerId } from '../structs/network.ts';
+import { Writer } from '../io/writer.ts';
 import { installWorldReader } from '../things/level.ts';
 import { partReaders } from '../things/parts.ts';
 import { readThingRef, type Thing } from '../things/thing.ts';
@@ -25,6 +26,8 @@ export interface CreatureAvatar {
   readonly creature: number;
   readonly mainFormCostume?: ResourceRef;
   readonly altFormCostume?: ResourceRef;
+  /** Up to subVersion 0x12a: the creature's plan descriptor, which `creature` replaces from 0xc5. Kept to be written back. */
+  readonly creaturePlan?: ResourceRef;
 }
 
 export interface SyncedProfile {
@@ -44,15 +47,43 @@ export interface SyncedProfile {
   readonly spawnAsAlternateForm: boolean;
   readonly creatureToPodAs: number;
   readonly podAsAlternateForm: boolean;
+  /** The first `timePlayed`, which cwlib reads and overwrites. Kept to be written back. */
+  readonly firstTimePlayed?: number;
+  /** Below version 0x193: a Thing array cwlib reads and drops. */
+  readonly droppedThings?: readonly (Thing | undefined)[];
+  /** Below version 0x13e: a resource cwlib reads and drops. */
+  readonly droppedResource?: ResourceRef;
+  /** Versions 0x1c5--0x212: an integer cwlib reads and drops. */
+  readonly droppedValue?: number;
+  /** Up to subVersion 0x12a: the plan descriptors `creatureToSpawnAs` and `creatureToPodAs` replace from 0xc5. */
+  readonly creatureToSpawnAsPlan?: ResourceRef;
+  readonly creatureToPodAsPlan?: ResourceRef;
 }
 
+/**
+ * The bytes each Thing reference here was read from -- the avatar's world and,
+ * below 0x193, the dropped array -- so the encoder writes them back: there is
+ * no writer for a Thing from its value yet.
+ */
+const RAW = new WeakMap<object, { world?: Uint8Array; dropped?: Uint8Array }>();
+
 /** cwlib's `adventureCreatureReference`: a plan descriptor up to subVersion 0x12a, an `s32` from 0xc5. */
-function readCreatureReference(s: Serializer): number {
+function readCreatureReference(s: Serializer): [number, ResourceRef | undefined] {
   const { subVersion } = s.revision;
   let value = 0;
-  if (subVersion <= 0x12a) value = s.resource()?.guid ?? 0;
+  let plan: ResourceRef | undefined;
+  if (subVersion <= 0x12a) {
+    plan = s.resource();
+    value = plan?.guid ?? 0;
+  }
   if (subVersion >= 0xc5) value = s.s32();
-  return value;
+  return [value, plan];
+}
+
+function writeCreatureReference(w: Writer, value: number, plan: ResourceRef | undefined): void {
+  const { subVersion } = w.revision;
+  if (subVersion <= 0x12a) w.ref(plan ?? (subVersion >= 0xc5 || value === 0 ? undefined : { guid: value }));
+  if (subVersion >= 0xc5) w.s32(value);
 }
 
 /** Read a `PRFb`. Throws on anything else, and unless the walk ends on the payload's last byte. */
@@ -65,17 +96,26 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
   const readers = partReaders();
   installWorldReader(readers);
 
-  s.i32(); // timePlayed, the first time
+  const raw: { world?: Uint8Array; dropped?: Uint8Array } = {};
+  const firstTimePlayed = s.i32(); // timePlayed, the first time
+  let start = s.position;
   const sackboyAvatarWorld = readThingRef(s, readers);
+  raw.world = s.data.slice(start, s.position);
   const creatureAvatars = subVersion > 0x17
-    ? s.array((self): CreatureAvatar => ({
-      creature: readCreatureReference(self),
-      mainFormCostume: self.resource(true),
-      altFormCostume: self.resource(true),
-    }))
+    ? s.array((self): CreatureAvatar => {
+      const [creature, creaturePlan] = readCreatureReference(self);
+      return {
+        creature,
+        mainFormCostume: self.resource(true),
+        altFormCostume: self.resource(true),
+        ...(creaturePlan ? { creaturePlan } : {}),
+      };
+    })
     : [];
-  if (version < 0x193) s.array((self) => readThingRef(self, readers));
-  if (version < 0x13e) s.resource();
+  start = s.position;
+  const droppedThings = version < 0x193 ? s.array((self) => readThingRef(self, readers)) : undefined;
+  if (droppedThings) raw.dropped = s.data.slice(start, s.position);
+  const droppedResource = version < 0x13e ? s.resource() : undefined;
   const timePlayed = s.i32();
   const uniqueNumber = s.u64Big();
   const colours: number[] = [];
@@ -85,21 +125,77 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
   }
   const playerId = version > 0x1a7 ? readNetworkPlayerId(s) : undefined;
   const vitaValue = vita >= 0 ? s.i32() : undefined;
-  if (version > 0x1c4 && version < 0x213) s.i32();
-  const creatureToSpawnAs = subVersion >= 0x9e ? readCreatureReference(s) : 0;
+  const droppedValue = version > 0x1c4 && version < 0x213 ? s.i32() : undefined;
+  const [creatureToSpawnAs, creatureToSpawnAsPlan] = subVersion >= 0x9e ? readCreatureReference(s) : [0, undefined];
   const spawnAsAlternateForm = subVersion >= 0x18a ? s.bool() : false;
   let creatureToPodAs = 0;
+  let creatureToPodAsPlan: ResourceRef | undefined;
   let podAsAlternateForm = false;
   if (subVersion >= 0x18d) {
-    creatureToPodAs = readCreatureReference(s);
+    [creatureToPodAs, creatureToPodAsPlan] = readCreatureReference(s);
     podAsAlternateForm = s.bool();
   }
   if (s.remaining !== 0) {
     throw new SerializerError(`PRFb read ended ${s.remaining} bytes before the end of its payload`);
   }
-  return {
+  const out: SyncedProfile = {
     revision, timePlayed, sackboyAvatarWorld, creatureAvatars, uniqueNumber, colours, playerId,
     ...(vitaValue === undefined ? {} : { vitaValue }),
     creatureToSpawnAs, spawnAsAlternateForm, creatureToPodAs, podAsAlternateForm,
+    firstTimePlayed,
+    ...(droppedThings ? { droppedThings } : {}),
+    ...(droppedResource ? { droppedResource } : {}),
+    ...(droppedValue === undefined ? {} : { droppedValue }),
+    ...(creatureToSpawnAsPlan ? { creatureToSpawnAsPlan } : {}),
+    ...(creatureToPodAsPlan ? { creatureToPodAsPlan } : {}),
   };
+  RAW.set(out, raw);
+  return out;
+}
+
+/**
+ * `readSyncedProfile`'s mirror: the payload, byte for byte, from the value.
+ * ⚠️ **Its Things are written from the bytes they were read from**, as there is
+ * no writer for a Thing from its value: a profile built afresh can hold only a
+ * null avatar world.
+ */
+export function encodeSyncedProfile(value: SyncedProfile, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { version, subVersion } = header.revision;
+  const vita = vitaRevision(header.revision);
+  const raw = RAW.get(value) ?? {};
+  w.i32(value.firstTimePlayed ?? value.timePlayed);
+  if (raw.world) w.bytes(raw.world);
+  else if (!value.sackboyAvatarWorld) w.i32(0);
+  else throw new SerializerError('a synced profile: its avatar world was not read from a file, and there is no Thing writer');
+  if (subVersion > 0x17) {
+    w.i32(value.creatureAvatars.length);
+    for (const a of value.creatureAvatars) {
+      writeCreatureReference(w, a.creature, a.creaturePlan);
+      w.ref(a.mainFormCostume, { descriptor: true });
+      w.ref(a.altFormCostume, { descriptor: true });
+    }
+  }
+  if (version < 0x193) {
+    if (raw.dropped) w.bytes(raw.dropped);
+    else if (!value.droppedThings?.length) w.i32(0);
+    else throw new SerializerError('a synced profile: Things not read from a file, and there is no Thing writer');
+  }
+  if (version < 0x13e) w.ref(value.droppedResource);
+  w.i32(value.timePlayed);
+  w.u64Big(value.uniqueNumber);
+  if (version > 0x163) {
+    for (let i = 0; i < 3; i += 1) w.i32(value.colours[i] ?? 0);
+    if (version > 0x3a6) w.i32(value.colours[3] ?? 0);
+  }
+  if (version > 0x1a7) writeNetworkPlayerId(w, value.playerId ?? '');
+  if (vita >= 0) w.i32(value.vitaValue ?? 0);
+  if (version > 0x1c4 && version < 0x213) w.i32(value.droppedValue ?? 0);
+  if (subVersion >= 0x9e) writeCreatureReference(w, value.creatureToSpawnAs, value.creatureToSpawnAsPlan);
+  if (subVersion >= 0x18a) w.bool(value.spawnAsAlternateForm);
+  if (subVersion >= 0x18d) {
+    writeCreatureReference(w, value.creatureToPodAs, value.creatureToPodAsPlan);
+    w.bool(value.podAsAlternateForm);
+  }
+  return w.done();
 }

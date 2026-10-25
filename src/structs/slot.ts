@@ -10,7 +10,7 @@
  */
 
 import { SerializerError, type ResourceRef, type Serializer } from '../io/serializer.ts';
-import { readNetworkOnlineId } from './network.ts';
+import { readNetworkOnlineId, writeNetworkOnlineId } from './network.ts';
 import type { Writer } from '../io/writer.ts';
 
 /** cwlib's `SlotID`: a `SlotType` and a number. */
@@ -88,6 +88,14 @@ export interface Slot {
   readonly customBadgeSize: number;
   readonly localPath: string;
   readonly thumbPath: string;
+  /**
+   * Below version `0x188`, a byte cwlib leaves unnamed; at `0x1de` and below a
+   * bool cwlib guesses is `sideMission`; between `0x1ad` and `0x1b9` another
+   * unnamed byte. Read and kept so `writeSlot` writes them back.
+   */
+  readonly unknown188?: number;
+  readonly sideMission?: boolean;
+  readonly unknown1b9?: number;
 }
 
 export function readSlotId(s: Serializer): SlotId {
@@ -101,11 +109,25 @@ function readCollectabubble(s: Serializer): Collectabubble {
 /** cwlib's `Branch.DOUBLE11`, the Vita's: a slot there has fields no file here has shown. */
 const DOUBLE11 = 0x4431;
 
+/**
+ * A bool the file stores as a byte other than 0 or 1 -- `initiallyLocked` is
+ * 0x18 in one of the game's slot lists -- by its field's name, so `writeSlot`
+ * writes the byte back. Kept beside the slot rather than on it: the field stays
+ * a boolean.
+ */
+const BOOL_BYTES = new WeakMap<object, Record<string, number>>();
+
 export function readSlot(s: Serializer): Slot {
   const { version, subVersion, branchId } = s.revision;
   if (branchId === DOUBLE11 && version >= 0x3c1 && version <= 0x3e2) {
     throw new SerializerError('a Vita slot: its reward and download fields are cwlib\'s and unmeasured here');
   }
+  const bytes: Record<string, number> = {};
+  const bool = (name: string): boolean => {
+    const byte = s.u8();
+    if (byte > 1) bytes[name] = byte;
+    return byte !== 0;
+  };
   const id = readSlotId(s);
   const root = s.resource(true);
   const adventure = subVersion >= 0x145 ? s.resource(true) : undefined;
@@ -118,19 +140,20 @@ export function readSlot(s: Serializer): Slot {
   const description = s.wstr();
   const primaryLinkLevel = readSlotId(s);
   const group = version >= 0x134 ? readSlotId(s) : undefined;
-  const initiallyLocked = s.bool();
+  const initiallyLocked = bool('initiallyLocked');
   let shareable = false;
   let backgroundGuid = 0;
   if (version > 0x237) {
-    shareable = s.bool();
+    shareable = bool('shareable');
     backgroundGuid = s.guid();
   }
   const planetDecorations = version >= 0x333 ? s.resource(true) : undefined;
-  if (version < 0x188) s.u8(); // unnamed in cwlib
+  const unknown188 = version < 0x188 ? s.u8() : undefined; // unnamed in cwlib
   let developerLevelType = 0;
+  let sideMission: boolean | undefined;
   if (version > 0x1de) developerLevelType = s.i32();
-  else s.bool(); // cwlib's guess: sideMission
-  if (version > 0x1ad && version < 0x1b9) s.u8(); // unnamed in cwlib
+  else sideMission = bool('sideMission'); // cwlib's guess: sideMission
+  const unknown1b9 = version > 0x1ad && version < 0x1b9 ? s.u8() : undefined; // unnamed in cwlib
   const gameProgressionState = version > 0x1b8 && version < 0x36c ? s.i32() : 0;
 
   const slot = {
@@ -143,26 +166,30 @@ export function readSlot(s: Serializer): Slot {
     crossCompatible: false, showOnPlanet: false, livesOverride: 0,
     gameMode: 0, isGameKit: false, entranceName: '', originalSlotId: undefined as SlotId | undefined,
     customBadgeSize: 0, localPath: '', thumbPath: '',
+    ...(unknown188 !== undefined ? { unknown188 } : {}),
+    ...(sideMission !== undefined ? { sideMission } : {}),
+    ...(unknown1b9 !== undefined ? { unknown1b9 } : {}),
   };
+  BOOL_BYTES.set(slot, bytes);
   if (version <= 0x2c3) return slot;
 
   if (version >= 0x33c) slot.labels = s.array((x) => ({ key: x.i32(), order: x.i32() }));
   if (version >= 0x2ea) slot.collectabubblesRequired = s.array(readCollectabubble);
   if (version >= 0x2f4) slot.collectabubblesContained = s.array(readCollectabubble);
-  if (version >= 0x352) slot.isSubLevel = s.bool();
+  if (version >= 0x352) slot.isSubLevel = bool('isSubLevel');
   if (version < 0x3d0) return slot;
 
   slot.minPlayers = s.i8();
   slot.maxPlayers = s.i8();
-  if (subVersion >= 0x215) slot.enforceMinMaxPlayers = s.bool();
-  slot.moveRecommended = s.bool();
-  if (version >= 0x3e9) slot.crossCompatible = s.bool();
-  if (version >= 0x3d1) slot.showOnPlanet = s.bool();
+  if (subVersion >= 0x215) slot.enforceMinMaxPlayers = bool('enforceMinMaxPlayers');
+  slot.moveRecommended = bool('moveRecommended');
+  if (version >= 0x3e9) slot.crossCompatible = bool('crossCompatible');
+  if (version >= 0x3d1) slot.showOnPlanet = bool('showOnPlanet');
   if (version >= 0x3d2) slot.livesOverride = s.i8();
 
   if (subVersion === 0) return slot; // the rest is LBP3's
   if (subVersion >= 0x12) slot.gameMode = s.u8();
-  if (subVersion >= 0xd2) slot.isGameKit = s.bool();
+  if (subVersion >= 0xd2) slot.isGameKit = bool('isGameKit');
   if (subVersion >= 0x11b) {
     slot.entranceName = s.wstr();
     slot.originalSlotId = readSlotId(s);
@@ -179,4 +206,85 @@ export function readSlot(s: Serializer): Slot {
 export function writeSlotId(w: Writer, slot: SlotId): void {
   w.i32(slot.type);
   w.u32(slot.number);
+}
+
+function writeCollectabubble(w: Writer, c: Collectabubble): void {
+  w.ref(c.plan, { descriptor: true });
+  w.i32(c.count);
+}
+
+/** `readSlot`'s mirror, field for field under the same gates. */
+export function writeSlot(w: Writer, slot: Slot): void {
+  const { version, subVersion, branchId } = w.revision;
+  if (branchId === DOUBLE11 && version >= 0x3c1 && version <= 0x3e2) {
+    throw new SerializerError('a Vita slot: its reward and download fields are unmeasured here');
+  }
+  const bytes = BOOL_BYTES.get(slot);
+  const bool = (name: string, value: boolean): void => {
+    const byte = bytes?.[name];
+    w.u8(byte !== undefined && value ? byte : value ? 1 : 0);
+  };
+  writeSlotId(w, slot.id);
+  w.ref(slot.root, { descriptor: true });
+  if (subVersion >= 0x145) w.ref(slot.adventure, { descriptor: true });
+  w.ref(slot.icon, { descriptor: true });
+  w.vector4(slot.location);
+  writeNetworkOnlineId(w, slot.author);
+  if (version >= 0x13b) w.wstr(slot.authorName);
+  if (version >= 0x183) w.str(slot.translationTag);
+  w.wstr(slot.name);
+  w.wstr(slot.description);
+  writeSlotId(w, slot.primaryLinkLevel);
+  if (version >= 0x134) writeSlotId(w, slot.group ?? { type: 0, number: 0 });
+  bool('initiallyLocked', slot.initiallyLocked);
+  if (version > 0x237) {
+    bool('shareable', slot.shareable);
+    w.guid(slot.backgroundGuid);
+  }
+  if (version >= 0x333) w.ref(slot.planetDecorations, { descriptor: true });
+  if (version < 0x188) w.u8(slot.unknown188 ?? 0);
+  if (version > 0x1de) w.i32(slot.developerLevelType);
+  else bool('sideMission', slot.sideMission ?? false);
+  if (version > 0x1ad && version < 0x1b9) w.u8(slot.unknown1b9 ?? 0);
+  if (version > 0x1b8 && version < 0x36c) w.i32(slot.gameProgressionState);
+  if (version <= 0x2c3) return;
+
+  if (version >= 0x33c) {
+    w.i32(slot.labels.length);
+    for (const label of slot.labels) {
+      w.i32(label.key);
+      w.i32(label.order);
+    }
+  }
+  if (version >= 0x2ea) {
+    w.i32(slot.collectabubblesRequired.length);
+    for (const c of slot.collectabubblesRequired) writeCollectabubble(w, c);
+  }
+  if (version >= 0x2f4) {
+    w.i32(slot.collectabubblesContained.length);
+    for (const c of slot.collectabubblesContained) writeCollectabubble(w, c);
+  }
+  if (version >= 0x352) bool('isSubLevel', slot.isSubLevel);
+  if (version < 0x3d0) return;
+
+  w.i8(slot.minPlayers);
+  w.i8(slot.maxPlayers);
+  if (subVersion >= 0x215) bool('enforceMinMaxPlayers', slot.enforceMinMaxPlayers);
+  bool('moveRecommended', slot.moveRecommended);
+  if (version >= 0x3e9) bool('crossCompatible', slot.crossCompatible);
+  if (version >= 0x3d1) bool('showOnPlanet', slot.showOnPlanet);
+  if (version >= 0x3d2) w.i8(slot.livesOverride);
+
+  if (subVersion === 0) return;
+  if (subVersion >= 0x12) w.u8(slot.gameMode);
+  if (subVersion >= 0xd2) bool('isGameKit', slot.isGameKit);
+  if (subVersion >= 0x11b) {
+    w.wstr(slot.entranceName);
+    writeSlotId(w, slot.originalSlotId ?? { type: 0, number: 0 });
+  }
+  if (subVersion >= 0x153) w.i8(slot.customBadgeSize);
+  if (subVersion >= 0x192) {
+    w.str(slot.localPath);
+    if (subVersion >= 0x206) w.str(slot.thumbPath);
+  }
 }

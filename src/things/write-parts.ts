@@ -40,6 +40,7 @@ import * as group from './parts/group.ts';
 import * as hudElem from './parts/hud-elem.ts';
 import * as instrument from './parts/instrument.ts';
 import * as joint from './parts/joint.ts';
+import * as level from './level.ts';
 import * as levelSettings from './parts/level-settings.ts';
 import * as materialOverride from './parts/material-override.ts';
 import * as materialTweak from './parts/material-tweak.ts';
@@ -138,6 +139,8 @@ const READERS: readonly (readonly [string, Record<string, unknown>, string])[] =
   ['POPPET_POWERUP', poppetPowerup, 'readPoppetPowerup'],
   ['TAG_SYNCHRONIZER', tagSynchronizer, 'readTagSynchroniser'],
   ['HUD_ELEM', hudElem, 'readHudElem'],
+  // `PWorld`'s reader is installed by `readLevelStream` and `installWorldReader`, not by `partReaders`.
+  ['WORLD', level, 'readWorld'],
 ];
 
 /** Every part with a writer, by its name in `PARTS`: its module's `write…` beside its `read…`. */

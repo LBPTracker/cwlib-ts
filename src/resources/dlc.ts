@@ -24,7 +24,8 @@
  */
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
-import { SerializerError, vitaRevision } from '../io/serializer.ts';
+import { SerializerError, vitaRevision, type RevisionInfo } from '../io/serializer.ts';
+import { Writer } from '../io/writer.ts';
 import { TextResource } from '../io/text-resource.ts';
 
 export interface DlcGuid {
@@ -105,4 +106,31 @@ export async function readDlcBinary(bytes: Uint8Array, inflate: Inflate): Promis
   });
   if (s.remaining !== 0) throw new SerializerError(`DLCb read ended ${s.remaining} bytes before the end of its payload`);
   return { guids, files };
+}
+
+/**
+ * `readDlcBinary`'s mirror: a `DLCb` payload, byte for byte, from the value.
+ * ⚠️ Proven by a round trip only: the game ships no `DLCb`.
+ */
+export function encodeDlcBinary(value: Dlc, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
+  const w = new Writer(header.revision, header.compressionFlags);
+  const { revision } = header;
+  w.i32(value.guids.length);
+  for (const g of value.guids) {
+    w.guid(g.guid);
+    w.i32(g.flags);
+  }
+  w.i32(value.files.length);
+  for (const f of value.files) {
+    w.str(f.directory);
+    w.str(f.file);
+    w.str(f.contentId);
+    w.str(f.inGameCommerceId);
+    if (revision.version >= 0x264) w.str(f.categoryId);
+    w.i32(f.flags);
+    if (revision.subVersion > 0x20c) w.intVector(f.nonPlanGuids ?? []);
+    w.intVector(f.guids);
+    if (vitaRevision(revision) >= 0x85) w.i32(f.typeMask);
+  }
+  return w.done();
 }
