@@ -72,11 +72,11 @@ level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
 ## Revisions
 
-This library refuses anything outside `0x3b7`–`0x3ff` (`requireLbp3`); Java reads LBP1, LBP2, the
-Vita and the toolkit branches. The older gates are ported here but unproved: with the bound lowered
-by hand, 2 of 19 LBP1 levels at `0x272` opened (`src/io/serializer.ts`, header). The 01.28 update's
-`patch_001.farc` holds 4 plans from before LBP2, at revisions `0x1b4` and `0x1c3`, which those gates
-would be tried on ([level-files.md](level-files.md), *The 01.28 update*). On the Vita's
+This library reads from `0x15e` to `0x3ff` (`requireLbp3`, `MIN_VERSION`), the older gates cwlib's
+gate for gate: 17,620 of the game's 17,624 plans and 516 of its 522 levels read to their last
+byte, and the archive's 19 LBP1 levels ([level-files.md](level-files.md), *Revisions below LBP3*).
+Java reads older still, and the toolkit's own branch, `MIZUKI`, whose `MZ_SCENE_GRAPH` Things
+this library does not read: no file below `0x15e` or on that branch is here. On the Vita's
 branch, 6 of the game's 25 Vita levels still do not read, through Vita-only parts cwlib has no table
 for either ([level-files.md](level-files.md), *The Vita branch*). The mesh gate in `readMesh` has
 never met a file.

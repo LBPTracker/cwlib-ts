@@ -21,6 +21,8 @@ files.
 |---|---|
 | lbptracker's `tools/PartCensus.java` | which Thing parts a level corpus actually uses, overall and on the Things carrying a `SEQUENCER` or an `INSTRUMENT`. Its `INSTRUMENT` count for the ten-level corpus, **62,158**, is what `test/project.test.ts` pins the TypeScript walk against |
 | lbptracker's `tools/CwlibTrace.java` | **ask cwlib what it reads from a level, and where.** `CwlibTrace parts <level>` gives the Thing count and each Thing's decoded part list; `CwlibTrace spans <level>` turns on cwlib's own serialiser log and prints every part boundary **with its byte offset** |
+| lbptracker's `tools/PlanTrace.java` | `CwlibTrace spans` for a plan: cwlib's part boundaries in its `thingData`, which cwlib parses only when asked (`RPlan.getThings`) |
+| `dev/span-diff.ts` | **the two traces diffed for a whole folder**: every level and plan in it through `CwlibTrace`/`PlanTrace` and through `readThings`, grouped by the first boundary they disagree on and the part open there. `LBP_JAVA` (a JDK 25 `java`) and `LBP_CWLIB_CP` (the toolkit jar and the two classes) name the machine's Java. How the revisions below LBP3 were brought to cwlib's reading |
 | `dev/trace-level.ts` | the other half: our reader's part spans in the same units, so a divergence is a diff that names the part and therefore the cwlib file to open |
 | `dev/walk-levels.ts` | walk a directory of resources and name the next part with no reader, rather than throwing a stack trace |
 | `dev/verify-levels.ts` | the golden fixture: the walk against `fixtures/levels/sequencers.jsonl`, plus the structural check that every board cell is whole and distinct |

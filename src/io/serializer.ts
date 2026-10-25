@@ -12,36 +12,19 @@
  *   rather than four or eight bytes; signed ones are zigzagged. Reading one as
  *   fixed-width when it is a varint desynchronises just as badly.
  *
- * ## Scope: LBP3 only, and the bound is now measured
+ * ## Scope: from version 0x15e, the oldest file measured
  *
- * ⚠️ **This used to say the older branches had been stripped in the port. They
- * were not.** the part readers (`src/things/parts/`) carry **238 distinct version gates spanning
- * `0x137`–`0x3f0`** and 163 subVersion gates — cwlib's own, ported with the
- * branches intact. What the bound below protects is therefore not a reader that
- * only knows LBP3; it is a reader whose *older* branches have never been run
- * against an older file.
+ * The part readers carry cwlib's version gates, the older branches with them, and
+ * since 0.4.61 they are cwlib's gate for gate below LBP3 too, diffed part by
+ * part against cwlib's own spans (steering/level-files.md, *Revisions below
+ * LBP3*). `requireLbp3` refuses only what nothing has measured: below
+ * `MIN_VERSION`, the oldest game file that reads to its last byte, and above
+ * `0x3ff`.
  *
- * ❗ **And that protection is measured, 2026-09-05, over 103 archive levels**
- * sampled from `dry.db` across all three games:
- *
- * | version | parse |
- * |---|---|
- * | `0x3b7` | **4 of 4** |
- * | `0x3b8`–`0x3f9` | **78 of 78** |
- * | `0x272` (LEERDAMMER, branch `4c44`) | **2 of 19** |
- *
- * So the wall is real and it is at LBP1, not at `0x3b8`. `0x3b8` was where the
- * ten-level corpus happened to start. **cwlib has exactly one gate at `0x3b8`
- * in its whole tree** — `PPhysicsTweak`'s `version > 0x3b8 && configuration ==
- * 0xd` — and `readPhysicsTweak` has it, so a `0x3b7` file takes the older branch
- * because the branch is there.
- *
- * The bound stays an assertion for the reason it always was: `requireLbp3`
- * refuses anything outside it rather than reading an older layout with newer
- * rules and producing plausible nonsense. What the 5-of-19 says is that at
- * `0x272` it would do exactly that: every one of the fourteen failures is the
- * stream diverging outright — negative string lengths, reads past the end — and
- * none of them is a part this reader is merely missing.
+ * ❗ **The bound used to be LBP3's own start, 0x3b7, and that was a measurement
+ * too**: 2 of 19 LBP1 levels at 0x272 read, the other 17 diverging outright. Once
+ * the older gates were cwlib's, all 19 read, and 17,620 of the game's 17,624
+ * plans and 516 of its 522 levels from 0x15e up.
  */
 
 import type { Tape } from './tape.ts';
@@ -70,14 +53,12 @@ export const COMPRESSED_VECTORS = 2;
 export const COMPRESSED_MATRICES = 4;
 
 /**
- * The version range this reader implements.
- *
- * ❗ **`0x3b7`, not `0x3b8`, and the difference is 4 archive levels of 103.**
- * See the header: the bound was the ten-level corpus's own floor, and the one
- * field cwlib changes at `0x3b8` is implemented, so the revision below it reads
- * on the older branch as it should. Going further down is a different question
- * and the measurement says no.
+ * The oldest version this reader reads: the oldest game file that reads to its
+ * last byte (`gamedata/levels/palettes/icon_generation_lighting.bin`, 0x15e).
+ * Below it nothing has been measured, and `requireLbp3` refuses.
  */
+export const MIN_VERSION = 0x15e;
+/** Where LBP3 begins: `0x3b7`, the bound before 0.4.61, kept as the fact it is. */
 export const LBP3_MIN_VERSION = 0x3b7;
 export const LBP3_MAX_VERSION = 0x3ff;
 
@@ -114,12 +95,16 @@ export function vitaRevision(r: RevisionInfo): number {
   return r.branchId === DOUBLE11 && r.version >= 0x3c1 && r.version <= 0x3e2 ? r.branchRevision : -1;
 }
 
+/**
+ * Refuse a revision outside `MIN_VERSION`..`LBP3_MAX_VERSION`. The name is older
+ * than the range: it was LBP3's alone before 0.4.61.
+ */
 export function requireLbp3(revision: RevisionInfo): void {
-  if (revision.version < LBP3_MIN_VERSION || revision.version > LBP3_MAX_VERSION) {
+  if (revision.version < MIN_VERSION || revision.version > LBP3_MAX_VERSION) {
     throw new SerializerError(
-      `revision 0x${revision.version.toString(16)} is outside the LBP3 range this ` +
-        `reader implements (0x${LBP3_MIN_VERSION.toString(16)}..` +
-        `0x${LBP3_MAX_VERSION.toString(16)}); older layouts differ field by field`,
+      `revision 0x${revision.version.toString(16)} is outside the range this ` +
+        `reader implements (0x${MIN_VERSION.toString(16)}..` +
+        `0x${LBP3_MAX_VERSION.toString(16)}); older layouts are not measured`,
     );
   }
 }

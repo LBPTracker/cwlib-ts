@@ -53,7 +53,7 @@ for (const file of FARCS) {
         }
       } catch (error) {
         const message = (error as Error).message;
-        if (/outside the LBP3 range|older than the header layout/.test(message)) {
+        if (/outside the range|older than the header layout/.test(message)) {
           counts[`${magic} refused`] = (counts[`${magic} refused`] ?? 0) + 1;
           continue;
         }

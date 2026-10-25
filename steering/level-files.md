@@ -2092,34 +2092,40 @@ the first real file through one is its first test.
 - `readAdventureCreateProfile` below subVersion `0x140` (the inline `AdventureData`), and
   `PlayedLevelData`'s Vita fields (`D1_DEFERRED_PLAYS`, `D1_UPLOADED_HIGH_SCORE`, `D1_TROPHIES`).
 
-## The reader's version bound — `LBP3_MIN_VERSION = 0x3b7`
+## Revisions below LBP3 — `MIN_VERSION = 0x15e`
 
-`src/io/serializer.ts` refuses anything older. Two measurements put it at `0x3b7`
-rather than the corpus's own `0x3b8`: cwlib has exactly one gate at `0x3b8` in its whole tree
-(`PPhysicsTweak`'s `version > 0x3b8 && configuration == 0xd`, which `readPhysicsTweak` has), and
-all four `0x3b7` levels in the archive sample parse the moment the bound allows them.
+`src/io/serializer.ts` refuses anything older than `0x15e`, the oldest game file that reads to its
+last byte, and newer than `0x3ff`; it refused everything below LBP3's `0x3b7` until 0.4.61. ✔ **The
+older gates are cwlib's now, gate for gate**, found by diffing cwlib's own part spans against ours
+over every file that failed (`dev/span-diff.ts`, with lbptracker's `CwlibTrace` and `PlanTrace`
+on the toolkit jar: 2026-10-25):
 
-What the 103-level sweep finds (2026-09-05):
+| what | how many read to their last byte |
+|---|---|
+| the game's `PLNb`, from `0x15e` | **17,620 of 17,624** — and all 17,624 open |
+| the game's `LVLb`, from `0x15e` | **516 of 522** |
+| the archive sample's 103 levels | **all 103**: 82 LBP3, the 19 LBP1 at `0x272` on LEERDAMMER's branch, 2 older |
+| written back (`dev/rewrite-levels.ts`) | **718 levels and 22,140 plans**, every one byte for byte, the 01.28 update's 4 plans at `0x1b4` and `0x1c3` among them |
 
-| version | branch | parses |
-|---|---|---|
-| `0x3b7` | `0/0` | **4 of 4** |
-| `0x3b8`–`0x3f9` | `0/0` | **78 of 78** |
-| `0x272` | `4c44` (LEERDAMMER) | 0 of 19 at the bound; **19 of 19 identical to cwlib, Thing for Thing**, with it lowered by hand |
-| `0x26e` | — | 0 of 1, refused by the bound; its container opens since the header gates (2026-10-19) |
-| `0x237` | — | 0 of 1, `0-aaaffe`, the same. It was put down to a truncated file; it was the header |
-
-**82 of 103, with no failure anywhere in the range the reader claims.** Below it, twelve part
-readers were wrong for LBP1 files and are fixed (`fillThing`, `readPos`, `Polygon`, `readShape`,
-`readRef`, `readGroup`, `readMetadata`, `readRenderMesh`, `readTrigger`, `readJoint`,
-`readSwitch`, `readCreature` — the gates are in *28* in
-[answered-questions.md](answered-questions.md)), and all nineteen files read identically to
-cwlib. ❗ **The bound has not been lowered anyway**: LBP1 has no Music Sequencer, and the range
-between `0x272` and `0x3b7` has **zero coverage** — no file in the sample sits there, and 2 of 19 at
-the start of that work is what "reading an older layout with newer rules and producing plausible
-nonsense" looks like from the outside. Whether to admit an *allowed set* (`0x272` plus
-`0x3b7..0x3ff`, refusing the untested span between) is a decision, in *28* in
-[open-questions.md](open-questions.md), with the other leftovers of the sweep.
+- The four plans left are `palette_tools_17`/`18`/`19`/`28` at `0x1d8`: each declares one Thing in
+  `thingData` and holds more after it, and cwlib stops at the same byte. `readPlan` returns their
+  Things with the leftover as `unreadTail`, as cwlib's `getThings` returns them, where it threw.
+- The six levels left are crossplay Vita levels, which fail in cwlib too (*The Vita branch*).
+- What it took, each the same as cwlib at `d6a2ef8`: `PWorld`'s tail gate for gate (it had left every
+  gate below LBP3 out, and an LBP2 tutorial at `0x39e` read 38 bytes too many), the Thing header's
+  world reference below `0x1fd`, joints at `0x1a6`–`0x1bb` and parts revision at `0x13c`, **the
+  parts the game dropped** (`TRIGGER_EFFECTOR` … `CAMERA` below `0x13c`, `PARTICLE_EMITTER_2` below
+  `0x18c`) in their declaration order, and **the bits above `0x28` moved only for a Thing at parts
+  revision `0x32` and up**; `PBody`, `PGroup`, `PEnemy`, `PRef`, `PPhysicsTweak`, `PCreature`,
+  `PScript` (and `InstanceLayout`'s reflection table below `0x1ec`), `PMetadata`'s `CValue`, `Decal`'s
+  colour, `InventoryItemDetails`' two older layouts, `RPlan`'s tags; and a resource's flag bits
+  swapped below `0x191` for a class pointer only.
+- ❗ **Two of them were wrong on LBP3 as well**: `PEnemy.partType` is a signed enum, an `s32`, so a
+  compressed file's eyes and rockets came out as 2 and 8 and only the uncompressed story chunks'
+  as 1 and 4; and a script's `s32` vector is signed. Both read the same bytes and the wrong values.
+- ⚠️ **The oracle is `bb79e81`'s cwlib, the toolkit jar's**, not `d6a2ef8`'s, whose build needs a
+  dependency this machine does not hold; every fix was read at `d6a2ef8`. Where the two differ the
+  spans would mislead, and nothing above turned on one.
 
 ### How a reader bug is found, the technique
 

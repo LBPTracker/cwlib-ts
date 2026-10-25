@@ -95,12 +95,6 @@ The reader is measured over 103 archive levels: no failure anywhere in the range
 ([level-files.md](level-files.md)). Levels off Bonsai turned one of the items below, the Vita
 branch, into one that stands between a reader and a song. What is left:
 
-- **The allowed-set decision.** `LBP3_MIN_VERSION` is `0x3b7` and all nineteen LBP1 files are
-  refused, deliberately: LBP1 has no Music Sequencer, so opening them buys the tracker nothing
-  musical, and the range `0x272`–`0x3b7` has zero coverage — admitting it wholesale is exactly the
-  plausible-nonsense failure the bound exists to prevent. The right change, if one is wanted, is an
-  **allowed set** — `0x272` plus `0x3b7..0x3ff`, refusing the untested span between — and it is a
-  design decision to take on purpose.
 - **Branch `0x4431`** — LBP Vita. ✔ cwlib's Vita gates are ported, and the Vita's own parts at
   bits `0x27`/`0x28` have a partial reading of our own (2026-10-25): all 148 of the game's Vita
   plans and 19 of its 25 Vita levels read, the levels to their last byte. ⚠️ The other 6

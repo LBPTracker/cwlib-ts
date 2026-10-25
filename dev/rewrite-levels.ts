@@ -46,7 +46,7 @@ const table = (bytes: Uint8Array): Uint8Array =>
 /** Why a file would not open, folded so that one cause is one line. */
 function refusal(magic: string, name: string, error: unknown): void {
   const message = (error as Error).message;
-  bump(/outside the LBP3 range|older than the header layout/.test(message)
+  bump(/outside the range|older than the header layout/.test(message)
     ? `${magic} refused by the version bound`
     : `${magic} does not open: ${message.replace(/\d+/g, 'N').slice(0, 90)}`, name);
 }
