@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { readThings } from '../src/things/level.ts';
 import type {
-  AtmosphericTweakPart, AudioWorldPart, BodyPart, MaterialTweakPart, SwitchKeyPart, WindTweakPart, CheckpointPart, FaderPart, StreamingHintPart, CostumePart, EmitterPart, EnemyPart, MaterialOverridePart, ScriptInstance, ShapePart, TriggerPart,
+  AnimationTweakPart, AtmosphericTweakPart, AudioWorldPart, CameraTweakPart, BodyPart, MaterialTweakPart, SwitchKeyPart, WindTweakPart, CheckpointPart, FaderPart, StreamingHintPart, CostumePart, EmitterPart, EnemyPart, MaterialOverridePart, ScriptInstance, ShapePart, TriggerPart,
 } from '../src/things/parts.ts';
 import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
@@ -36,6 +36,8 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   const more = { bodies: 0, faders: 0, hints: 0, names: [] as string[] };
   // And since 0.4.30: keys, sounds, material tweakers and whether they cast a shadow.
   const tweaks = { keys: 0, sounds: 0, materialTweaks: 0, shadowless: 0, winds: 0 };
+  // And since 0.4.31: camera zones and their shots, animation tweakers and what they play.
+  const scene = { cameras: 0, cameraNodes: 0, animTweaks: 0, animsPlayed: 0 };
   let firstText = '';
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
@@ -77,6 +79,16 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
         const trigger = thing?.parts.get('TRIGGER') as TriggerPart | undefined;
         if (trigger?.triggerType === 0) gameplay.radiusTriggers += 1;
         if (trigger?.triggerType === 2) gameplay.switchTriggers += 1;
+        const camera = thing?.parts.get('CAMERA_TWEAK') as CameraTweakPart | undefined;
+        if (camera) {
+          scene.cameras += 1;
+          scene.cameraNodes += camera.nodes.length;
+        }
+        const animTweak = thing?.parts.get('ANIMATION_TWEAK') as AnimationTweakPart | undefined;
+        if (animTweak) {
+          scene.animTweaks += 1;
+          if (animTweak.anim) scene.animsPlayed += 1;
+        }
         if (thing?.parts.get('SWITCH_KEY') as SwitchKeyPart | undefined) tweaks.keys += 1;
         if ((thing?.parts.get('AUDIO_WORLD') as AudioWorldPart | undefined)?.soundName) tweaks.sounds += 1;
         const materialTweak = thing?.parts.get('MATERIAL_TWEAK') as MaterialTweakPart | undefined;
@@ -105,6 +117,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   assert.deepEqual(kept, { costumes: 3, costumeMeshes: 3, weather: 19, overrides: 1 });
   assert.deepEqual(scripts, { instances: 346, withFields: 346, texts: 36 });
   assert.equal(firstText, 'NP_TU01B_130_NEWTON');
+  assert.deepEqual(scene, { cameras: 65, cameraNodes: 65, animTweaks: 32, animsPlayed: 3 });
   assert.deepEqual(tweaks, { keys: 313, sounds: 154, materialTweaks: 287, shadowless: 2, winds: 9 });
   assert.deepEqual(more, { bodies: 1838, faders: 246, hints: 40, names: ['handle'] });
   assert.deepEqual(gameplay, { emitters: 7, emittedPlans: 7, eyes: 24, rockets: 5, checkpoints: 9, radiusTriggers: 255, switchTriggers: 213 });

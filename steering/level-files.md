@@ -905,6 +905,14 @@ from version 0x3ed split into its 0x80 and 0x40), `TagSynchronizerPart`, `Connec
 the tweaked shape is drawn). Needlepoint Peaks: 313 keys (`bot follow`…), 154 sounds, each named
 (`spots/lbp2/contraptions/winding_ratchet_loop`…), 287 material tweakers, 2 of them shadowless and
 none without its bevel, 9 winds and one connector hook.
+
+From 0.4.31 three a renderer frames a level by: `CameraTweakPart` (the zone's trigger box, camera
+type, cut-scene timing and field of view, and from version 0x37e its `nodes`, each a target box,
+pitch and zoom), `AnimationTweakPart` (the `RAnimation` it plays, speed, loop, start and end,
+the meshes it names) and `HudElemPart` (an on-screen element's layer, scale, offset, colour and
+its quads, each a texture frame on four corners). Needlepoint Peaks: 65 camera zones, 56 of
+`cameraType` 0 and 9 of 3, one node each (a zoom of 2037, a cut-scene field of view of 1.047 —
+60°); 32 animation tweakers, 3 of them playing a looping `.anim`; no HUD element.
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the

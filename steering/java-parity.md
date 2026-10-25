@@ -16,12 +16,12 @@ to touch `lib/cwlib/`) against this repository's modules and the return type of 
 (2024-04-30) lacks 147 files' worth of `lib/cwlib/` changes — so name the commit you read, and
 re-check a line against the current checkout before relying on it.
 
-## Thing parts walked and not kept (10)
+## Thing parts walked and not kept (7)
 
 Every part of `Part.java` has a reader (`CREATOR_ANIM` none, and Java too expects it null), so any
-file in range walks to its end; these 10 return nothing, where Java builds an object for each:
-`CREATURE`, `NPC`, `SWITCH_INPUT`, `CONTROLINATOR`, `POPPET_POWERUP`, `HUD_ELEM`,
-`PHYSICS_TWEAK`, `CAMERA_TWEAK`, `ANIMATION_TWEAK`, `YELLOWHEAD`.
+file in range walks to its end; these 7 return nothing, where Java builds an object for each:
+`CREATURE`, `NPC`, `SWITCH_INPUT`, `CONTROLINATOR`, `POPPET_POWERUP`, `PHYSICS_TWEAK`,
+`YELLOWHEAD`.
 Even a kept part returns only the fields a reader of the level needs, not every one it walks. Keeping one is a return
 value on a reader that already reads every field.
 

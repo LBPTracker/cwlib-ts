@@ -86,7 +86,7 @@ import { readYellowHead } from './parts/yellowhead.ts';
 
 export { readAudioWorld, type AudioWorldPart } from './parts/audio-world.ts';
 export { readBody, type BodyPart } from './parts/body.ts';
-export { readCameraTweak } from './parts/camera-tweak.ts';
+export { readCameraTweak, type CameraNode, type CameraTweakPart } from './parts/camera-tweak.ts';
 export { readCheckpoint, type CheckpointPart } from './parts/checkpoint.ts';
 export { readControlinator } from './parts/controlinator.ts';
 export { readCostume, type CostumePart, type CostumePiece, type CostumePrimitive } from './parts/costume.ts';
@@ -97,6 +97,8 @@ export { readCreature } from './parts/creature.ts';
 export { readDecorations, type Decoration } from './parts/decorations.ts';
 export { readEmitter, type EmittedObjectSource, type EmitterPart } from './parts/emitter.ts';
 export { readEnemy, type EnemyPart } from './parts/enemy.ts';
+export { readAnimationTweak, type AnimationTweakPart } from './parts/animation-tweak.ts';
+export { readHudElem, type HudDrawable, type HudElemPart } from './parts/hud-elem.ts';
 export { readConnectorHook, type ConnectorHookPart } from './parts/connector-hook.ts';
 export { readPocketItem, type PocketItemPart } from './parts/pocket-item.ts';
 export { readTagSynchroniser, type TagSynchronizerPart } from './parts/tag-synchronizer.ts';
