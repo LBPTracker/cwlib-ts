@@ -42,46 +42,10 @@
  *   on every mesh as `_VERTEX_MASS`, the weight in a grey unsigned-short VEC4.
  */
 
-import type { ResourceRef } from '../io/serializer.ts';
-import { refKey, type GltfMaterial, type GltfTexture } from './gltf-material.ts';
-import { uvHandedness, type Mesh } from './mesh.ts';
+import { ARRAY_BUFFER, GltfBuilder, UNSIGNED_BYTE, bytesOf, type GltfOptions } from './gltf-builder.ts';
+import { uvHandedness, type Mesh, type TangentFramed } from './mesh.ts';
 
-const FLOAT = 5126;
-const UNSIGNED_BYTE = 5121;
-const UNSIGNED_SHORT = 5123;
-const ARRAY_BUFFER = 34962;
-const ELEMENT_ARRAY_BUFFER = 34963;
-const GLB_MAGIC = 0x46546c67; // "glTF"
-const JSON_CHUNK = 0x4e4f534a; // "JSON"
-const BIN_CHUNK = 0x004e4942; // "BIN\0"
-
-export interface GltfOptions {
-  /** Each material by `refKey`, as `gltfMaterials` makes them. */
-  readonly materials?: ReadonlyMap<string, GltfMaterial>;
-  /** A material's name where `materials` has none; by default `g<GUID>` or its hash in hex. */
-  readonly materialName?: (material: ResourceRef) => string | undefined;
-}
-
-/** cwlib's `TextureWrap` as a glTF wrap: 1 repeat, 2 mirrored repeat, the clamps to the edge. */
-const wrapOf = (wrap: number): number => (wrap === 1 ? 10497 : wrap === 2 ? 33648 : 33071);
-
-/**
- * A sample's `u' = a·u + b·v + c`, `v' = d·u + e·v + f` as
- * `KHR_texture_transform`'s offset, rotation and scale (`uv' = T·R·S·uv`, `R`
- * the rotation by `rotation` counter-clockwise); undefined for the identity.
- * ⚠️ A shear has no place in it and is lost.
- */
-function textureTransform([a, b, c, d, e, f]: GltfTexture['uvTransform']): Record<string, unknown> | undefined {
-  if (a === 1 && b === 0 && c === 0 && d === 0 && e === 1 && f === 0) return undefined;
-  if (b === 0 && d === 0) return { offset: [c, f], scale: [a, e] };
-  const rotation = Math.atan2(-d, a);
-  const sx = Math.hypot(a, d);
-  const sy = b * Math.sin(rotation) + e * Math.cos(rotation);
-  return { offset: [c, f], rotation, scale: [sx, sy] };
-}
-
-/** NaN written 0. */
-const finite = (values: Float32Array): Float32Array => (values.some(Number.isNaN) ? values.map((v) => (Number.isNaN(v) ? 0 : v)) : values);
+export type { GltfOptions } from './gltf-builder.ts';
 
 /**
  * A column-major affine matrix as glTF's translation, rotation and scale,
@@ -137,7 +101,7 @@ function foldJoints(joints: Uint8Array, weights: Float32Array): { joints: Uint8A
  * The tangents as glTF's VEC4: xyz as `readMesh` gives them, w the handedness
  * (header) -- `uvHandedness` turned round, glTF's +Y running toward `v = 0`.
  */
-function tangentsWithHandedness(mesh: Mesh): Float32Array {
+export function tangentsWithHandedness(mesh: TangentFramed): Float32Array {
   const out = new Float32Array(mesh.vertexCount * 4);
   const hand = uvHandedness(mesh);
   const tg = mesh.tangents;
@@ -166,134 +130,41 @@ function multiply(a: Float32Array, b: Float32Array): number[] {
 
 /** Write a mesh as a `.glb`. */
 export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
-  const parts: Uint8Array[] = [];
-  let length = 0;
-  const bufferViews: Record<string, unknown>[] = [];
-  const accessors: Record<string, unknown>[] = [];
-
-  /** A view onto bytes appended to the buffer, 4-aligned; its index. */
-  const view = (bytes: Uint8Array, target?: number): number => {
-    const pad = (4 - (length % 4)) % 4;
-    if (pad > 0) {
-      parts.push(new Uint8Array(pad));
-      length += pad;
-    }
-    bufferViews.push({ buffer: 0, byteOffset: length, byteLength: bytes.length, ...(target ? { target } : {}) });
-    parts.push(bytes);
-    length += bytes.length;
-    return bufferViews.length - 1;
-  };
-  const bytesOf = (array: Float32Array | Uint8Array | Uint16Array): Uint8Array =>
-    new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
-  const accessor = (bufferView: number, componentType: number, type: string, count: number, extra: Record<string, unknown> = {}): number => {
-    accessors.push({ bufferView, componentType, count, type, ...extra });
-    return accessors.length - 1;
-  };
-  const bounds = (values: Float32Array): { min: number[]; max: number[] } => {
-    const min = [Infinity, Infinity, Infinity];
-    const max = [-Infinity, -Infinity, -Infinity];
-    for (let i = 0; i < values.length; i += 1) {
-      const v = values[i];
-      if (v < min[i % 3]) min[i % 3] = v;
-      if (v > max[i % 3]) max[i % 3] = v;
-    }
-    return { min, max };
-  };
-  const vec3 = (values: Float32Array, withBounds: boolean): number =>
-    accessor(view(bytesOf(finite(values)), ARRAY_BUFFER), FLOAT, 'VEC3', mesh.vertexCount, withBounds ? bounds(finite(values)) : {});
-
+  const g = new GltfBuilder(options);
   const hasVertices = mesh.vertexCount > 0;
   const skinned = mesh.bones.length > 0;
   const attributes: Record<string, number> = {};
   let targets: Record<string, number>[] = [];
   if (hasVertices) {
-    attributes.POSITION = vec3(mesh.positions, true);
-    attributes.NORMAL = vec3(mesh.normals, false);
-    attributes.TANGENT = accessor(view(bytesOf(tangentsWithHandedness(mesh)), ARRAY_BUFFER), FLOAT, 'VEC4', mesh.vertexCount);
-    if (mesh.softbodyWeights.some((w) => w < 1)) {
-      attributes._SOFTBODY_WEIGHT = accessor(view(bytesOf(mesh.softbodyWeights), ARRAY_BUFFER), FLOAT, 'SCALAR', mesh.vertexCount);
-    }
+    attributes.POSITION = g.floats(mesh.positions, 'VEC3', ARRAY_BUFFER, true);
+    attributes.NORMAL = g.floats(mesh.normals, 'VEC3', ARRAY_BUFFER);
+    attributes.TANGENT = g.floats(tangentsWithHandedness(mesh), 'VEC4', ARRAY_BUFFER);
+    if (mesh.softbodyWeights.some((w) => w < 1)) attributes._SOFTBODY_WEIGHT = g.floats(mesh.softbodyWeights, 'SCALAR', ARRAY_BUFFER);
     mesh.uvs.forEach((uv, i) => {
-      attributes[`TEXCOORD_${i}`] = accessor(view(bytesOf(finite(uv)), ARRAY_BUFFER), FLOAT, 'VEC2', mesh.vertexCount);
+      attributes[`TEXCOORD_${i}`] = g.floats(uv, 'VEC2', ARRAY_BUFFER);
     });
     if (skinned) {
       const { joints, weights } = foldJoints(mesh.joints, mesh.weights);
-      attributes.JOINTS_0 = accessor(view(bytesOf(joints), ARRAY_BUFFER), UNSIGNED_BYTE, 'VEC4', mesh.vertexCount);
-      attributes.WEIGHTS_0 = accessor(view(bytesOf(weights), ARRAY_BUFFER), FLOAT, 'VEC4', mesh.vertexCount);
+      attributes.JOINTS_0 = g.accessor(g.view(bytesOf(joints), ARRAY_BUFFER), UNSIGNED_BYTE, 'VEC4', mesh.vertexCount);
+      attributes.WEIGHTS_0 = g.floats(weights, 'VEC4', ARRAY_BUFFER);
     }
-    targets = mesh.morphs.map((morph) => ({ POSITION: vec3(morph.offsets, true), NORMAL: vec3(morph.normals, false) }));
+    targets = mesh.morphs.map((morph) => ({
+      POSITION: g.floats(morph.offsets, 'VEC3', ARRAY_BUFFER, true),
+      NORMAL: g.floats(morph.normals, 'VEC3', ARRAY_BUFFER),
+    }));
   }
-
-  const images: Record<string, unknown>[] = [];
-  const imageIndex = new Map<Uint8Array, number>();
-  const samplers: Record<string, unknown>[] = [];
-  const textures: Record<string, unknown>[] = [];
-  const textureIndex = new Map<string, number>();
-  let transformed = false;
-  const textureInfo = (texture: GltfTexture, extra: Record<string, unknown> = {}): Record<string, unknown> => {
-    let image = imageIndex.get(texture.png);
-    if (image === undefined) {
-      images.push({ name: texture.name, mimeType: 'image/png', bufferView: view(texture.png) });
-      image = images.length - 1;
-      imageIndex.set(texture.png, image);
-    }
-    const wrapS = wrapOf(texture.wrapS);
-    const wrapT = wrapOf(texture.wrapT);
-    let sampler = samplers.findIndex((s) => s.wrapS === wrapS && s.wrapT === wrapT);
-    if (sampler < 0) sampler = samplers.push({ wrapS, wrapT }) - 1;
-    const key = `${image}/${sampler}`;
-    let index = textureIndex.get(key);
-    if (index === undefined) {
-      index = textures.push({ source: image, sampler }) - 1;
-      textureIndex.set(key, index);
-    }
-    const transform = textureTransform(texture.uvTransform);
-    if (transform) transformed = true;
-    return {
-      index, ...extra,
-      ...(texture.texCoord !== 0 ? { texCoord: texture.texCoord } : {}),
-      ...(transform ? { extensions: { KHR_texture_transform: transform } } : {}),
-    };
-  };
-
-  const materials: Record<string, unknown>[] = [];
-  const materialIndex = new Map<string, number>();
-  const materialOf = (ref: ResourceRef): number => {
-    const key = refKey(ref);
-    let index = materialIndex.get(key);
-    if (index === undefined) {
-      index = materials.length;
-      const made = options.materials?.get(key);
-      materials.push(made === undefined
-        ? { name: options.materialName?.(ref) ?? key, pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0 } }
-        : {
-          name: made.name,
-          pbrMetallicRoughness: {
-            baseColorFactor: made.baseColorFactor ?? [1, 1, 1, 1],
-            metallicFactor: 0,
-            ...(made.baseColorTexture ? { baseColorTexture: textureInfo(made.baseColorTexture) } : {}),
-          },
-          ...(made.normalTexture ? { normalTexture: textureInfo(made.normalTexture) } : {}),
-          ...(made.doubleSided ? { doubleSided: true } : {}),
-          ...(made.alphaCutoff !== undefined ? { alphaMode: 'MASK', alphaCutoff: made.alphaCutoff } : {}),
-        });
-      materialIndex.set(key, index);
-    }
-    return index;
-  };
 
   // Java's `getSubmeshes`: one mesh per region, here in the order regions first appear.
   const regions = new Map<number, Record<string, unknown>[]>();
   for (const primitive of mesh.primitives) {
     if (primitive.triangles.length === 0 || !hasVertices) continue;
-    const indices = accessor(view(bytesOf(primitive.triangles), ELEMENT_ARRAY_BUFFER), UNSIGNED_SHORT, 'SCALAR', primitive.triangles.length);
     const list = regions.get(primitive.region) ?? [];
     regions.set(primitive.region, list);
     list.push({
       attributes,
-      indices,
+      indices: g.indices(primitive.triangles),
       mode: 4,
-      ...(primitive.material ? { material: materialOf(primitive.material) } : {}),
+      ...(primitive.material ? { material: g.material(primitive.material) } : {}),
       ...(targets.length > 0 ? { targets } : {}),
     });
   }
@@ -311,8 +182,8 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
   const skins = skinned
     ? [{
       joints: mesh.bones.map((_, i) => i),
-      inverseBindMatrices: accessor(view(bytesOf(Float32Array.from(mesh.bones.flatMap((b) =>
-        [...b.invSkinPose].map((v, i) => (i === 15 ? 1 : i % 4 === 3 ? 0 : v)))))), FLOAT, 'MAT4', mesh.bones.length),
+      inverseBindMatrices: g.floats(Float32Array.from(mesh.bones.flatMap((b) =>
+        [...b.invSkinPose].map((v, i) => (i === 15 ? 1 : i % 4 === 3 ? 0 : v)))), 'MAT4', undefined),
     }]
     : [];
   const meshNodes = meshes.map((_, i) => {
@@ -324,40 +195,11 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
   nodes.push({ name: 'Armature', ...(roots.length > 0 ? { children: roots } : {}) });
   const armature = nodes.length - 1;
 
-  const json = {
-    asset: { version: '2.0', generator: 'cwlib-ts meshToGlb' },
-    ...(transformed ? { extensionsUsed: ['KHR_texture_transform'] } : {}),
+  return g.glb('cwlib-ts meshToGlb', {
     scene: 0,
     scenes: [{ name: 'Scene', nodes: [armature, ...meshNodes] }],
     nodes,
     ...(meshes.length > 0 ? { meshes } : {}),
-    ...(materials.length > 0 ? { materials } : {}),
-    ...(textures.length > 0 ? { textures, images, samplers } : {}),
     ...(skins.length > 0 ? { skins } : {}),
-    accessors,
-    bufferViews,
-    buffers: [{ byteLength: length }],
-  };
-
-  const text = new TextEncoder().encode(JSON.stringify(json));
-  const jsonLength = Math.ceil(text.length / 4) * 4;
-  const binLength = Math.ceil(length / 4) * 4;
-  const out = new Uint8Array(12 + 8 + jsonLength + 8 + binLength);
-  const dv = new DataView(out.buffer);
-  dv.setUint32(0, GLB_MAGIC, true);
-  dv.setUint32(4, 2, true);
-  dv.setUint32(8, out.length, true);
-  dv.setUint32(12, jsonLength, true);
-  dv.setUint32(16, JSON_CHUNK, true);
-  out.set(text, 20);
-  out.fill(0x20, 20 + text.length, 20 + jsonLength);
-  let at = 20 + jsonLength;
-  dv.setUint32(at, binLength, true);
-  dv.setUint32(at + 4, BIN_CHUNK, true);
-  at += 8;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
+  });
 }

@@ -177,6 +177,16 @@ function unpackNormal32(word: number, out: Float32Array, to: number): void {
   out[to + 2] = word >>> 31 ? -(511 - z) / 511 : z / 511;
 }
 
+/** What a tangent frame is made of: an `RMesh`, or an `RStaticMesh` (`staticmesh.ts`). */
+export interface TangentFramed {
+  readonly vertexCount: number;
+  readonly positions: Float32Array;
+  readonly normals: Float32Array;
+  readonly tangents: Float32Array;
+  readonly uvs: readonly Float32Array[];
+  readonly primitives: readonly { readonly triangles: ArrayLike<number> }[];
+}
+
 /**
  * Each vertex's handedness on a UV channel: +1 where the bitangent
  * `normal × tangent` runs the way `v` grows (`∂P/∂v`, summed over the
@@ -185,7 +195,7 @@ function unpackNormal32(word: number, out: Float32Array, to: number): void {
  * sign from this, by its own convention -- glTF's runs toward `v = 0`
  * (`mesh-gltf.ts`), a renderer with `v` down the image may run with it.
  */
-export function uvHandedness(mesh: Mesh, channel = 0): Int8Array {
+export function uvHandedness(mesh: TangentFramed, channel = 0): Int8Array {
   const n = mesh.vertexCount;
   const out = new Int8Array(n);
   const uv = mesh.uvs[channel];

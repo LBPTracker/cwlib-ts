@@ -46,6 +46,15 @@ export interface StaticMesh {
   readonly positions: Float32Array;
   /** `vertexCount * 3`, from cwlib's `unpackNormal32`. */
   readonly normals: Float32Array;
+  /**
+   * `vertexCount * 3`: the direction UV 0's `u` runs, the pack at 28 --
+   * cwlib's "smooth normal" -- unpacked like the normal. ✔ Within 0.9 of the
+   * tangent made from positions and UV 0 on 6,586,039 of the 7,400,001 vertices
+   * it can be made on over the game's 47 backdrops (6,375,295 the same way),
+   * and across the normal on 71.5% of all; the pack at 20, cwlib's "tangent",
+   * lines up on 8%. No handedness is stored (`uvHandedness`).
+   */
+  readonly tangents: Float32Array;
   /** `vertexCount * 2` each: two channels of half floats. */
   readonly uvs: [Float32Array, Float32Array];
   readonly primitives: StaticPrimitive[];
@@ -154,6 +163,7 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
   const vertexCount = vertexStreamSize / 0x20;
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
+  const tangents = new Float32Array(vertexCount * 3);
   const uv0 = new Float32Array(vertexCount * 2);
   const uv1 = new Float32Array(vertexCount * 2);
   for (let v = 0; v < vertexCount; v += 1) {
@@ -164,7 +174,8 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
     unpackNormal32(d.getUint32(o + 12, false), normals, v * 3);
     uv0[v * 2] = halfToFloat(d.getUint16(o + 16, false));
     uv0[v * 2 + 1] = halfToFloat(d.getUint16(o + 18, false));
-    // o + 20: the tangent, packed like the normal; o + 28: cwlib's "smooth normal". Neither is returned.
+    // o + 20: cwlib's "tangent", which is none (`StaticMesh.tangents`), not returned; o + 28 the tangent.
+    unpackNormal32(d.getUint32(o + 28, false), tangents, v * 3);
     uv1[v * 2] = halfToFloat(d.getUint16(o + 24, false));
     uv1[v * 2 + 1] = halfToFloat(d.getUint16(o + 26, false));
   }
@@ -176,7 +187,7 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
     }
     return { ...p, triangles: triangles(indices, p.indexStart, p.numIndices, p.type, p.vertexStart) };
   });
-  return { revision, lightmap, risemap, fallmap, vertexCount, positions, normals, uvs: [uv0, uv1], primitives };
+  return { revision, lightmap, risemap, fallmap, vertexCount, positions, normals, tangents, uvs: [uv0, uv1], primitives };
 }
 
 /** For the census: one run's raw indices, to test what `vertexStart` is. */

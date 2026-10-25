@@ -188,6 +188,7 @@ never silently follow the toolkit against our own measurement.
 | 40 | a glTF tangent's w | 1 | the vertex's handedness from its UVs, glTF's +Y toward `v = 0` | the stream stores none; +1 on 82% of the game's vertices ([level-files.md](level-files.md), *Written as glTF*) |
 | 41 | a mesh's softbody weight in glTF | `_VERTEX_MASS`, a grey unsigned-short VEC4, on every mesh | `_SOFTBODY_WEIGHT`, a float, where some vertex is below 1 | 4,875 of the game's 5,941 meshes are 1 everywhere; the name says what it is ([level-files.md](level-files.md), *The game's meshes*) |
 | 42 | an `RMesh` as OBJ | every primitive, no material | a run two primitives share written once; `usemtl` when the caller names the material | 345 of the game's meshes draw a run twice under two materials, which would double the faces ([level-files.md](level-files.md), *Written as OBJ*) |
+| 43 | an `RStaticMesh`'s tangent | the pack at 20 (its comment; it writes no tangent to glTF) | the pack at 28, cwlib's "smooth normal", into `StaticMesh.tangents` and the glTF | it lines up with the UV tangent on 89% of the backdrops' vertices, the one at 20 on 8% ([level-files.md](level-files.md), *Backdrops*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

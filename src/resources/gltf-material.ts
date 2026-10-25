@@ -27,7 +27,10 @@ import type { Deflate } from '../io/writer.ts';
 import { encodePng } from '../io/png.ts';
 import { toHex } from '../io/hex.ts';
 import { materialSummary, readMaterial, type SampleSummary } from './material.ts';
-import type { Mesh } from './mesh.ts';
+/** Anything with primitives that name materials: an `RMesh`, an `RStaticMesh`. */
+export interface WithMaterials {
+  readonly primitives: readonly { readonly material?: ResourceRef }[];
+}
 import { decodeLevel, readTexture } from './texture.ts';
 
 /** One image as a material samples it. */
@@ -71,10 +74,10 @@ const MATERIAL_TYPE = 7;
 const TEXTURE_TYPE = 1;
 
 /**
- * Every material a mesh's primitives name, by `refKey`. A material or texture
+ * Every material a mesh's or a backdrop's primitives name, by `refKey`. A material or texture
  * that does not resolve or read is left out, and its primitives go plain.
  */
-export async function gltfMaterials(mesh: Mesh, source: GltfMaterialSource): Promise<Map<string, GltfMaterial>> {
+export async function gltfMaterials(mesh: WithMaterials, source: GltfMaterialSource): Promise<Map<string, GltfMaterial>> {
   const pngs = new Map<string, Promise<Uint8Array | undefined>>();
   const nameOf = (ref: ResourceRef): string => source.name?.(ref) ?? refKey(ref);
 

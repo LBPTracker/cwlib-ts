@@ -1129,8 +1129,21 @@ payload: the vertex stream, 0x20 a vertex  f32 x3 position, u32 normal, f16 x2 u
 | every primitive names a gfx material; every backdrop names its three maps | 37,184 of 37,184; 47 of 47 |
 | positions in the level's world | Needlepoint Peaks' settings Thing has an identity `PPos`, and its backdrop spans x −31,862 to 36,258 and z −28,768 to 249, around and behind the level's chunks; drawn in lbprender its textures read the right way round (a "SACKTOWN WELCOME" sign) |
 
-The tangent and "smooth normal" packs are not returned (not measured here; an `RMesh`'s tangent
-is its pack at 12, *The game's meshes*), nor the `UnknownStruct`s; the three light maps are named but
+❗ **The tangent is the pack at 28, cwlib's "smooth normal"** (`StaticMesh.tangents`, 0.4.46), not
+the one at 20 that cwlib calls the tangent: against the tangent made from positions and UV 0 it is
+within 0.9 on 6,586,039 of the 7,400,001 vertices it can be made on over all 47 backdrops (6,375,295
+the same way, 210,744 the opposite), and across the normal on 71.5% of all 7,505,122 — fewer than an
+`RMesh`'s, the 32-bit pack keeping less; the pack at 20 lines up on 8% and is not returned. On UV 1,
+the light maps' channel, the pack at 28 lines up on 38% (scratch census, 2026-10-25).
+
+✔ **Written as glTF** (`staticMeshToGlb`, `src/resources/staticmesh-gltf.ts`, cwlib's
+`MeshExporter.GLB.FromMesh(RStaticMesh)`): one mesh on a node `bg`, a primitive per primitive,
+positions, normals, the tangents with their handedness, both UV channels; materials as for a mesh.
+All 47 validate with no error and no warning under Khronos's validator, with their 2,691 materials
+(2,591 with a base-colour texture; one material does not resolve). The light maps are not written,
+by Java either.
+
+The `UnknownStruct`s are not returned; the three light maps are named but
 what they hold is not measured.
 
 ## Bevels — `RBevel`

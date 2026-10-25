@@ -7,6 +7,7 @@ import test from 'node:test';
 import { openFarc } from '../src/archives/farc.ts';
 import { readFileDB } from '../src/archives/filedb.ts';
 import { readStaticMesh } from '../src/resources/staticmesh.ts';
+import { staticMeshToGlb } from '../src/resources/staticmesh-gltf.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 /**
@@ -52,4 +53,15 @@ test("the default background template: a backdrop that reads, facing out", async
     }
   }
   assert.ok(ccw / (ccw + cw) > 0.98, `${ccw} counter-clockwise, ${cw} clockwise`);
+
+  // Its glTF: one mesh on the node bg, a primitive per primitive, every attribute over every vertex.
+  const glb = staticMeshToGlb(m);
+  const view = new DataView(glb.buffer);
+  assert.equal(view.getUint32(0, true), 0x46546c67);
+  const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + view.getUint32(12, true))));
+  assert.equal(json.nodes[0].name, 'bg');
+  assert.equal(json.meshes[0].primitives.length, m.primitives.filter((p) => p.triangles.length > 0).length);
+  const attributes = json.meshes[0].primitives[0].attributes;
+  assert.deepEqual(Object.keys(attributes).sort(), ['NORMAL', 'POSITION', 'TANGENT', 'TEXCOORD_0', 'TEXCOORD_1']);
+  for (const a of Object.values(attributes) as number[]) assert.equal(json.accessors[a].count, m.vertexCount);
 });
