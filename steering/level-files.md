@@ -1290,7 +1290,7 @@ such as `NP_TU01B_130_NEWTON`, and `translate` takes either. FileDB paths
 `gamedata/languages/<language>.trans`, and one per language under `languages/patch/`.
 
 - ❗ **No container and no magic: the FARC entry is the table.** A census of the archives by magic
-  does not see these, which is how the resource census of 2026-10-24 counted none (`java-parity.md`
+  does not see these, which is how the resource census of 2026-10-24 counted none (the parity list
   said "not at all"). `u32` count, then `{u32 key, u32 offset}` sorted by key, then UTF-16BE
   strings, each opening with a BOM, at the offset from the end of the key list; all big-endian.
 - ✔ **All 46 in the FARCs read** (`test/translation.test.ts`, 2026-10-25): 24 full tables, 36,906
