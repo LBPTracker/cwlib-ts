@@ -2,66 +2,68 @@
 
 Read before porting a reader, a writer or a tool from ennuo's cwlib, and before saying what this
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
-not. What this library reads is in [level-files.md](level-files.md) beside each reader, and the
-places where it reads the same thing differently are *Where we deliberately differ* in
+not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
+and where it does the same thing differently is *Where we deliberately differ* in
 [lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 35 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
-Measured 2026-10-24 and again 2026-10-25 at 0.4.26, by listing the classes under
-`lib/cwlib/src/main/java/cwlib/` (`resources/`, `structs/things/parts/`, `types/`, `io/`, `util/`) of
+Measured 2026-10-24 and 2026-10-25 by listing the classes under `lib/cwlib/src/main/java/cwlib/`
+(`resources/`, `structs/things/parts/`, `types/`, `io/`, `util/`, `singleton/`) of
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
-to touch `lib/cwlib/`) against this repository's modules and the return type of every reader
-`partReaders()` binds. ⚠️ A checkout of the toolkit can be far behind that: one at `bb79e81`
-(2024-04-30) lacks 147 files' worth of `lib/cwlib/` changes — so name the commit you read, and
-re-check a line against the current checkout before relying on it.
+to touch `lib/cwlib/`) against this repository's
+modules and the return type of every reader `partReaders()` binds; revised as each gap closed, last
+at 0.4.40. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
+on this machine is at `fee2239`, but its `lib/cwlib/` is `bb79e81` (2024-04-30), 147 files'
+worth behind — `RTranslationTable.patch`, `MeshExporter` and `RMesh` among them. Name the commit
+whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` with `git show`.
 
 ## Thing parts: fields walked and not returned
 
-Every part of `Part.java` has a reader (`CREATOR_ANIM` none, and Java too expects it null), so any
-file in range walks to its end, and since 0.4.32 **every reader returns its part** — but only the
-fields a reader of a level needs, where Java keeps every one. What each returns is its interface in
-`src/things/parts/`; a field a part walks and does not return is a gap here, and keeping it is a
-return value on a reader that already reads it. The part with the most left out is `CREATURE`
-(its state machine, whip, jetpack and the rest; the settings and the Thing lists are returned),
-then `NPC`, `YELLOWHEAD`'s `Poppet`, `PHYSICS_TWEAK` and `SWITCH`. Keeping one is a return
-value on a reader that already reads every field.
+Every part reader returns its part, but only the fields a reader of a level needs, where Java keeps
+every one; a field walked and not returned is the gap, and closing it is a return value on a reader
+that already reads it. Most is left out of `CREATURE` (its state machine, whip, jetpack and the
+rest), then `NPC`, `YELLOWHEAD`'s `Poppet`, `PHYSICS_TWEAK` and `SWITCH`. Each part's interface in
+`src/things/parts/` is what it returns.
 
 ## Resources
 
-- **No reader** (2, and `BigSave` in `types/save/`): `RBigProfile` and `RLocalProfile`. Neither the
-  install nor the saves on this machine hold one (a census of the FARCs and the saves by magic,
+- **No reader**: `RBigProfile`, `RLocalProfile` and `BigSave` (`types/save/`). Neither the install
+  nor the saves on this machine hold one (a census of the FARCs and the saves by magic,
   2026-10-25), so a reader would have nothing to be proven on.
 - **Read, but less than Java**:
-  - `RGfxMaterial`: the compiled shaders are kept as blobs (Java's `CgAssembler`/`GfxAssembler`,
-    below, build them).
+  - `RGfxMaterial`: the compiled shaders are kept as blobs (Java builds them, *Tools*).
   - `RTranslationTable`: the old text layout (a UTF-16 file of tags and lines) is refused; the game
     holds none.
   - `RAdventureCreateProfile`: the inline `AdventureData` below subVersion `0x140` and
     `PlayedLevelData` on the Vita's branch refuse; the game's three are past the one and off the other.
   - `InventoryItemDetails` (inside `RPlan`, `RLevel`, the poppet power-up): the two layouts at and
     below version `0x37c` refuse — below the revision bound, *Revisions*.
-  - `RDLC` and `RGuidSubst`: read in the engine's text form only (`GSBt`, `DLCt`), the one the game
-    ships; Java reads `RDLC`'s binary form and another text layout for `RGuidSubst`.
+  - `RDLC` and `RGuidSubst`: the engine's text form only (`GSBt`, `DLCt`), the one the game ships;
+    not `RDLC`'s binary form, nor `RGuidSubst`'s other text layout.
+  - `RMesh`: the vertex colours and the tangents (`getTangents`, at `d6a2ef8`) are not returned.
+- **The legacy one-file mod**, `MODb`/`MODe` (`Mod.fromLegacyMod`), is not read; no such file was
+  on this disk.
 
 ## Writing
 
-Java's one serializer reads and writes every resource. This library writes a sequencer `.plan` and
-the container around it (`src/sequencer/write-plan.ts`, `src/io/writer.ts`), a `FAR4` in the clear
-with a zeroed hashinate (`writeFar`), a toolkit `.mod` (`writeMod`), a FileDB (`writeFileDB`), a FARC (`writeFarc`), a translation table (`writeTranslationTable`) and a ZIP — and nothing else: no
-level or other resource. A `.mod`'s `patches.json` and icon are read and written; the legacy
-one-file `MODb`/`MODe` (`Mod.fromLegacyMod`) is not read.
+Java's one serializer writes every resource it reads. Here: **no level, and no resource other than a
+sequencer `.plan`** — so no `Resources.hashinate` either, which rewrites each dependency's table
+and so needs a writer for every resource.
 
 ## Tools
 
-Java exports an `RMesh`'s textures and vertex colours into its glTF, an `RStaticMesh` and an
-`RAnimation` to glTF too, and an `RMesh` to OBJ (`MeshExporter`; the mesh itself is `meshToGlb`), imports models and animations (`ModelImporter`,
-`AnimationImporter`, `BlendPacketImporter`), builds an `RStaticMesh` (`StaticMeshBuilder`),
-assembles material shaders (`CgAssembler`, `GfxAssembler`), converts resources to JSON (`gson/`),
-replaces a resource's dependencies with hashes (`Resources.hashinate`, which needs a writer for
-every resource). This library has none of these; `Resources.collect` is `gatherDependencies`, and
-`ResourceSystem.extract` over one install is `openGame` — but not Java's set of databases and
-archives loaded and saved together, nor adding a resource to one.
+- **glTF and OBJ** (`MeshExporter`): an `RStaticMesh`, an `RAnimation` and a material's animation
+  (`FromMaterialAnimation`) to glTF; an `RMesh` to OBJ, whole, by cluster or its springs; and in an
+  `RMesh`'s glTF, the tangents, the vertex colours, the specular colour
+  (`KHR_materials_pbrSpecularGlossiness`), the occlusion map Java makes of a diffuse texture whose
+  path holds `dirt`, and the `BLEND` it gives a material named `decal`.
+- **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
+  `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
+- **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).
+- **JSON**: any resource to and from JSON (`gson/`).
+- **The resource system** (`ResourceSystem`): several databases and archives loaded at once, saved
+  together, and a resource added to one. Here one install opens read-only.
 
 ## Revisions
 

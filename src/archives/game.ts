@@ -1,7 +1,7 @@
 /**
  * The game's data, opened: a GUID or a SHA-1 in, a resource's bytes out --
  * cwlib's `ResourceSystem.extract` (`singleton/ResourceSystem.java`, ennuo/toolkit
- * `fee2239`) over one install.
+ * `d6a2ef8`) over one install.
  *
  * A GUID is its FileDB row, straight or through the remap; a row's SHA-1 is
  * looked for in the FARCs, and failing that the row's path is read loose from

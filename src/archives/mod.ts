@@ -54,7 +54,7 @@ export const DEFAULT_MOD_INFO: ModInfo = {
  *
  * ⚠️ **Nothing in the toolkit applies one.** cwlib reads, keeps and writes it
  * (`Mod.java`; `fromLegacyMod` makes one of a legacy mod's LAMS rows) and no
- * class at `fee2239` reads it back; `translationPatchTable` and
+ * class at `d6a2ef8` reads it back; `translationPatchTable` and
  * `patchTranslationTable` in `translation.ts` are how this library would.
  */
 export interface TranslationPatch {

@@ -391,7 +391,7 @@ the Import/Export view writes one around the `.plan` ([export-to-game.md](export
 | `data.map` | a FileDB, revision `0x01480100` — LBP3 rows: `i16` path length, path, `u32` date, `u32` size, SHA-1, `u32` GUID; ascending GUID |
 | `data.farc` | the rows' bytes as a `FAR4`: sorted by SHA-1 hex, padded to 4, a 0x84-byte save key holding only the revision (head `0x021803f9`, branch `0x4d5a`/`0xc` — the toolkit's own "Mizuki"), the table, a **zeroed** hashinate |
 | `icon.png` | optional; read and written as the bytes it is (Java re-encodes its `ImageIcon`) |
-| `patches.json` | optional, and only when there are patches: Gson's `ModPatch[]`, of which cwlib has one kind — `{"type": "TRANSLATION", "name", "languages": [...], "keys": [{"tag", "string"}]}`, `languages` `["*"]` from a legacy mod. `type` is matched without case, any other dropped (`PatchSerializer`). ⚠️ Nothing in the toolkit at `fee2239` applies one; `translationPatchTable` makes its keys a table for `patchTranslationTable` |
+| `patches.json` | optional, and only when there are patches: Gson's `ModPatch[]`, of which cwlib has one kind — `{"type": "TRANSLATION", "name", "languages": [...], "keys": [{"tag", "string"}]}`, `languages` `["*"]` from a legacy mod. `type` is matched without case, any other dropped (`PatchSerializer`). ⚠️ Nothing in the toolkit at `d6a2ef8` applies one; `translationPatchTable` makes its keys a table for `patchTranslationTable` |
 
 A new row's GUID is the first free one from `0x00180000`, cwlib's "not used by any game".
 
@@ -514,7 +514,7 @@ row's GUID is "the same as row.to" is wrong: it is the pair's second word.
 
 ### Gathering what a resource needs — `gatherDependencies` in `src/archives/gather.ts`
 
-cwlib's `Resources.collect` (ennuo/toolkit `fee2239`), which a mod is built from: each resource with
+cwlib's `Resources.collect` (ennuo/toolkit `d6a2ef8`), which a mod is built from: each resource with
 a binary header (`b` or `e` fourth byte) has its dependency table walked, every row fetched
 through a `resolve` the caller injects, dependencies before what needs them and the root last.
 
@@ -766,7 +766,7 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
 
 ### Written as glTF — `meshToGlb` in `src/resources/mesh-gltf.ts`
 
-cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `fee2239`), without textures: one glTF mesh
+cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `d6a2ef8`), without textures: one glTF mesh
 per primitive `region`, positions, normals, every UV channel, the bones as a skin, the morphs as
 targets named in `extras.targetNames`; a material is a name the caller gives (`materialName`).
 
@@ -1452,8 +1452,9 @@ such as `NP_TU01B_130_NEWTON`, and `translate` takes either. FileDB paths
 - ✔ **Written too** (`writeTranslationTable`, 0.4.36, cwlib's `build`): keys sorted, each distinct
   text once at the offset of the first key that uses it. **All 46 come back byte for byte**
   (`test/translation.test.ts`) — no table holds a text twice, and the texts lie in the order of
-  their first key. `patchTranslationTable` is cwlib's `patch`: ⚠️ it adds only the keys the table
-  lacks, so a key it already holds keeps its text; no patch in the game has text to test that on.
+  their first key. `patchTranslationTable` is cwlib's `patch` at `d6a2ef8`: every key of the
+  patch goes in, replacing the table's text. ⚠️ Until 2024 (`bb79e81`) Java skipped a key the table
+  already held, and an old checkout still reads so; no patch in the game has text to test either on.
 
 ## Fonts — `RFontFace`
 

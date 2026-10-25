@@ -135,12 +135,14 @@ export function writeTranslationTable(table: TranslationTable): Uint8Array {
 }
 
 /**
- * cwlib's `RTranslationTable.patch`: `patch`'s keys added where `table` has no
- * text. ⚠️ **A key the table already holds keeps its text** -- Java's rule, and
- * the only definition there is; the game holds no patch with text to test it on.
+ * cwlib's `RTranslationTable.patch` (ennuo/toolkit `d6a2ef8`): every key of
+ * `patch` put into the table, **its text replacing what the table had**. ⚠️ The
+ * toolkit's own history is the trap: until 2024 (`bb79e81`) `patch` skipped a
+ * key the table already held, and a checkout that old reads that way. Java is
+ * the only definition; the game holds no patch with text to test it on.
  */
 export function patchTranslationTable(table: TranslationTable, patch: TranslationTable): TranslationTable {
   const out = new Map(table);
-  for (const [key, value] of patch) if (!out.has(key >>> 0)) out.set(key >>> 0, value);
+  for (const [key, value] of patch) out.set(key >>> 0, value);
   return out;
 }

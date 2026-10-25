@@ -114,7 +114,7 @@ test('the trap the mod route exists for: its farc, read as a pile, is taken for 
   assert.ok(result.saves[0]?.why, 'XXTEA over plain bytes fails every SHA-1');
 });
 
-test("a mod's icon and translation patch come back, and the patch fills a table's gaps", async () => {
+test("a mod's icon and translation patch come back, and the patch goes into a table", async () => {
   const icon = Uint8Array.of(0x89, 0x50, 0x4e, 0x47);
   const patch = { type: 'TRANSLATION' as const, name: 'Translations', languages: ['*'], keys: [{ tag: 'MY_TITLE', string: 'My Song' }] };
   const files = await readZip(await writeMod({}, [{ path: 'p.plan', bytes: Uint8Array.of(1) }], new Date(0), { patches: [patch], icon }), nodeInflateRaw);

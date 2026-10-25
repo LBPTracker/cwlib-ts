@@ -1,6 +1,6 @@
 /**
  * Everything a resource needs, gathered: cwlib's `Resources.collect`
- * (`util/Resources.java`, ennuo/toolkit `fee2239`), which a mod is built from.
+ * (`util/Resources.java`, ennuo/toolkit `d6a2ef8`), which a mod is built from.
  *
  * Each resource with a binary header carries a dependency table
  * (`readDependencies`); each row is fetched through `resolve` -- injected, as
