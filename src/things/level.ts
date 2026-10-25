@@ -28,6 +28,7 @@ import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
+import { Tape } from '../io/tape.ts';
 import { toHex } from '../io/hex.ts';
 import { readSlotId, type SlotId } from '../structs/slot.ts';
 import { readNetworkPlayerId } from '../structs/network.ts';
@@ -139,7 +140,7 @@ const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
 function readChunkFile(s: Serializer): void {
   const { subVersion } = s.revision;
   let sha1 = '';
-  if (subVersion > 0x130) sha1 = toHex(s.sha1()); // chunkHash
+  if (subVersion > 0x130) sha1 = toHex(s.mark('chunkHash', (self) => self.sha1()));
   else if (subVersion >= 0x73) {
     const ref = s.resource(true); // chunkHash, as a descriptor
     if (ref?.hash) sha1 = toHex(ref.hash);
@@ -543,17 +544,33 @@ export async function readPlan(
   readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, flags, s } = await open(bytes, inflate);
+  return readPlanStream(s, revision, flags, readers);
+}
+
+/**
+ * `readPlan` on a payload already open: what `editPlan` (`write-level.ts`)
+ * calls, with a tape on the serializer. `thingData`'s own stream gets a tape
+ * of its own when the outer one has one, kept in `planTapes`.
+ */
+export function readPlanStream(
+  s: Serializer,
+  revision: RevisionInfo,
+  flags: number,
+  readers: Map<string, PartReader> = partReaders(),
+): LevelParse {
   const streaming = revision.subVersion >= STREAMING_PLAN ? s.bool() : false;
   s.i32();
-  const inner = new Serializer(s.bytes(s.i32()), revision, flags);
+  const inner = new Serializer(s.mark('thingData', (self) => self.bytes(self.i32())), revision, flags);
+  if (s.tape) {
+    inner.tape = new Tape(inner.data);
+    planTapes.set(s.tape, inner.tape);
+  }
   // A plan can hold a world Thing -- 3 islands of the game's story chunks do --
   // and its WORLD part is read like an inner world of a level: its Things are
   // the part's value, not the plan's. Installed on the map the readers close
   // over, as `readLevel` does, and only where nothing installed one already.
   installWorldReader(readers);
-  const count = inner.i32();
-  const things: (Thing | undefined)[] = [];
-  for (let i = 0; i < count; i += 1) things.push(readThingRef(inner, readers));
+  const things = inner.list('things', (self) => readThingRef(self, readers));
   // ❗ **The array fills the blob exactly, and that is checked.** `thingData`
   // holds the Thing array and nothing else, so bytes left over mean a part
   // reader took the wrong number and the parse is wrong even though it finished.
@@ -564,6 +581,7 @@ export async function readPlan(
         'unread — a part reader consumed the wrong number of bytes',
     );
   }
+  inner.tape?.finish(inner.position);
   // What follows the Things is read to the payload's last byte, as `readLevel`
   // reads a level's; where it does not, the Things still come back.
   let inventory: PlanInventory | undefined;
@@ -585,6 +603,9 @@ export async function readPlan(
     ...(unreadTail === undefined ? {} : { unreadTail }),
   };
 }
+
+/** A plan's outer tape → the tape of its `thingData` stream. */
+export const planTapes = new WeakMap<Tape, Tape>();
 
 /**
  * Put a `WORLD` reader on the map the part readers close over, where none is: a
@@ -616,7 +637,7 @@ function readIsland(s: Serializer, plans: Uint8Array[], bounds: IslandBounds[]):
   const min = s.vector3();
   const max = s.vector3();
   bounds.push({ min, max });
-  plans.push(s.bytes(s.i32())); // planData
+  plans.push(s.mark('planData', (self) => self.bytes(self.i32())));
   readStreamingLists(s);
   readDependencyLists(s);
 }
@@ -655,6 +676,15 @@ export async function readChunkIslands(
   inflate: Inflate,
 ): Promise<{ revision: RevisionInfo; plans: Uint8Array[]; bounds: IslandBounds[] }> {
   const { revision, s } = await open(bytes, inflate);
+  return { revision, ...readChunkIslandsStream(s) };
+}
+
+/**
+ * `readChunkIslands` on a payload already open: what `editChunk`
+ * (`write-level.ts`) calls, with a tape on the serializer.
+ */
+export function readChunkIslandsStream(s: Serializer): { plans: Uint8Array[]; bounds: IslandBounds[] } {
+  const { revision } = s;
   const plans: Uint8Array[] = [];
   const bounds: IslandBounds[] = [];
   s.references((self) => readIsland(self, plans, bounds));
@@ -664,7 +694,7 @@ export async function readChunkIslands(
       `the chunk's island list left ${s.remaining} of ${s.data.length} bytes unread`,
     );
   }
-  return { revision, plans, bounds };
+  return { plans, bounds };
 }
 
 /**

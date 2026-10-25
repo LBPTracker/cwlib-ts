@@ -46,15 +46,14 @@ in [level-files.md](level-files.md), *Ported from Java, proven on no file*.
 
 ## Writing
 
-Java's one serializer writes every resource it reads, from its fields. Here a level is written
-back from the bytes it was read from, with three edits (*Writing a level*, level-files.md), and a
-sequencer `.plan` from values; what is missing:
+Java's one serializer writes every resource it reads, from its fields. Here a level, a plan and a
+streaming chunk are written back from the bytes they were read from, with a few edits (*Writing a
+level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
-- **A level from its values**: a field of a part changed and written, or a part added to a Thing —
-  every edit but a `PPos` matrix, the world's list and the Things in it.
-- **Any other resource written**: a plan other than a sequencer, a streaming chunk, a mesh, a
-  texture, a profile… — and so no `Resources.hashinate` either, which rewrites each dependency's
-  table.
+- **Things from their values**: a field of a part changed and written, or a part added to a Thing —
+  every edit but a `PPos` matrix, the list of Things and the Things in it.
+- **Any other resource written**: a mesh, a texture, a profile, an adventure… — and so no
+  `Resources.hashinate` either, which rewrites each dependency's table.
 
 ## Tools
 

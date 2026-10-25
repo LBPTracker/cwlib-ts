@@ -74,8 +74,8 @@ interface Frame {
   list?: ListSegment;
 }
 
-/** The writer's view of objects: substitutes, by the object they stand for. */
-export type Aliases = ReadonlyMap<TapeObject, TapeObject>;
+/** The writer's view of objects: substitutes, by the object they stand for; `null` writes a null reference. */
+export type Aliases = ReadonlyMap<TapeObject, TapeObject | null>;
 
 export class Tape {
   readonly data: Uint8Array;
@@ -85,6 +85,8 @@ export class Tape {
   private readonly stack: Frame[] = [{ body: this.root }];
   private last = 0;
   private pendingLabel: string | undefined;
+  /** Every mark, in stream order. */
+  readonly marks: MarkSegment[] = [];
 
   constructor(data: Uint8Array) {
     this.data = data;
@@ -170,7 +172,9 @@ export class Tape {
   /** The bytes between `start` and `end` are the field `label`. */
   mark(label: string, start: number, end: number): void {
     this.flush(start);
-    this.frame.body.push({ kind: 'mark', label, bytes: this.data.subarray(start, end) });
+    const mark: MarkSegment = { kind: 'mark', label, bytes: this.data.subarray(start, end) };
+    this.frame.body.push(mark);
+    this.marks.push(mark);
     this.last = end;
   }
 
@@ -197,7 +201,8 @@ const writeObject = (aliases: Aliases | undefined) => (w: Writer, object: TapeOb
 function writeBody(w: Writer, body: readonly Segment[], aliases: Aliases | undefined): void {
   const write = writeObject(aliases);
   const ref = (target: TapeObject | undefined): void => {
-    const object = target && (aliases?.get(target) ?? target);
+    const alias = target && aliases?.get(target);
+    const object = alias === null ? undefined : alias ?? target;
     w.reference(object, write, object?.id);
   };
   for (const segment of body) {

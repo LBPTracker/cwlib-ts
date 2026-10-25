@@ -317,7 +317,9 @@ export class Writer {
    * of its 340 LBP3 levels, 19 hold ids out of sequence -- `40980` as the 20th
    * object, gaps after it -- and only kept ids write them back byte for byte
    * (`tape.ts`, `dev/rewrite-levels.ts`). Any id is a valid one so long as no
-   * two objects share it.
+   * two objects share it, and **-1 is one**: 5,905 of the game's 44,089 chunks
+   * name their island `0xffffffff`, which `Serializer.reference` takes for an
+   * object like any other (steering/level-files.md, *Writing a level*).
    */
   reference<T extends object>(value: T | undefined, write: (self: Writer, value: T) => void, id?: number): void {
     if (!value) {
@@ -330,7 +332,7 @@ export class Writer {
       return;
     }
     let fresh = id;
-    if (fresh === undefined || fresh <= 0 || this.taken.has(fresh)) {
+    if (fresh === undefined || fresh === 0 || this.taken.has(fresh)) {
       while (this.taken.has(this.nextId)) this.nextId += 1;
       fresh = this.nextId;
       this.nextId += 1;
@@ -415,6 +417,12 @@ export interface ResourceOut {
   readonly compressionFlags: number;
   readonly payload: Uint8Array;
   readonly dependencies: readonly DependencyOut[];
+  /**
+   * False writes the payload as it is, with no chunk table: `isCompressed` 0,
+   * as every `CHKb` and island plan of the game's story levels is
+   * (steering/level-files.md, *Writing a level*). True by default.
+   */
+  readonly isCompressed?: boolean;
 }
 
 /** Raw chunk size. The game's own files are cut here; the last chunk is short. */
@@ -438,16 +446,17 @@ export async function writeResource(
   resource: ResourceOut,
   deflate: Deflate,
 ): Promise<Uint8Array> {
-  const { magic, revision, compressionFlags, payload, dependencies } = resource;
+  const { magic, revision, compressionFlags, payload, dependencies, isCompressed = true } = resource;
   if (magic.length !== 4) throw new WriterError(`magic ${JSON.stringify(magic)} is not 4 bytes`);
 
   const chunks: { deflated: Uint8Array; rawSize: number }[] = [];
-  for (let at = 0; at < payload.length; at += CHUNK_SIZE) {
+  for (let at = 0; isCompressed && at < payload.length; at += CHUNK_SIZE) {
     const raw = payload.subarray(at, Math.min(at + CHUNK_SIZE, payload.length));
     chunks.push({ deflated: await deflate(raw), rawSize: raw.length });
   }
 
-  let size = 0x16 + chunks.length * 4;
+  // Uncompressed, the payload follows the `isCompressed` byte at 0x11 directly.
+  let size = isCompressed ? 0x16 + chunks.length * 4 : 0x12 + payload.length;
   for (const chunk of chunks) size += chunk.deflated.length;
   const depsAt = size;
   for (const dependency of dependencies) {
@@ -469,10 +478,16 @@ export async function writeResource(
   view.setUint16(12, revision.branchId, false);
   view.setUint16(14, revision.branchRevision, false);
   out[0x10] = compressionFlags;
-  out[0x11] = 1; // isCompressed
-  view.setUint16(0x12, 1, false); // the flag that is 0x0001 in every file seen
-  view.setUint16(0x14, chunks.length, false);
-  let at = 0x16;
+  out[0x11] = isCompressed ? 1 : 0;
+  let at = 0x12;
+  if (isCompressed) {
+    view.setUint16(0x12, 1, false); // the flag that is 0x0001 in every file seen
+    view.setUint16(0x14, chunks.length, false);
+    at = 0x16;
+  } else {
+    out.set(payload, at);
+    at += payload.length;
+  }
   for (const chunk of chunks) {
     // ⚠️ Both sizes are u16, which is why a chunk is 0x8000 raw: 0x10000 would
     // not fit, and a chunk that deflates larger than 0xffff cannot be written.

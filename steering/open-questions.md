@@ -81,10 +81,11 @@ the rest. What reads it — the quest log, the objective UI — would say what i
 
 ## 66. Whether the game opens an edited level
 
-A level written with no edit is the game's own bytes (*Writing a level*, level-files.md), so the
-game opens it. An edited one has never been loaded: whether the game minds a removed Thing still
-in the stream outside the world, two Things with one uid after a copy, or ids out of its own
-numbering is not known. **What would settle it**: move, remove and copy Things in a level of the
+A level, plan or chunk written with no edit is the game's own bytes (*Writing a level*,
+level-files.md), so the game opens it. An edited one has never been loaded: whether the game minds
+a removed Thing still in the stream outside the world, two Things with one uid after a copy, ids
+out of its own numbering, or an island whose bounds and dependency lists no longer match its plan
+is not known. **What would settle it**: move, remove and copy Things in a level of the
 corpus with `write-level.ts`, put it in a save and open it in the game.
 
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's

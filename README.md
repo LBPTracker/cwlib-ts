@@ -35,7 +35,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`things/`** | |
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
 | `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
-| `write-level.ts` | a level written back byte for byte, with Things removed, added from another level or moved |
+| `write-level.ts` | a level, plan or streaming chunk written back byte for byte, with Things removed, added from another file or moved |
 | **`resources/`** | |
 | `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents (and their handedness from the UVs, `uvHandedness`), the softbody weight, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
