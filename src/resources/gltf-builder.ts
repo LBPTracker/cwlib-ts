@@ -23,6 +23,11 @@ export interface GltfOptions {
   readonly materials?: ReadonlyMap<string, GltfMaterial>;
   /** A material's name where `materials` has none; by default `g<GUID>` or its hash in hex. */
   readonly materialName?: (material: ResourceRef) => string | undefined;
+  /**
+   * Keys a second a material's texture animation plays at, which the file does
+   * not say: 30 by default, cwlib's `FromMaterialAnimation`.
+   */
+  readonly materialKeysPerSecond?: number;
 }
 
 /** cwlib's `TextureWrap` as a glTF wrap: 1 repeat, 2 mirrored repeat, the clamps to the edge. */
@@ -65,6 +70,8 @@ export class GltfBuilder {
   private readonly materials: Record<string, unknown>[] = [];
   private readonly materialIndex = new Map<string, number>();
   private readonly extensions = new Set<string>();
+  /** The materials' texture animations, through `KHR_animation_pointer`. */
+  private readonly animations: Record<string, unknown>[] = [];
 
   private readonly options: GltfOptions;
 
@@ -114,6 +121,39 @@ export class GltfBuilder {
     return this.accessor(this.view(bytesOf(narrow), ELEMENT_ARRAY_BUFFER), narrow instanceof Uint16Array ? UNSIGNED_SHORT : UNSIGNED_INT, 'SCALAR', narrow.length);
   }
 
+  /**
+   * A texture's scale and offset keyed over time, as an animation of its
+   * `KHR_texture_transform` through `KHR_animation_pointer` -- what cwlib's
+   * `FromMaterialAnimation` does for a material's first animation, here for
+   * each animated sample a material exports, offset and scale each only where
+   * they move. `path` is the texture info's JSON pointer.
+   */
+  private animateTexture(texture: GltfTexture, path: string, name: string): void {
+    const keys = texture.uvKeys;
+    if (!keys || keys.length < 2) return;
+    const moves = texture.uvKeysAnimated ?? 0xf;
+    const perSecond = this.options.materialKeysPerSecond ?? 30;
+    const time = this.floats(Float32Array.from(keys, (_, k) => k / perSecond), 'SCALAR', undefined, true);
+    const channels: Record<string, unknown>[] = [];
+    const samplers: Record<string, unknown>[] = [];
+    for (const [property, at] of [['scale', 0], ['offset', 2]] as const) {
+      if ((moves & (3 << at)) === 0) continue;
+      const values = new Float32Array(keys.length * 2);
+      keys.forEach((key, k) => {
+        values[k * 2] = key[at]!;
+        values[k * 2 + 1] = key[at + 1]!;
+      });
+      samplers.push({ input: time, output: this.floats(values, 'VEC2', undefined), interpolation: 'LINEAR' });
+      channels.push({
+        sampler: samplers.length - 1,
+        target: { path: 'pointer', extensions: { KHR_animation_pointer: { pointer: `${path}/extensions/KHR_texture_transform/${property}` } } },
+      });
+    }
+    if (channels.length === 0) return;
+    this.extensions.add('KHR_animation_pointer');
+    this.animations.push({ name, channels, samplers });
+  }
+
   private textureInfo(texture: GltfTexture): Record<string, unknown> {
     let image = this.imageIndex.get(texture.png);
     if (image === undefined) {
@@ -131,7 +171,8 @@ export class GltfBuilder {
       index = this.textures.push({ source: image, sampler }) - 1;
       this.textureIndex.set(key, index);
     }
-    const transform = textureTransform(texture.uvTransform);
+    // An animated transform is written even where it starts at the identity, for the pointer to land on.
+    const transform = textureTransform(texture.uvTransform) ?? (texture.uvKeys ? { offset: [0, 0], scale: [1, 1] } : undefined);
     if (transform) this.extensions.add('KHR_texture_transform');
     return {
       index,
@@ -168,6 +209,12 @@ export class GltfBuilder {
           ...(made.doubleSided ? { doubleSided: true } : {}),
           ...(made.alphaCutoff !== undefined ? { alphaMode: 'MASK', alphaCutoff: made.alphaCutoff } : {}),
         });
+      if (made) {
+        const at = `/materials/${index}`;
+        if (made.baseColorTexture) this.animateTexture(made.baseColorTexture, `${at}/pbrMetallicRoughness/baseColorTexture`, made.name);
+        if (made.normalTexture) this.animateTexture(made.normalTexture, `${at}/normalTexture`, made.name);
+        if (made.occlusionTexture) this.animateTexture(made.occlusionTexture, `${at}/occlusionTexture`, made.name);
+      }
       this.materialIndex.set(key, index);
     }
     return index;
@@ -175,10 +222,12 @@ export class GltfBuilder {
 
   /** The `.glb`: the scene's own objects, and everything the builder made. */
   glb(generator: string, scene: Record<string, unknown>): Uint8Array {
+    const animations = [...((scene.animations as unknown[] | undefined) ?? []), ...this.animations];
     const json = {
       asset: { version: '2.0', generator },
       ...(this.extensions.size > 0 ? { extensionsUsed: [...this.extensions] } : {}),
       ...scene,
+      ...(animations.length > 0 ? { animations } : {}),
       ...(this.materials.length > 0 ? { materials: this.materials } : {}),
       ...(this.textures.length > 0 ? { textures: this.textures, images: this.images, samplers: this.samplers } : {}),
       ...(this.accessors.length > 0 ? { accessors: this.accessors } : {}),

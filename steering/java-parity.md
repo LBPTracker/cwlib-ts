@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 53 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 54 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -66,9 +66,6 @@ level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
 ## Tools
 
-- **glTF** (`MeshExporter`): a material's animation (`FromMaterialAnimation`) — a test in Java
-  rather than an export: a material name written in (`cosmos_pixels`), one triangle, and the first
-  parameter animation as a texture offset through `KHR_animation_pointer`.
 - **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
   `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
 - **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).

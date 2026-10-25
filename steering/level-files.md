@@ -1006,6 +1006,13 @@ caller gives (`materialName`).
   - A sample's UV matrix goes in as `KHR_texture_transform` (151 rotated or skewed); a shear has
     no place there and is lost, on 4. Wrap 1 is `REPEAT`, 2 `MIRRORED_REPEAT`, the rest
     `CLAMP_TO_EDGE`. A cube or volume texture has no glTF image and is left out.
+  - **A sample whose box's first parameter animation has keys** (params 0–3, scale then offset,
+    *The game's materials*) is an animation of its `KHR_texture_transform` through
+    `KHR_animation_pointer`: one channel for the scale and one for the offset, each only where its
+    components move, one key per row at 30 a second — cwlib's rate in `FromMaterialAnimation`;
+    the file has none. ✔ 154 of the game's 5,941 meshes have one, 201 animations and 204 channels,
+    and every one validates with no error or warning (the Khronos validator, 2026-10-25; it says
+    its support for the pointer is incomplete). `GltfOptions.materialKeysPerSecond` changes the rate.
 
 ## Shapes — `PShape` and `PGeneratedMesh`
 

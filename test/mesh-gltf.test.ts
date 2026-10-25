@@ -170,3 +170,38 @@ test("sack_boy.mol comes back out of its .glb whole", async (t) => {
   assert.ok(json.materials!.every((m) => m.name.endsWith('.gmat')), JSON.stringify(json.materials));
   for (const a of accesses) await a.close();
 });
+
+test("wall_light.mol's scrolling texture becomes an animation of its texture transform", async (t) => {
+  if (GAME === '' || !existsSync(path.join(GAME, FARCS[0]))) return t.skip(NO_GAME);
+  const accesses = await Promise.all(FARCS.map((f) => openFileAccess(path.join(GAME, f))));
+  const game = await openGame({
+    fileDB: new Uint8Array(await readFile(path.join(GAME, 'output', 'orbisguids.map'))),
+    remap: new Uint8Array(await readFile(path.join(GAME, 'output', 'orbisguids.remap'))),
+    farcs: accesses.map((access, i) => ({ name: FARCS[i], access })),
+    loose: looseFiles(GAME),
+  });
+  const mesh = await readMesh((await game.resolve({ kind: 'guid', guid: 278140, type: 2 }))!, nodeInflate);
+  const materials = await gltfMaterials(mesh, { resolve: (d) => game.resolve(d), inflate: nodeInflate, deflate: nodeDeflate });
+  const animated = [...materials.values()].flatMap((m) => [m.baseColorTexture, m.normalTexture, m.occlusionTexture]).find((x) => x?.uvKeys);
+  assert.ok(animated?.uvKeys, 'a sample with keys');
+  const { json, values } = readGlb(meshToGlb(mesh, { materials }));
+  const raw = json as unknown as {
+    animations: { channels: { sampler: number; target: { path: string; extensions: { KHR_animation_pointer: { pointer: string } } } }[]; samplers: { input: number; output: number }[] }[];
+  };
+  assert.ok(json.extensionsUsed!.includes('KHR_animation_pointer'));
+  const [animation] = raw.animations;
+  const channel = animation!.channels[0]!;
+  assert.equal(channel.target.path, 'pointer');
+  const pointer = channel.target.extensions.KHR_animation_pointer.pointer;
+  assert.match(pointer, /^\/materials\/\d+\/.*\/extensions\/KHR_texture_transform\/(offset|scale)$/);
+  // The property the pointer names is in the document, and the keys are the box's, at 30 a second.
+  const property = pointer.split('/').slice(1).reduce((at: any, key) => at?.[/^\d+$/.test(key) ? Number(key) : key], json);
+  assert.ok(Array.isArray(property), pointer);
+  const sampler = animation!.samplers[channel.sampler]!;
+  const times = values(sampler.input);
+  assert.equal(times.length, animated.uvKeys.length);
+  assert.ok(Math.abs(times[1]! - 1 / 30) < 1e-6);
+  const at = pointer.endsWith('offset') ? 2 : 0;
+  assert.deepEqual(values(sampler.output).slice(0, 2), [...animated.uvKeys[0]!.slice(at, at + 2)].map(Math.fround));
+  for (const a of accesses) await a.close();
+});

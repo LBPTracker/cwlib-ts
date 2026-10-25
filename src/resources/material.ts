@@ -296,6 +296,15 @@ export interface SampleSummary {
    * (`dev/uv-census.ts`, steering/level-files.md).
    */
   readonly uvTransform: readonly [number, number, number, number, number, number];
+  /**
+   * The box's first parameter animation where it has keys and the sample is
+   * the scale-and-offset form: `[scaleU, scaleV, offsetU, offsetV]` per key,
+   * params 0--3 (steering/level-files.md, *The game's materials*). At how many
+   * keys a second the game plays them is not in the file.
+   */
+  readonly uvKeys?: readonly (readonly [number, number, number, number])[];
+  /** Which of the four `uvKeys` move: bit i, component i. */
+  readonly uvKeysAnimated?: number;
   /** `TextureWrap` of the slot, 1 wrap … 5 clamp. */
   readonly wrapS: number;
   readonly wrapT: number;
@@ -349,8 +358,10 @@ function sampleOf(m: GfxMaterial, index: number): SampleSummary {
   const uvTransform: SampleSummary['uvTransform'] = box.subType === 1
     ? [p[0], p[1], p[2], p[3], p[6], p[7]]
     : [p[0], 0, p[2], 0, p[1], p[3]];
+  const animated = box.subType !== 1 && box.anim.keys.length > 0;
   return {
     box: index, slot, texture: m.textures[slot], uvChannel: box.params[4], uvTransform,
+    ...(animated ? { uvKeys: box.anim.keys, uvKeysAnimated: box.anim.componentsAnimated } : {}),
     wrapS: m.wrapS[slot] ?? 1, wrapT: m.wrapT[slot] ?? 1,
   };
 }

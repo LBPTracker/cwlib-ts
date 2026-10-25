@@ -50,6 +50,9 @@ export interface GltfTexture {
   readonly texCoord: number;
   /** `[a, b, c, d, e, f]`: `u' = a·u + b·v + c`, `v' = d·u + e·v + f` (`SampleSummary`). */
   readonly uvTransform: readonly [number, number, number, number, number, number];
+  /** The sample's scale and offset keyed over time, and which of the four move (`SampleSummary.uvKeys`). */
+  readonly uvKeys?: readonly (readonly [number, number, number, number])[];
+  readonly uvKeysAnimated?: number;
   /** cwlib's `TextureWrap`, 1 wrap … 5 clamp. */
   readonly wrapS: number;
   readonly wrapT: number;
@@ -118,6 +121,7 @@ export async function gltfMaterials(mesh: WithMaterials, source: GltfMaterialSou
     const png = await image(sample.texture, bump);
     return png && {
       png, name: nameOf(sample.texture), texCoord: sample.uvChannel, uvTransform: sample.uvTransform,
+      ...(sample.uvKeys ? { uvKeys: sample.uvKeys, uvKeysAnimated: sample.uvKeysAnimated } : {}),
       wrapS: sample.wrapS, wrapT: sample.wrapT,
     };
   };
