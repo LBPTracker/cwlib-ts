@@ -4,22 +4,38 @@ import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader } from '../thing.ts';
 
 /** `PMaterialTweak`: the per-Thing material overrides. */
-export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PMaterialTweak`, kept: how a material tweaker changes a shape's physics and its look. */
+export interface MaterialTweakPart {
+  readonly hideInPlayMode: boolean;
+  readonly restitution: number;
+  readonly frictionScale: number;
+  readonly grabbability: number;
+  readonly stickiness: number;
+  readonly isProjectile: boolean;
+  /** Whether the tweaked shape casts a shadow, from version 0x3ed or subVersion 6. */
+  readonly hasShadow: boolean;
+  /** Whether it is drawn without its bevel, from subVersion 0x34. */
+  readonly noBevel: boolean;
+  readonly zSlice: boolean;
+  readonly climbability: boolean;
+}
+
+export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, PartReader>): MaterialTweakPart {
   const { version, subVersion } = s.revision;
   if (version < 0x2c4) s.f32(); // activation
-  s.bool(); // hideInPlayMode
+  const hideInPlayMode = s.bool();
   if (version < 0x2cd) s.i32(); // colorIndex
-  if (version > 0x2b6) s.f32(); // restitution
-  if (version > 0x30c) s.f32(); // frictionScale
+  const restitution = version > 0x2b6 ? s.f32() : 0;
+  const frictionScale = version > 0x30c ? s.f32() : 1;
   if (version >= 0x2b7 && version < 0x343) {
     s.u8();
     s.u8();
   }
-  if (version > 0x342) s.u8(); // grabbability
+  const grabbability = version > 0x342 ? s.u8() : 0;
   if (version > 0x3bc) s.u8(); // grabFilter
-  if (version > 0x342) s.u8(); // stickiness
+  const stickiness = version > 0x342 ? s.u8() : 0;
   if (version > 0x2b8) s.bool(); // noAutoDestruct
-  if (subVersion > 0x2) s.bool(); // isProjectile
+  const isProjectile = subVersion > 0x2 ? s.bool() : false;
   if (version >= 0x2df && version < 0x327) readThingRef(s, readers);
   if (version > 0x356) s.bool(); // disablePhysicsAudio
   const vita = vitaRevision(s.revision);
@@ -34,10 +50,10 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
   if (vita >= 0x6c) s.bool(); // touchabilityInvisible
   if (vita >= 0x7) s.wstr(); // name
   if (subVersion > 0x3) s.bool(); // isUsableByPoppetAudio
-  if (version > 0x3ec || subVersion > 5) s.bool(); // hasShadow
-  if (subVersion > 0x33) s.bool(); // noBevel
-  if (subVersion > 0xdb) s.bool(); // zSlice
-  if (subVersion > 0x48) s.bool(); // climbability
+  const hasShadow = version > 0x3ec || subVersion > 5 ? s.bool() : true;
+  const noBevel = subVersion > 0x33 ? s.bool() : false;
+  const zSlice = subVersion > 0xdb ? s.bool() : false;
+  const climbability = subVersion > 0x48 ? s.bool() : false;
   if (subVersion > 0x8c) {
     s.bool(); // ppGrab
     s.u8(); // ppTweakability
@@ -49,4 +65,5 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
     if (subVersion >= 0x92 && subVersion < 0x13d) s.i32();
   }
   if (subVersion > 0xa7) s.bool(); // ppMaterialMergeable
+  return { hideInPlayMode, restitution, frictionScale, grabbability, stickiness, isProjectile, hasShadow, noBevel, zSlice, climbability };
 }

@@ -84,7 +84,7 @@ import { readWindTweak } from './parts/wind-tweak.ts';
 import { readWormhole } from './parts/wormhole.ts';
 import { readYellowHead } from './parts/yellowhead.ts';
 
-export { readAudioWorld } from './parts/audio-world.ts';
+export { readAudioWorld, type AudioWorldPart } from './parts/audio-world.ts';
 export { readBody, type BodyPart } from './parts/body.ts';
 export { readCameraTweak } from './parts/camera-tweak.ts';
 export { readCheckpoint, type CheckpointPart } from './parts/checkpoint.ts';
@@ -97,6 +97,10 @@ export { readCreature } from './parts/creature.ts';
 export { readDecorations, type Decoration } from './parts/decorations.ts';
 export { readEmitter, type EmittedObjectSource, type EmitterPart } from './parts/emitter.ts';
 export { readEnemy, type EnemyPart } from './parts/enemy.ts';
+export { readConnectorHook, type ConnectorHookPart } from './parts/connector-hook.ts';
+export { readPocketItem, type PocketItemPart } from './parts/pocket-item.ts';
+export { readTagSynchroniser, type TagSynchronizerPart } from './parts/tag-synchronizer.ts';
+export { readWindTweak, type WindTweakPart } from './parts/wind-tweak.ts';
 export { readFader, type FaderPart } from './parts/fader.ts';
 export { readMetadata, type MetadataPart } from './parts/metadata.ts';
 export { readPowerUp, type PowerUpPart } from './parts/power-up.ts';
@@ -118,7 +122,7 @@ export {
   type LevelLighting,
   type LevelSettingsPart,
 } from './parts/level-settings.ts';
-export { readMaterialTweak } from './parts/material-tweak.ts';
+export { readMaterialTweak, type MaterialTweakPart } from './parts/material-tweak.ts';
 export { readMicrochip, type Component, type Microchip } from './parts/microchip.ts';
 export { readNpc } from './parts/npc.ts';
 export { readPhysicsTweak } from './parts/physics-tweak.ts';
@@ -131,7 +135,7 @@ export { readSpriteLight, type SpriteLightPart } from './parts/sprite-light.ts';
 export { readStickers, type Decal, type StickersPart } from './parts/stickers.ts';
 export { readSwitch, type SwitchPart, type SwitchTarget } from './parts/switch.ts';
 export { readSwitchInput } from './parts/switch-input.ts';
-export { readSwitchKey } from './parts/switch-key.ts';
+export { readSwitchKey, type SwitchKeyPart } from './parts/switch-key.ts';
 export { readTrigger, type TriggerPart } from './parts/trigger.ts';
 export { readYellowHead } from './parts/yellowhead.ts';
 export { SerializerError } from '../io/serializer.ts';

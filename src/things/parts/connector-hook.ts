@@ -10,27 +10,46 @@ import { Serializer } from '../../io/serializer.ts';
  * read always; measured 2026-10-22, `sack_town.bin` (subVersion 0xc8) read the
  * next Thing's UID as `hookType` and failed 8 bytes on, at 367139.
  */
-export function readConnectorHook(s: Serializer): void {
+/** `PConnectorHook`, kept: how a hook connects and moves. */
+export interface ConnectorHookPart {
+  readonly mode: number;
+  readonly inputAction: number;
+  readonly poweredSpeed: number;
+  readonly accel: number;
+  readonly decel: number;
+  readonly delay: number;
+  readonly reverse: boolean;
+  readonly angle: number;
+  readonly friction: number;
+  readonly pivot?: readonly [number, number, number, number];
+  readonly hookType: number;
+}
+
+export function readConnectorHook(s: Serializer): ConnectorHookPart {
   const { subVersion } = s.revision;
-  s.i32(); // mode
+  const mode = s.i32();
   if (subVersion <= 0xbb) s.i32();
-  s.i32(); // inputAction
+  const inputAction = s.i32();
   if (subVersion <= 0xbd) s.skipVector3();
-  s.f32(); // poweredSpeed
-  s.f32(); // accel
-  s.f32(); // decel
-  if (subVersion > 0x7b) s.f32(); // delay
-  if (subVersion > 0x7c) s.bool(); // reverse
+  const poweredSpeed = s.f32();
+  const accel = s.f32();
+  const decel = s.f32();
+  const delay = subVersion > 0x7b ? s.f32() : 0;
+  const reverse = subVersion > 0x7c ? s.bool() : false;
+  let angle = 0;
+  let friction = 0;
+  let pivot: [number, number, number, number] | undefined;
   if (subVersion > 0xfd) {
     s.bool(); // tryLatch
     s.bool(); // clamped
     s.i32(); // collidable
-    s.f32(); // angle
-    s.f32(); // friction
-    s.skipVector4(); // pivot
+    angle = s.f32();
+    friction = s.f32();
+    pivot = s.vector4();
   }
   if (subVersion >= 0xff && subVersion < 0x15d) s.i32();
   if (subVersion > 0x103) s.f32(); // spinDamping
   if (subVersion > 0x13d) s.bool(); // audioEnable
-  if (subVersion > 0x14e) s.i32(); // hookType
+  const hookType = subVersion > 0x14e ? s.i32() : 0;
+  return { mode, inputAction, poweredSpeed, accel, decel, delay, reverse, angle, friction, pivot, hookType };
 }

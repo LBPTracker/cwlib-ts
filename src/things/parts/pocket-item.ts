@@ -13,19 +13,28 @@ import { Serializer } from '../../io/serializer.ts';
  * rather than dropped because a silent misparse of the wrong branch is exactly
  * what the Thing marker cannot catch until the *next* Thing.
  */
-export function readPocketItem(s: Serializer): void {
+/** `PPocketItem`, kept: a pocket item's flags, power-up and lifetime. */
+export interface PocketItemPart {
+  readonly flags: number;
+  readonly powerUpType: number;
+  readonly aimModifier: number;
+  readonly lifetime: number;
+}
+
+export function readPocketItem(s: Serializer): PocketItemPart {
   const { subVersion } = s.revision;
   if (subVersion < 0x15) {
     s.str();
     s.u16();
   }
   if (subVersion >= 0x15 && subVersion < 0x14d) s.u16();
-  s.i16(); // flags
+  const flags = s.i16();
   if (subVersion >= 0x14 && subVersion < 0x60) s.resource(true); // plan
   if (subVersion >= 0x1e && subVersion < 0x78) s.u8();
   if (subVersion >= 0x2e && subVersion < 0x14d) s.u8();
   if (subVersion >= 0x2e && subVersion < 0x78) s.u8();
-  if (subVersion > 0x3d) s.i8(); // powerUpType
-  if (subVersion > 0x3f) s.f32(); // aimModifier
-  if (subVersion > 0x55) s.i32(); // lifetime
+  const powerUpType = subVersion > 0x3d ? s.i8() : 0;
+  const aimModifier = subVersion > 0x3f ? s.f32() : 0;
+  const lifetime = subVersion > 0x55 ? s.i32() : 0;
+  return { flags, powerUpType, aimModifier, lifetime };
 }

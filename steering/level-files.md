@@ -897,6 +897,14 @@ bodies, 246 faders — `fadeAmount` 1 on 244 and 0.5 on 2, which end is opaque n
 hint boxes (2048 × 1024 × 800 the first), 4,431 streaming data and one script name, `handle`.
 Over the FARCs' 18,146 levels and plans, each Thing once: no `REF` at all, and 13 `METADATA`,
 every key 0 and no icon, 12 of type 0 and one `BACKGROUND` (`0x100`).
+
+From 0.4.30 seven more: `SwitchKeyPart` (a key's colour, name, hidden, dummy — the packed byte
+from version 0x3ed split into its 0x80 and 0x40), `TagSynchronizerPart`, `ConnectorHookPart`,
+`AudioWorldPart` (the FMOD event's path, volume, pitch, falloff, play mode), `WindTweakPart`,
+`PocketItemPart` and `MaterialTweakPart` (physics, and `hasShadow`, `noBevel`, `zSlice` — how
+the tweaked shape is drawn). Needlepoint Peaks: 313 keys (`bot follow`…), 154 sounds, each named
+(`spots/lbp2/contraptions/winding_ratchet_loop`…), 287 material tweakers, 2 of them shadowless and
+none without its bevel, 9 winds and one connector hook.
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the
