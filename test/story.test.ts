@@ -48,3 +48,26 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   assert.equal(things, 9214);
   assert.equal(shapes, 2521);
 });
+
+const ADVENTURES = path.join(GAME, 'gamedata', 'lbp3', 'official_adventure_levels');
+
+test("titan_2 and game_outro: every island of every chunk opens, the world nested in one too", async (t) => {
+  if (!GAME || !existsSync(ADVENTURES)) return t.skip(NO_GAME);
+  // These held the story's last islands that would not open: three of titan_2's chunks carry a
+  // plan with a world Thing in it (question 57), and six of game_outro's read short.
+  const levels: Record<string, string[]> = {
+    '03_ziggurat/06_titan_2': ['titan_2.farc', 'titan_2_container.farc'],
+    '04_bunkum/c13_game_outro': ['game_outro.farc', 'game_outro_a.farc', 'game_outro_b.farc'],
+  };
+  let chunks = 0;
+  for (const [dir, names] of Object.entries(levels)) {
+    for (const name of names) {
+      for (const { bytes } of await readFar(new Uint8Array(await readFile(path.join(ADVENTURES, dir, name))))) {
+        if (magicOf(bytes) !== 'CHKb') continue;
+        chunks += 1;
+        assert.deepEqual((await readThings(bytes, nodeInflate)).problems ?? [], [], `${dir}/${name}`);
+      }
+    }
+  }
+  assert.equal(chunks, 1669);
+});

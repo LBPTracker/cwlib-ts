@@ -112,7 +112,8 @@ branch, into one that stands between a reader and a song. What is left:
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
   `sack_town.bin`. Two levels that open end one byte past `RLevel`'s last field, `pod2.bin` and
   `sack_town.bin` at subVersions `0xe2` and `0xc8`: a field cwlib's gates do not have, where is
-  not known (*`readLevel` reads to the end* in [level-files.md](level-files.md)). In the story chunks, 9 islands (`dev/story-census.ts`): 3 of `titan_2` with a world nested in an island, 6 of `game_outro`. Plans: 6 since 2026-10-25 — a
+  not known (*`readLevel` reads to the end* in [level-files.md](level-files.md)). In the story chunks, none since 2026-10-24: every island of the 41,741 chunks opens
+  (*Streaming levels* in [level-files.md](level-files.md)). Plans: 6 since 2026-10-25 — a
   live-streaming-choice switch and five Move DLC palette plans that cwlib reads short in the same
   place (*`playerMode` at 0x3eb* in [level-files.md](level-files.md), which also has whether
   `playerMode` belongs to 0x3eb or to the crossplay build). Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set

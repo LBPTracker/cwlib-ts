@@ -301,8 +301,10 @@ gates in the island are bracketed by measurement — absent at `0x1ab`, present 
 file here sits between. `HUD_ELEM` got its reader from cwlib (2 islands), and a plan now reads a
 `WORLD` part the way a level reads an inner world — **all of `PWorld`, not only up to `things`**,
 because the world Thing's other parts follow it; the 3 islands holding one read since 0.2.73
-(question 57 in [answered-questions.md](answered-questions.md)). Left over: 6 islands of
-`game_outro` read short.
+(question 57 in [answered-questions.md](answered-questions.md)). ✔ **None is left**: all 41,741
+chunks of the 88 archives read with no island refused (`dev/story-census.ts`, 2026-10-24 and
+2026-10-25), `game_outro`'s six that had read short among them; `test/story.test.ts` holds
+`titan_2`'s 757 chunks and `game_outro`'s 912 to it.
 
 ⚠️ **An island that will not open is reported, not swallowed.** Islands are independent resources
 in one list, so one failing says nothing about its neighbours: `LevelParse.problems` carries them
