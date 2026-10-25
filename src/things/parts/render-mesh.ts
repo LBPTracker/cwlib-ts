@@ -31,6 +31,8 @@ export interface RenderMeshPart {
    */
   readonly visibilityFlags: number;
   readonly poppetRenderScale: number;
+  readonly parentDistanceFront?: number;
+  readonly parentDistanceSide?: number;
 }
 
 const channel = (x: number): number => Math.max(0, Math.min(255, Math.round(x * 255)));
@@ -38,6 +40,8 @@ const channel = (x: number): number => Math.max(0, Math.min(255, Math.round(x * 
 /** `PRenderMesh`: the mesh a Thing draws, its animation and its visibility. */
 export function readRenderMesh(s: Serializer, readers: ReadonlyMap<string, PartReader>): RenderMeshPart {
   const { version } = s.revision;
+  let parentDistanceFront: number | undefined;
+  let parentDistanceSide: number | undefined;
   const mesh = s.resource();
   const boneThings: (Thing | undefined)[] = [];
   const count = s.count();
@@ -63,11 +67,12 @@ export function readRenderMesh(s: Serializer, readers: ReadonlyMap<string, PartR
   const visibilityFlags = version > 0x2e2 ? s.u8() : 0x2 | (s.bool() ? 0x1 : 0);
   const poppetRenderScale = s.f32();
   if (version > 0x1f5 && version < 0x34d) {
-    s.f32(); // parentDistanceFront
-    s.f32(); // parentDistanceSide
+    parentDistanceFront = s.f32();
+    parentDistanceSide = s.f32();
   }
   return {
     mesh, boneThings, anim, animPos, animSpeed, animLoop, loopStart, loopEnd, editorColor,
     castShadows, rttEnable, visibilityFlags, poppetRenderScale,
+  parentDistanceFront, parentDistanceSide,
   };
 }

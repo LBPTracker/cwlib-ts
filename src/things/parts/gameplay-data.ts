@@ -8,12 +8,20 @@ import { Serializer, type ResourceRef } from '../../io/serializer.ts';
  * ⚠️ The painting at the end is behind a **bool it reads first**, not a
  * revision gate — `hasPainting` decides whether a resource follows.
  */
-function readEggLink(s: Serializer): ResourceRef | undefined {
+export interface EggLink {
+  readonly plan?: ResourceRef;
+  /** Version `0x23c` on. */
+  readonly shareable?: boolean;
+  /** Version `0x3e1` on, when its bool says so: a descriptor. */
+  readonly painting?: ResourceRef;
+}
+
+function readEggLink(s: Serializer): EggLink {
   const { version } = s.revision;
-  const plan = s.resource(); // plan
-  if (version > 0x23b) s.bool(); // shareable
-  if (version > 0x3e0 && s.bool()) s.resource(true); // painting
-  return plan;
+  const plan = s.resource();
+  const shareable = version > 0x23b ? s.bool() : undefined;
+  const painting = version > 0x3e0 && s.bool() ? s.resource(true) : undefined;
+  return { plan, shareable, painting };
 }
 
 /** `PGameplayData`: what a Thing is worth when collected. steering/level-files.md, *Prize bubbles*. */
@@ -23,23 +31,28 @@ export interface GameplayDataPart {
   readonly fluffCost: number;
   /** The plan the Thing gives when collected: a prize bubble's prize. */
   readonly prize?: ResourceRef;
+  /** The prize's link: the plan, whether it may be shared, and a painting. */
+  readonly eggLink?: EggLink;
+  /** The slot the Thing names: cwlib's `SlotID`. */
+  readonly slot?: { readonly slotType: number; readonly slotNumber: number };
+  readonly treasureType?: number;
+  readonly treasureCount?: number;
 }
 
 export function readGameplayData(s: Serializer): GameplayDataPart {
   const { version, subVersion } = s.revision;
+  let treasureType: number | undefined;
+  let treasureCount: number | undefined;
   let gameplayType = -1;
   if (subVersion >= 0xef && version > 0x2d0) gameplayType = s.i32();
   const fluffCost = s.s32();
   // A reference: a second Thing naming the same link gets the plan read the first time.
-  const prize = s.reference(readEggLink);
-  s.reference((self) => {
-    self.i32(); // SlotID.slotType
-    self.u32(); // SlotID.slotNumber
-  });
+  const eggLink = s.reference(readEggLink);
+  const slot = s.reference((self) => ({ slotType: self.i32(), slotNumber: self.u32() }));
   if (version >= 0x2d1 && subVersion < 0xef) gameplayType = s.i32();
   if (subVersion >= 0xf3) {
-    s.i32(); // treasureType
-    s.i16(); // treasureCount
+    treasureType = s.i32();
+    treasureCount = s.i16();
   }
-  return { gameplayType, fluffCost, prize: prize ?? undefined };
+  return { gameplayType, fluffCost, prize: eggLink?.plan, eggLink, slot, treasureType, treasureCount };
 }

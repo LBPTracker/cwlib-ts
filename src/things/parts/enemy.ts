@@ -18,11 +18,19 @@ export interface EnemyPart {
   readonly animSpeed: number;
   readonly smokeColor: number;
   readonly smokeBrightness: number;
+  readonly sourcePlayerNumber?: number;
+  readonly newWalkConstraintMass?: boolean;
+  readonly touchSensitive?: boolean;
+  readonly touchType?: number;
 }
 
 /** `PEnemy`: one part of a creature. */
 export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader>): EnemyPart {
   const { version } = s.revision;
+  let sourcePlayerNumber: number | undefined;
+  let newWalkConstraintMass: boolean | undefined;
+  let touchSensitive: boolean | undefined;
+  let touchType: number | undefined;
   const partType = version >= 0x15d ? s.i32() : 0;
   const radius = version >= 0x16d ? s.f32() : 0;
   const snapVertex = version >= 0x19f ? s.i32() : 0;
@@ -34,12 +42,15 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
     animThing = readThingRef(s, readers);
     animSpeed = s.f32();
   }
-  if (version >= 0x246) s.i32(); // sourcePlayerNumber
-  if (version >= 0x265) s.bool(); // newWalkConstraintMass
+  if (version >= 0x246) sourcePlayerNumber = s.i32();
+  if (version >= 0x265) newWalkConstraintMass = s.bool();
   const smokeColor = version >= 0x31e ? s.i32() : 0;
   const smokeBrightness = version >= 0x39a ? s.f32() : 0;
   const vita = vitaRevision(s.revision);
-  if (vita >= 0x2) s.bool(); // touchSensitive
-  if (vita >= 0x3) s.i32(); // touchType
-  return { partType, radius, snapVertex, centerOffset, animThing, animSpeed, smokeColor, smokeBrightness };
+  if (vita >= 0x2) touchSensitive = s.bool();
+  if (vita >= 0x3) touchType = s.i32();
+  return {
+    partType, radius, snapVertex, centerOffset, animThing, animSpeed, smokeColor, smokeBrightness,
+    sourcePlayerNumber, newWalkConstraintMass, touchSensitive, touchType,
+  };
 }

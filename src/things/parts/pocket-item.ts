@@ -1,6 +1,6 @@
 /** `POCKET_ITEM`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 
 /**
  * `PPocketItem`: a power-up as it sits in a plan's inventory.
@@ -19,22 +19,24 @@ export interface PocketItemPart {
   readonly powerUpType: number;
   readonly aimModifier: number;
   readonly lifetime: number;
+  readonly plan?: ResourceRef;
 }
 
 export function readPocketItem(s: Serializer): PocketItemPart {
   const { subVersion } = s.revision;
+  let plan: ResourceRef | undefined;
   if (subVersion < 0x15) {
     s.str();
     s.u16();
   }
   if (subVersion >= 0x15 && subVersion < 0x14d) s.u16();
   const flags = s.i16();
-  if (subVersion >= 0x14 && subVersion < 0x60) s.resource(true); // plan
+  if (subVersion >= 0x14 && subVersion < 0x60) plan = s.resource(true);
   if (subVersion >= 0x1e && subVersion < 0x78) s.u8();
   if (subVersion >= 0x2e && subVersion < 0x14d) s.u8();
   if (subVersion >= 0x2e && subVersion < 0x78) s.u8();
   const powerUpType = subVersion > 0x3d ? s.i8() : 0;
   const aimModifier = subVersion > 0x3f ? s.f32() : 0;
   const lifetime = subVersion > 0x55 ? s.i32() : 0;
-  return { flags, powerUpType, aimModifier, lifetime };
+  return { flags, powerUpType, aimModifier, lifetime, plan };
 }

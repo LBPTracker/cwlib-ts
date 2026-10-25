@@ -25,15 +25,29 @@ export interface HudElemPart {
   readonly colorIndex: number;
   readonly name: string;
   readonly drawables: readonly HudDrawable[];
+  readonly inputType?: number;
+  readonly transmitMode?: number;
+  readonly zTest?: number;
+  readonly onAnim?: number;
+  readonly offAnim?: number;
+  readonly highlightAnim?: number;
+  readonly transform?: Float32Array;
 }
 
 export function readHudElem(s: Serializer): HudElemPart {
   const { subVersion } = s.revision;
+  let transform: Float32Array | undefined;
+  let inputType: number | undefined;
+  let transmitMode: number | undefined;
+  let zTest: number | undefined;
+  let onAnim: number | undefined;
+  let offAnim: number | undefined;
+  let highlightAnim: number | undefined;
   let layer = 0;
   if (subVersion > 0x23) {
     layer = s.i32();
-    s.i32(); // inputType
-    s.i32(); // transmitMode
+    inputType = s.i32();
+    transmitMode = s.i32();
   }
   if (subVersion < 0x47) {
     s.i32();
@@ -43,7 +57,7 @@ export function readHudElem(s: Serializer): HudElemPart {
   let renderMode = 0;
   if (subVersion > 0x23) {
     renderMode = s.i32();
-    s.i32(); // zTest
+    zTest = s.i32();
   }
   let [scaleX, scaleY, offsetX, offsetY] = [1, 1, 0, 0];
   if (subVersion > 0x36) {
@@ -58,7 +72,7 @@ export function readHudElem(s: Serializer): HudElemPart {
     alpha = s.f32();
     color = s.i32();
   }
-  if (subVersion > 0x36) s.skipMatrix(); // transform
+  if (subVersion > 0x36) transform = s.matrix();
   let colorIndex = 0;
   let name = '';
   if (subVersion >= 0x24) {
@@ -83,9 +97,12 @@ export function readHudElem(s: Serializer): HudElemPart {
     s.i32();
   }
   if (subVersion >= 0x47) {
-    s.i32(); // onAnim
-    s.i32(); // offAnim
-    s.i32(); // highlightAnim
+    onAnim = s.i32();
+    offAnim = s.i32();
+    highlightAnim = s.i32();
   }
-  return { layer, renderMode, scaleX, scaleY, offsetX, offsetY, brightness, alpha, color, colorIndex, name, drawables };
+  return {
+    layer, renderMode, scaleX, scaleY, offsetX, offsetY, brightness, alpha, color, colorIndex, name,
+    drawables, inputType, transmitMode, zTest, onAnim, offAnim, highlightAnim, transform,
+  };
 }

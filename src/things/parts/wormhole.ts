@@ -17,17 +17,26 @@ export interface WormholePart {
   readonly playerMode: number;
   readonly audioEnabled: boolean;
   readonly activated: boolean;
+  readonly trigger: boolean;
+  readonly finished: boolean;
+  readonly exitCount: number;
+  readonly exitDelay: number;
+  readonly activeTypeForTwoWayHole?: number;
 }
 
 export function readWormhole(s: Serializer): WormholePart {
+  let activeTypeForTwoWayHole: number | undefined;
   const type = s.s32();
-  if (s.revision.subVersion >= 0x111) s.i8(); // activeTypeForTwoWayHole
+  if (s.revision.subVersion >= 0x111) activeTypeForTwoWayHole = s.i8();
   const playerMode = s.s32();
   const audioEnabled = s.bool();
-  s.bool(); // trigger
-  s.bool(); // finished
+  const trigger = s.bool();
+  const finished = s.bool();
   const activated = s.bool();
-  s.i32(); // exitCount
-  s.i32(); // exitDelay
-  return { type, playerMode, audioEnabled, activated };
+  const exitCount = s.i32();
+  const exitDelay = s.i32();
+  return {
+    type, playerMode, audioEnabled, activated, trigger, finished, exitCount, exitDelay,
+    activeTypeForTwoWayHole,
+  };
 }

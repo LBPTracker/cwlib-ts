@@ -21,14 +21,29 @@ export interface CheckpointPart {
   /** cwlib's `CheckpointType`, from subVersion 0x101. */
   readonly checkpointType: number;
   readonly teamFlags: number;
+  readonly activationFrame: number;
+  readonly creatureToChangeBackTo?: number;
+  readonly changeBackGate?: boolean;
+  readonly teamFilter?: number;
+  readonly persistPoint?: number;
+  readonly enableAudio?: boolean;
+  readonly continueMusic?: boolean;
+  readonly persistLives?: boolean;
 }
 
 /** `PCheckpoint`: a spawn point. Almost all of its later fields are subVersion-gated. */
 export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartReader>): CheckpointPart {
   const { version, subVersion } = s.revision;
+  let teamFilter: number | undefined;
+  let persistPoint: number | undefined;
+  let enableAudio: boolean | undefined;
+  let continueMusic: boolean | undefined;
+  let persistLives: boolean | undefined;
+  let creatureToChangeBackTo: number | undefined;
+  let changeBackGate: boolean | undefined;
   if (subVersion > 0x101) s.u8();
   else s.bool(); // activeFlags
-  s.i32(); // activationFrame
+  const activationFrame = s.i32();
   const spawnsLeft = version >= 0x1a7 ? s.s32() : -1;
   const maxSpawnsLeft = version >= 0x1c6 ? s.s32() : -1;
   const instanceInfiniteSpawns = version >= 0x1eb ? s.bool() : false;
@@ -39,8 +54,8 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
     spawningDelay = s.i32();
   }
   const lifeMultiplier = version >= 0x1fa ? s.i32() : 1;
-  if (version >= 0x2ae && subVersion < 0x100) s.i32(); // teamFilter
-  if (subVersion >= 0x1 && subVersion < 0x127) s.u8(); // persistPoint
+  if (version >= 0x2ae && subVersion < 0x100) teamFilter = s.i32();
+  if (subVersion >= 0x1 && subVersion < 0x127) persistPoint = s.u8();
   let creatureToSpawnAs = 0;
   if (subVersion >= 0x88) {
     if (subVersion <= 0x12a) creatureToSpawnAs = s.resource()?.guid ?? 0;
@@ -58,15 +73,17 @@ export function readCheckpoint(s: Serializer, readers: ReadonlyMap<string, PartR
     checkpointType = s.i32();
     teamFlags = s.i32();
   }
-  if (vitaRevision(s.revision) >= 0x50 || subVersion >= 0x15a) s.bool(); // enableAudio
-  if (subVersion >= 0x191) s.bool(); // continueMusic
+  if (vitaRevision(s.revision) >= 0x50 || subVersion >= 0x15a) enableAudio = s.bool();
+  if (subVersion >= 0x191) continueMusic = s.bool();
   if (subVersion >= 0x199) {
-    s.i32(); // creatureToChangeBackTo
-    s.bool(); // changeBackGate
+    creatureToChangeBackTo = s.i32();
+    changeBackGate = s.bool();
   }
-  if (subVersion >= 0x19b) s.bool(); // persistLives
+  if (subVersion >= 0x19b) persistLives = s.bool();
   return {
     spawnsLeft, maxSpawnsLeft, instanceInfiniteSpawns, spawningList, spawningDelay, lifeMultiplier,
     creatureToSpawnAs, isStartPoint, linkVisibleOnPlanet, name, checkpointType, teamFlags,
+  activationFrame, creatureToChangeBackTo, changeBackGate,
+    teamFilter, persistPoint, enableAudio, continueMusic, persistLives,
   };
 }

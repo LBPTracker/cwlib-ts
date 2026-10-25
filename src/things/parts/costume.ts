@@ -24,6 +24,8 @@ export interface CostumePiece {
   readonly primitives: readonly CostumePrimitive[];
   /** The piece's plan, a descriptor; version 0x19a on. */
   readonly plan?: ResourceRef;
+  /** Which of the mesh's morphs each costume morph drives: an i32 each below subVersion 0x105, a byte each from it. */
+  readonly morphParamRemap: readonly number[] | Uint8Array;
 }
 
 /** `PCostume`: what a creature is wearing -- its base mesh, its material, and the pieces on it. */
@@ -57,13 +59,14 @@ function readCostumePiece(s: Serializer): CostumePiece {
   const { version, subVersion } = s.revision;
   const mesh = s.resource();
   const categoriesUsed = s.i32();
+  let morphParamRemap: number[] | Uint8Array;
   if (subVersion < 0x105) {
     const n = s.count();
-    for (let i = 0; i < n; i += 1) s.i32(); // morphParamRemap, an i32 each
-  } else s.skip(s.i32());
+    morphParamRemap = Array.from({ length: n }, () => s.i32());
+  } else morphParamRemap = s.bytes(s.i32());
   const primitives = s.array(readPrimitive);
   const plan = version >= 0x19a ? s.resource(true) : undefined;
-  return { mesh, categoriesUsed, primitives, plan };
+  return { mesh, categoriesUsed, primitives, plan, morphParamRemap };
 }
 
 export function readCostume(s: Serializer): CostumePart {
@@ -82,5 +85,8 @@ export function readCostume(s: Serializer): CostumePart {
     const temp = s.i32();
     for (let i = 0; i < temp; i += 1) temporaryPieces.push(readCostumePiece(s));
   }
-  return { mesh, material, materialPlan, meshPartsHidden, primitives, creatureFilter, pieces, temporaryPieces };
+  return {
+    mesh, material, materialPlan, meshPartsHidden, primitives, creatureFilter, pieces,
+    temporaryPieces,
+  };
 }

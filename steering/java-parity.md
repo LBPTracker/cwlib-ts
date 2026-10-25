@@ -13,18 +13,24 @@ Measured 2026-10-24 and 2026-10-25 by listing the classes under `lib/cwlib/src/m
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
 to touch `lib/cwlib/`) against this repository's
 modules and the return type of every reader `partReaders()` binds; revised as each gap closed, last
-at 0.4.48. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
+at 0.4.49. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
 on this machine is at `fee2239`, but its `lib/cwlib/` is `bb79e81` (2024-04-30), 147 files'
 worth behind — `RTranslationTable.patch`, `MeshExporter` and `RMesh` among them. Name the commit
 whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` with `git show`.
 
 ## Thing parts: fields walked and not returned
 
-Every part reader returns its part, but only the fields a reader of a level needs, where Java keeps
-every one; a field walked and not returned is the gap, and closing it is a return value on a reader
-that already reads it. Most is left out of `CREATURE` (its state machine, whip, jetpack and the
-rest), then `NPC`, `YELLOWHEAD`'s `Poppet`, `PHYSICS_TWEAK` and `SWITCH`. Each part's interface in
-`src/things/parts/` is what it returns.
+Since 0.4.49 every field cwlib names in a part is returned, under its name, in the part's interface
+in `src/things/parts/` — the structures inside too (`NpcBehavior`, `Poppet`, `WhipSim`,
+`SwitchOutput`, `ContactCache`, `EyetoyData`…). Left:
+- **`POS`'s bone** (`thingOfWhichIAmABone`, `animHash`): `readPos` returns the world matrix alone,
+  as every renderer reads it, and changing that changes every caller.
+- **Fields only below the revision bound** (`0x3b7`, *Revisions*): `PSwitch`'s `connectorPos`,
+  `connectorGrabbed` and `stickerPlan`, `PMaterialTweak`'s old `colorIndex`, `PShape`'s
+  `lethalType` as an enum32, the old switches' single-output activation.
+- **Reads with no name here**: 108 one-line reads in the part readers carry no name — mostly
+  revision-gated padding — and the Vita-only parts (`vita.ts`), which cwlib has no table for.
+  Whether cwlib names each of the 108 was not checked one by one.
 
 ## Resources
 

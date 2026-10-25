@@ -27,6 +27,13 @@ export interface Decal {
   readonly scorchMark: boolean;
   readonly plan?: ResourceRef;
   readonly planGUID: number;
+  /** Versions `0x158` to `0x3ba`. */
+  readonly numMetadata?: number;
+  /** Version `0x214` on. */
+  readonly placedBy?: number;
+  /** The Vita's, from its revisions `0x3f` and `0x7e`. */
+  readonly localHitPoint?: readonly [number, number, number, number];
+  readonly dontWantGammaCorrection?: boolean;
 }
 
 /** `Decal`: one sticker. */
@@ -42,14 +49,15 @@ function readDecal(s: Serializer): Decal {
   const color = version >= 0x260 ? s.i16() : -1;
   let type = -1;
   let metadataIndex = -1;
+  let numMetadata: number | undefined;
   if (version >= 0x158) {
     type = s.u8(); // enum8
     metadataIndex = s.i16();
     // ⚠️ Version-dependent *inside* the corpus: 0x3b8 and 0x3ba have this, the
     // rest do not.
-    if (version <= 0x3ba) s.i16(); // numMetadata
+    if (version <= 0x3ba) numMetadata = s.i16();
   }
-  if (version >= 0x214) s.i16(); // placedBy
+  const placedBy = version >= 0x214 ? s.i16() : undefined;
   const playModeFrame = version >= 0x215 ? s.i32() : -1;
   const scorchMark = version >= 0x219 ? s.bool() : false;
   let plan: ResourceRef | undefined;
@@ -57,9 +65,20 @@ function readDecal(s: Serializer): Decal {
   if (version >= 0x34c) plan = s.resource(true); // a descriptor
   else if (version >= 0x25b) planGUID = s.guid();
   const vita = vitaRevision(s.revision);
-  if (vita >= 0x3f) s.skipVector4(); // localHitPoint
-  if (vita >= 0x7e) s.bool(); // dontWantGammaCorrection
-  return { texture, u, v, xvecu, xvecv, yvecu, yvecv, color, type, metadataIndex, playModeFrame, scorchMark, plan, planGUID };
+  const localHitPoint = vita >= 0x3f ? s.vector4() : undefined;
+  const dontWantGammaCorrection = vita >= 0x7e ? s.bool() : undefined;
+  return {
+    texture, u, v, xvecu, xvecv, yvecu, yvecv, color, type, metadataIndex, playModeFrame, scorchMark, plan, planGUID,
+    numMetadata, placedBy, localHitPoint, dontWantGammaCorrection,
+  };
+}
+
+/** `PaintControlPoint`: four signed bytes. */
+export interface PaintControlPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly startRadius: number;
+  readonly endRadius: number;
 }
 
 /** `PStickers`: the decals on a Thing, and its costume pieces' own. */
@@ -67,9 +86,13 @@ export interface StickersPart {
   readonly decals: Decal[];
   /** One list per costume piece. */
   readonly costumeDecals: Decal[][];
+  /** Versions 0x158 to 0x3ba: where the paint was laid, in points. */
+  readonly paintControl?: readonly PaintControlPoint[];
+  /** Version 0x15d on: the photos stuck to the Thing. */
+  readonly eyetoyData?: readonly EyetoyData[];
 }
 
-/** `PStickers`: the decals on a Thing, plus the costume and eyetoy lists (eyetoy walked, discarded). */
+/** `PStickers`: the decals on a Thing, plus the costume, paint and eyetoy lists. */
 export function readStickers(s: Serializer): StickersPart {
   const { version } = s.revision;
   const decals: Decal[] = [];
@@ -84,34 +107,52 @@ export function readStickers(s: Serializer): StickersPart {
     costumeDecals.push(list);
   }
   // ⚠️ `paintControl` exists only up to 0x3ba, and the corpus starts at 0x3b8.
-  if (version >= 0x158 && version <= 0x3ba) {
-    const n = s.count();
-    for (let i = 0; i < n; i += 1) s.skip(4); // x, y, startRadius, endRadius
-  }
-  if (version >= 0x15d) {
-    const n = s.count();
-    for (let i = 0; i < n; i += 1) readEyetoyData(s);
-  }
+  const paintControl = version >= 0x158 && version <= 0x3ba
+    ? s.array((x) => ({ x: x.i8(), y: x.i8(), startRadius: x.i8(), endRadius: x.i8() }))
+    : undefined;
+  const eyetoyData = version >= 0x15d ? s.array(readEyetoyData) : undefined;
   // ❗ An array of descriptors for versions 0x3bc–0x3cb only, which the game's
   // loader (`v0xcfff80` in `eboot-v128.bin`, the array `v0xd77400`) reads and
   // drops and cwlib does not have: the five Move DLC palette plans at 0x3c1 and
   // 0x3c7, one hash each. steering/level-files.md, *`playerMode` at 0x3eb*.
   if (version >= 0x3bc && version <= 0x3cb) s.array((self) => self.resource(true));
-  return { decals, costumeDecals };
+  return { decals, costumeDecals, paintControl, eyetoyData };
 }
 
 /** `ColorCorrection`: six floats. */
-function readColorCorrection(s: Serializer): void {
-  for (let i = 0; i < 6; i += 1) s.f32();
+export interface ColorCorrection {
+  readonly saturation: number;
+  readonly hueShift: number;
+  readonly brightness: number;
+  readonly contrast: number;
+  readonly tintHue: number;
+  readonly tintAmount: number;
 }
 
-/** `EyetoyData`: a photo stuck to a Thing. */
-export function readEyetoyData(s: Serializer): void {
+function readColorCorrection(s: Serializer): ColorCorrection {
+  return {
+    saturation: s.f32(), hueShift: s.f32(), brightness: s.f32(),
+    contrast: s.f32(), tintHue: s.f32(), tintAmount: s.f32(),
+  };
+}
+
+/** `EyetoyData`: a photo stuck to a Thing; nothing below version `0x15e`. */
+export interface EyetoyData {
+  readonly frame?: ResourceRef;
+  readonly alphaMask?: ResourceRef;
+  readonly colorCorrection?: Float32Array;
+  readonly colorCorrectionSrc?: ColorCorrection;
+  readonly outline?: ResourceRef;
+}
+
+export function readEyetoyData(s: Serializer): EyetoyData {
   const { version } = s.revision;
-  if (version < 0x15e) return;
-  s.resource(); // frame
-  s.resource(); // alphaMask
-  s.skipMatrix(); // colorCorrection
-  readColorCorrection(s);
-  if (version > 0x39f) s.resource(); // outline
+  if (version < 0x15e) return {};
+  return {
+    frame: s.resource(),
+    alphaMask: s.resource(),
+    colorCorrection: s.matrix(),
+    colorCorrectionSrc: readColorCorrection(s),
+    outline: version > 0x39f ? s.resource() : undefined,
+  };
 }

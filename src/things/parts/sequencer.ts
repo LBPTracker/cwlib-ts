@@ -17,6 +17,11 @@ export interface SequencerPart {
   readonly volumes: readonly number[];
   /** False for an animation or logic sequencer — those carry no music. */
   readonly musicSequencer: boolean;
+  readonly playHead?: number;
+  readonly isPlaying?: boolean;
+  readonly triggerPlayer?: number;
+  readonly animationSequencer?: boolean;
+  readonly behavior?: number;
 }
 
 /**
@@ -28,6 +33,11 @@ export interface SequencerPart {
  */
 export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, PartReader>): SequencerPart {
   const { version, subVersion } = s.revision;
+  let animationSequencer: boolean | undefined;
+  let behavior: number | undefined;
+  let playHead: number | undefined;
+  let isPlaying: boolean | undefined;
+  let triggerPlayer: number | undefined;
   const tempo = s.f32();
   const swing = s.f32();
   const echoFeedback = s.f32();
@@ -40,14 +50,14 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
   const volumes: number[] = [];
   for (let i = 0; i < 6; i += 1) volumes.push(s.f32());
   if (version > 0x369) {
-    s.f32(); // playHead
-    s.bool(); // isPlaying
+    playHead = s.f32();
+    isPlaying = s.bool();
   }
   const musicSequencer = version > 0x36c ? s.bool() : false;
-  if (subVersion > 0x28) s.bool(); // animationSequencer
-  if (version > 0x371) s.i32(); // behavior
+  if (subVersion > 0x28) animationSequencer = s.bool();
+  if (version > 0x371) behavior = s.i32();
   if (version > 0x3a0) {
-    s.i32(); // triggerPlayer
+    triggerPlayer = s.i32();
     readThingRef(s, readers); // previewThing
   }
   return {
@@ -62,5 +72,7 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
     numChannels,
     volumes,
     musicSequencer,
+  playHead, isPlaying, triggerPlayer,
+    animationSequencer, behavior,
   };
 }

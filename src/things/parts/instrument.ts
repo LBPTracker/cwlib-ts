@@ -36,6 +36,10 @@ export interface InstrumentPart {
    * table measured out of the corpus.
    */
   readonly icon: number;
+  readonly scrollX?: number;
+  readonly scrollY?: number;
+  readonly cursorX?: number;
+  readonly cursorY?: number;
 }
 
 /**
@@ -47,6 +51,10 @@ export interface InstrumentPart {
  */
 export function readInstrumentPart(s: Serializer): InstrumentPart {
   const { version } = s.revision;
+  let scrollX: number | undefined;
+  let scrollY: number | undefined;
+  let cursorX: number | undefined;
+  let cursorY: number | undefined;
   const resource = s.resource();
   const name = version >= 0x35b ? decodeEntities(s.wstr()) : '';
   const colour = s.i32();
@@ -58,10 +66,10 @@ export function readInstrumentPart(s: Serializer): InstrumentPart {
   const echoSend = s.f32();
   const reverbSend = s.f32();
   if (version >= 0x389) {
-    s.i16(); // scrollX
-    s.i16(); // scrollY
-    s.i16(); // cursorX
-    s.i16(); // cursorY
+    scrollX = s.i16();
+    scrollY = s.i16();
+    cursorX = s.i16();
+    cursorY = s.i16();
   }
   const count = s.count();
   const notes = s.bytes(count * 4).slice();
@@ -79,5 +87,6 @@ export function readInstrumentPart(s: Serializer): InstrumentPart {
     echoSend,
     reverbSend,
     notes,
+  scrollX, scrollY, cursorX, cursorY,
   };
 }

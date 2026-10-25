@@ -14,20 +14,24 @@ export interface AtmosphericTweakPart {
   /** subVersion > 0x19b, the values when the input is off; equal to the on ones before. */
   readonly intensityOff: number;
   readonly directionStrengthOff: number;
+  readonly disableAudio?: boolean;
+  readonly currentInput?: number;
 }
 
 export function readAtmosphericTweak(s: Serializer): AtmosphericTweakPart {
   const { subVersion } = s.revision;
+  let disableAudio: boolean | undefined;
+  let currentInput: number | undefined;
   const atmosType = s.s32();
   const intensity = s.f32();
   const directionStrength = s.f32();
   const inputAction = s.s32();
-  if (subVersion < 0x1a8) s.bool(); // disableAudio
+  if (subVersion < 0x1a8) disableAudio = s.bool();
   // ❗ cwlib's gates (`PAtmosphericTweak.java`), measured 2026-10-22 on
   // `sack_town.bin` (subVersion 0xc8): no maxParticles, and the u8 and f32 pair
   // instead, the part's 22 bytes ending on that f32's 0.5.
   const maxParticles = subVersion > 0x135 ? s.f32() : 0;
-  if (subVersion > 0xb3) s.f32(); // currentInput
+  if (subVersion > 0xb3) currentInput = s.f32();
   if (subVersion >= 0xb9 && subVersion < 0xd4) {
     s.u8();
     s.f32();
@@ -38,5 +42,8 @@ export function readAtmosphericTweak(s: Serializer): AtmosphericTweakPart {
     intensityOff = s.f32();
     directionStrengthOff = s.f32();
   }
-  return { atmosType, intensity, directionStrength, inputAction, maxParticles, intensityOff, directionStrengthOff };
+  return {
+    atmosType, intensity, directionStrength, inputAction, maxParticles, intensityOff,
+    directionStrengthOff, disableAudio, currentInput,
+  };
 }

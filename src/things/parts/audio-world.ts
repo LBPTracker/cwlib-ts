@@ -18,29 +18,45 @@ export interface AudioWorldPart {
   readonly soundNames: number;
   readonly meshColor: number;
   readonly categoryGuid: number;
+  readonly impactTolerance: number;
+  readonly triggerByFalloff?: boolean;
+  readonly triggerByImpact?: boolean;
+  readonly triggerBySwitch?: boolean;
+  readonly paramAffectVol: boolean;
+  readonly paramAffectPitch: boolean;
+  readonly paramAffectParam: boolean;
+  readonly triggerByDestroy?: boolean;
+  readonly behavior?: number;
+  readonly activatedLastFrame?: boolean;
 }
 
 export function readAudioWorld(s: Serializer): AudioWorldPart {
   const { version, subVersion } = s.revision;
+  let triggerByDestroy: boolean | undefined;
+  let behavior: number | undefined;
+  let activatedLastFrame: boolean | undefined;
+  let triggerByFalloff: boolean | undefined;
+  let triggerByImpact: boolean | undefined;
+  let triggerBySwitch: boolean | undefined;
   const soundName = s.str();
   const initialVolume = s.f32();
   const initialPitch = s.f32();
   const initialParam1 = s.f32();
   const maxFalloff = s.f32();
-  s.f32(); // impactTolerance
+  const impactTolerance = s.f32();
   let playMode = 0;
   if (version < 0x2c4) {
-    s.bool(); // triggerByFalloff
-    s.bool(); // triggerByImpact
-    s.bool(); // triggerBySwitch
-    if (version >= 0x1ad) s.bool(); // triggerByDestroy
+    triggerByFalloff = s.bool();
+    triggerByImpact = s.bool();
+    triggerBySwitch = s.bool();
+    if (version >= 0x1ad) triggerByDestroy = s.bool();
   } else playMode = s.i32(); // enum32
-  s.bool(); // paramAffectVol
-  s.bool(); // paramAffectPitch
-  s.bool(); // paramAffectParam
+  const paramAffectVol = s.bool();
+  const paramAffectPitch = s.bool();
+  const paramAffectParam = s.bool();
   const isLocal = version >= 0x165 ? s.bool() : false;
   const hideInPlayMode = version >= 0x198 ? s.bool() : false;
-  if (version >= 0x2c4) s.i32(); // behavior
+  if (version >= 0x2c4) behavior = s.i32();
   let soundNames = 0;
   let meshColor = 0;
   if (version >= 0x380) {
@@ -48,6 +64,11 @@ export function readAudioWorld(s: Serializer): AudioWorldPart {
     meshColor = s.i32();
   }
   const categoryGuid = subVersion >= 0x178 ? s.i32() : 0;
-  if (subVersion >= 0x191) s.bool(); // activatedLastFrame
-  return { soundName, initialVolume, initialPitch, initialParam1, maxFalloff, playMode, isLocal, hideInPlayMode, soundNames, meshColor, categoryGuid };
+  if (subVersion >= 0x191) activatedLastFrame = s.bool();
+  return {
+    soundName, initialVolume, initialPitch, initialParam1, maxFalloff, playMode, isLocal,
+    hideInPlayMode, soundNames, meshColor, categoryGuid, impactTolerance, triggerByFalloff,
+    triggerByImpact, triggerBySwitch, paramAffectVol, paramAffectPitch, paramAffectParam,
+    triggerByDestroy, behavior, activatedLastFrame,
+  };
 }

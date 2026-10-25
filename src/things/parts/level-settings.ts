@@ -20,6 +20,23 @@ export interface LevelLighting {
   readonly fogFar: number;
   readonly rimColor: readonly [number, number, number, number];
   readonly rimColor2: readonly [number, number, number, number];
+  /** Version `0x325` on: the baked shadow and occlusion, and the near depth of field. */
+  readonly bakedShadowAmount?: number;
+  readonly bakedShadowBlur?: number;
+  readonly bakedAOBias?: number;
+  readonly bakedAOScale?: number;
+  readonly dynamicAOAmount?: number;
+  readonly dofNear?: number;
+  /** Version `0x326` on. */
+  readonly dofFar?: number;
+  /** Version `0x331` on. */
+  readonly zEffectAmount?: number;
+  readonly zEffectBright?: number;
+  readonly zEffectContrast?: number;
+  /** subVersion `0x7a` on, and `dofFar3` `0xce` on. */
+  readonly dofNear2?: number;
+  readonly dofFar2?: number;
+  readonly dofFar3?: number;
 }
 
 /** `PLevelSettings`: the lighting, its presets, and the backdrop. */
@@ -31,6 +48,8 @@ export interface LevelSettingsPart extends LevelLighting {
   /** subVersion 0xaf on; 0 before. See steering/level-files.md, *Level settings*. */
   readonly backgroundRepeatFlags: number;
   readonly backgroundSkyHeight: number;
+  /** The Vita's, from its revision `0x78`. */
+  readonly nonLinearFog?: boolean;
 }
 
 /**
@@ -50,29 +69,30 @@ function readLevelSettings(s: Serializer): LevelLighting {
   const fogFar = s.f32();
   const rimColor = s.vector4();
   const rimColor2 = s.vector4();
-  if (version >= 0x325) {
-    s.f32(); // bakedShadowAmount
-    s.f32(); // bakedShadowBlur
-    s.f32(); // bakedAOBias
-    s.f32(); // bakedAOScale
-    s.f32(); // dynamicAOAmount
-    s.f32(); // dofNear
-  }
-  if (version >= 0x326) s.f32(); // dofFar
-  if (version >= 0x331) {
-    s.f32(); // zEffectAmount
-    s.f32(); // zEffectBright
-    s.f32(); // zEffectContrast
-  }
-  if (subVersion >= 0x7a) {
-    s.f32(); // dofNear2
-    s.f32(); // dofFar2
-    if (subVersion >= 0xce) s.f32(); // dofFar3
-  }
-  return {
+  const out: { -readonly [K in keyof LevelLighting]: LevelLighting[K] } = {
     sunPosition, sunPositionScale, sunColor, ambientColor, sunMultiplier, exposure,
     fogColor, fogNear, fogFar, rimColor, rimColor2,
   };
+  if (version >= 0x325) {
+    out.bakedShadowAmount = s.f32();
+    out.bakedShadowBlur = s.f32();
+    out.bakedAOBias = s.f32();
+    out.bakedAOScale = s.f32();
+    out.dynamicAOAmount = s.f32();
+    out.dofNear = s.f32();
+  }
+  if (version >= 0x326) out.dofFar = s.f32();
+  if (version >= 0x331) {
+    out.zEffectAmount = s.f32();
+    out.zEffectBright = s.f32();
+    out.zEffectContrast = s.f32();
+  }
+  if (subVersion >= 0x7a) {
+    out.dofNear2 = s.f32();
+    out.dofFar2 = s.f32();
+    if (subVersion >= 0xce) out.dofFar3 = s.f32();
+  }
+  return out;
 }
 
 /** `PLevelSettings`: the lighting, inline, then the presets and the backdrop. */
@@ -84,7 +104,7 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
     const count = s.count();
     for (let i = 0; i < count; i += 1) presets.push(readLevelSettings(s));
   }
-  if (vitaRevision(s.revision) >= 0x78) s.bool(); // nonLinearFog
+  const nonLinearFog = vitaRevision(s.revision) >= 0x78 ? s.bool() : undefined;
   const backdropAmbience = s.str();
   const backdropMesh = version >= 0x2f3 ? s.resource() : undefined;
   let backgroundRepeatFlags = 0;
@@ -93,5 +113,8 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
     backgroundRepeatFlags = s.i32();
     backgroundSkyHeight = s.f32();
   }
-  return { ...lighting, presets, backdropAmbience, backdropMesh, backgroundRepeatFlags, backgroundSkyHeight };
+  return {
+    ...lighting, presets, backdropAmbience, backdropMesh, backgroundRepeatFlags,
+    backgroundSkyHeight, nonLinearFog,
+  };
 }

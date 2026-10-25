@@ -16,6 +16,8 @@ export interface TriggerPart {
   readonly enabled: boolean;
   readonly zOffset: number;
   readonly scoreValue: number;
+  /** The Vita's, from its revision 0x17: each of `inThings`' action. */
+  readonly inThingActions?: readonly number[];
 }
 
 /** `PTrigger`: the volume a switch senses in. */
@@ -24,13 +26,12 @@ export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartRead
   const vita = vitaRevision(s.revision);
   const triggerType = s.u8(); // enum8
   let inThings: (Thing | undefined)[];
+  let inThingActions: number[] | undefined;
   if (vita >= 0x17) {
     // The Vita's inThings: each with an action.
-    inThings = s.array((self) => {
-      const thing = readThingRef(self, readers);
-      self.s32(); // thingAction
-      return thing;
-    });
+    const pairs = s.array((self) => ({ thing: readThingRef(self, readers), action: self.s32() }));
+    inThings = pairs.map((p) => p.thing);
+    inThingActions = pairs.map((p) => p.action);
   } else inThings = thingArray(s, readers);
   const radiusMultiplier = s.f32();
   if (version < 0x1d5) s.i32();
@@ -44,5 +45,8 @@ export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartRead
   }
   const zOffset = version >= 0x322 ? s.f32() : 0;
   const scoreValue = subVersion >= 0x90 || vita >= 0x30 ? s.s32() : 0;
-  return { triggerType, inThings, radiusMultiplier, zRangeHundreds, allZLayers, hysteresisMultiplier, enabled, zOffset, scoreValue };
+  return {
+    triggerType, inThings, radiusMultiplier, zRangeHundreds, allZLayers, hysteresisMultiplier,
+    enabled, zOffset, scoreValue, inThingActions,
+  };
 }

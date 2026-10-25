@@ -23,10 +23,20 @@ export interface ConnectorHookPart {
   readonly friction: number;
   readonly pivot?: readonly [number, number, number, number];
   readonly hookType: number;
+  readonly tryLatch?: boolean;
+  readonly clamped?: boolean;
+  readonly collidable?: number;
+  readonly spinDamping?: number;
+  readonly audioEnable?: boolean;
 }
 
 export function readConnectorHook(s: Serializer): ConnectorHookPart {
   const { subVersion } = s.revision;
+  let spinDamping: number | undefined;
+  let audioEnable: boolean | undefined;
+  let tryLatch: boolean | undefined;
+  let clamped: boolean | undefined;
+  let collidable: number | undefined;
   const mode = s.i32();
   if (subVersion <= 0xbb) s.i32();
   const inputAction = s.i32();
@@ -40,16 +50,19 @@ export function readConnectorHook(s: Serializer): ConnectorHookPart {
   let friction = 0;
   let pivot: [number, number, number, number] | undefined;
   if (subVersion > 0xfd) {
-    s.bool(); // tryLatch
-    s.bool(); // clamped
-    s.i32(); // collidable
+    tryLatch = s.bool();
+    clamped = s.bool();
+    collidable = s.i32();
     angle = s.f32();
     friction = s.f32();
     pivot = s.vector4();
   }
   if (subVersion >= 0xff && subVersion < 0x15d) s.i32();
-  if (subVersion > 0x103) s.f32(); // spinDamping
-  if (subVersion > 0x13d) s.bool(); // audioEnable
+  if (subVersion > 0x103) spinDamping = s.f32();
+  if (subVersion > 0x13d) audioEnable = s.bool();
   const hookType = subVersion > 0x14e ? s.i32() : 0;
-  return { mode, inputAction, poweredSpeed, accel, decel, delay, reverse, angle, friction, pivot, hookType };
+  return {
+    mode, inputAction, poweredSpeed, accel, decel, delay, reverse, angle, friction, pivot, hookType,
+    tryLatch, clamped, collidable, spinDamping, audioEnable,
+  };
 }

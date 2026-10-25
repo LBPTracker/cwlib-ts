@@ -31,6 +31,9 @@ export interface ScriptFieldLayout {
   /** cwlib's `BuiltinType`, the type the script declares; 0 below version 0x145. */
   readonly fishType: number;
   readonly divergent: boolean;
+  readonly dimensionCount: number;
+  readonly arrayBaseMachineType: number;
+  readonly instanceOffset: number;
 }
 
 /**
@@ -78,6 +81,8 @@ export interface ScriptInstance {
   readonly script?: ResourceRef;
   /** Empty when the instance is not serialised or has no layout. */
   readonly fields: readonly ScriptField[];
+  /** The layout's instance size, where the instance has a layout. */
+  readonly instanceSize?: number;
 }
 
 /**
@@ -98,18 +103,20 @@ function readFieldLayout(s: Serializer): ScriptFieldLayout {
     const flags = s.i16();
     const machineType = s.u8();
     const fishType = s.u8();
-    s.i8(); // dimensionCount
-    s.u8(); // arrayBaseMachineType
-    s.i32(); // instanceOffset
-    return { name, machineType, fishType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
+    const dimensionCount = s.i8();
+    const arrayBaseMachineType = s.u8();
+    const instanceOffset = s.i32();
+    const divergent = (flags & MODIFIER_DIVERGENT) !== 0;
+    return { name, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
   }
   const flags = s.i32();
   const machineType = s.i32();
   const fishType = version >= 0x145 ? s.i32() : 0;
-  s.i8(); // dimensionCount
-  s.i32(); // arrayBaseMachineType
-  s.i32(); // instanceOffset
-  return { name, machineType, fishType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
+  const dimensionCount = s.i8();
+  const arrayBaseMachineType = s.i32();
+  const instanceOffset = s.i32();
+  const divergent = (flags & MODIFIER_DIVERGENT) !== 0;
+  return { name, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
 }
 
 /**
@@ -140,15 +147,16 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
   const pointer = s.i32();
   if (pointer === 0) return { script, fields: [] };
 
-  let layout = s.pointers.get(pointer) as ScriptFieldLayout[] | undefined;
-  if (layout === undefined) {
+  // A layout is written once and named by pointer after; its instance size with it.
+  let shared = s.pointers.get(pointer) as { layout: ScriptFieldLayout[]; instanceSize: number } | undefined;
+  if (shared === undefined) {
     const fields: ScriptFieldLayout[] = [];
     const count = s.count();
     for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(s));
-    s.i32(); // instanceSize
-    layout = fields;
-    s.pointers.set(pointer, layout);
+    shared = { layout: fields, instanceSize: s.i32() };
+    s.pointers.set(pointer, shared);
   }
+  const { layout, instanceSize } = shared;
 
   const reflectDivergent = version > 0x19c ? s.bool() : false;
   const fields: ScriptField[] = [];
@@ -190,7 +198,7 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
     }
     fields.push({ ...field, stored: true, value });
   }
-  return { script, fields };
+  return { script, fields, instanceSize };
 }
 
 /** `PScript`: a script attached to a Thing, and its fields' values. */

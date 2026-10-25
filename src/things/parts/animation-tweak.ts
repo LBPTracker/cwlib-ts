@@ -31,15 +31,43 @@ export interface AnimationTweakPart {
   readonly animToOverride: number;
   readonly tweakMeshFile: number;
   readonly actorName: string;
+  readonly rootRotationY?: number;
+  readonly usesRootRotation?: boolean;
+  readonly containerType?: number;
+  readonly subContainerIndex?: number;
+  readonly yawRate?: number;
+  readonly pitchRate?: number;
+  readonly rollRate?: number;
+  readonly yawPosition?: number;
+  readonly pitchPosition?: number;
+  readonly rollPosition?: number;
+  readonly rootRotationZ?: number;
+  readonly blendAction?: number;
+  readonly animResetOnInactive?: boolean;
+  readonly rootRotationX?: number;
 }
 
 export function readAnimationTweak(s: Serializer): AnimationTweakPart {
   const { subVersion } = s.revision;
+  let blendAction: number | undefined;
+  let animResetOnInactive: boolean | undefined;
+  let rootRotationX: number | undefined;
+  let rootRotationY: number | undefined;
+  let usesRootRotation: boolean | undefined;
+  let containerType: number | undefined;
+  let subContainerIndex: number | undefined;
+  let yawRate: number | undefined;
+  let pitchRate: number | undefined;
+  let rollRate: number | undefined;
+  let yawPosition: number | undefined;
+  let pitchPosition: number | undefined;
+  let rollPosition: number | undefined;
+  let rootRotationZ: number | undefined;
   const animSpeed = s.f32();
   const animPos = subVersion > 0x1d ? s.f32() : 0;
   const animBlendTime = subVersion >= 0x25 ? s.f32() : 0;
   const behavior = s.i32();
-  if (subVersion >= 0x25) s.i32(); // blendAction
+  if (subVersion >= 0x25) blendAction = s.i32();
   let anim: ResourceRef | undefined;
   let animLoop = false;
   if (subVersion > 0x1d) {
@@ -56,11 +84,11 @@ export function readAnimationTweak(s: Serializer): AnimationTweakPart {
     animEnd = s.f32();
   }
   const animPlaying = subVersion > 0x25 ? s.bool() : false;
-  if (subVersion > 0x26) s.bool(); // animResetOnInactive
-  if (subVersion > 0x146 || (subVersion > 0x13e && subVersion < 0x143)) s.f32(); // rootRotationX
+  if (subVersion > 0x26) animResetOnInactive = s.bool();
+  if (subVersion > 0x146 || (subVersion > 0x13e && subVersion < 0x143)) rootRotationX = s.f32();
   if (subVersion > 0x39) {
-    s.f32(); // rootRotationY
-    s.bool(); // usesRootRotation
+    rootRotationY = s.f32();
+    usesRootRotation = s.bool();
   }
   let type = 0;
   let animToOverride = 0;
@@ -71,21 +99,25 @@ export function readAnimationTweak(s: Serializer): AnimationTweakPart {
   if (subVersion >= 0x5c && subVersion < 0x152) s.u8();
   const tweakMeshFile = subVersion > 0x66 ? s.guid() : 0;
   if (subVersion > 0x69) {
-    s.i32(); // containerType
-    s.i32(); // subContainerIndex
+    containerType = s.i32();
+    subContainerIndex = s.i32();
   }
   const actorName = subVersion > 0x6a ? s.wstr() : '';
   if (subVersion > 0x151) {
-    s.f32(); // yawRate
-    s.f32(); // pitchRate
-    s.f32(); // rollRate
-    s.f32(); // yawPosition
-    s.f32(); // pitchPosition
-    s.f32(); // rollPosition
-    s.f32(); // rootRotationZ
+    yawRate = s.f32();
+    pitchRate = s.f32();
+    rollRate = s.f32();
+    yawPosition = s.f32();
+    pitchPosition = s.f32();
+    rollPosition = s.f32();
+    rootRotationZ = s.f32();
   }
   return {
-    animSpeed, animPos, animBlendTime, behavior, anim, animLoop, cachedMeshFile, containerFile, animStart, animEnd,
+    animSpeed, animPos, animBlendTime, behavior, anim, animLoop, cachedMeshFile, containerFile,
+    animStart, animEnd,
     animPlaying, type, animToOverride, tweakMeshFile, actorName,
+  rootRotationY, usesRootRotation, containerType, subContainerIndex, yawRate, pitchRate, rollRate,
+  yawPosition, pitchPosition, rollPosition, rootRotationZ,
+    blendAction, animResetOnInactive, rootRotationX,
   };
 }

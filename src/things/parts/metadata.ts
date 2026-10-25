@@ -30,10 +30,23 @@ export interface MetadataPart {
   readonly type: number;
   readonly subType: number;
   readonly icon?: ResourceRef;
+  readonly locationTag?: string;
+  readonly categoryTag?: string;
+  readonly creationDate: number;
+  readonly descTranslationTag?: string;
+  readonly primaryIndex?: number;
+  readonly referencable?: boolean;
+  readonly allowEmit?: boolean;
 }
 
 export function readMetadata(s: Serializer): MetadataPart {
   const { version, branchId, branchRevision } = s.revision;
+  let descTranslationTag: string | undefined;
+  let primaryIndex: number | undefined;
+  let referencable: boolean | undefined;
+  let allowEmit: boolean | undefined;
+  let locationTag: string | undefined;
+  let categoryTag: string | undefined;
   const leerdammer = branchId === 0x4c44;
   // cwlib `hasDepreciatedValue`: a `CValue` struct that LEERDAMMER dropped at
   // its revision 2 and everyone else at 0x297.
@@ -58,15 +71,15 @@ export function readMetadata(s: Serializer): MetadataPart {
     // hashed keys. `descTranslationTag` is only stored below 0x159; above it
     // cwlib derives it as `name + "_DESC"` and reads nothing.
     nameTag = s.str();
-    if (version < 0x159) s.str(); // descTranslationTag
-    s.str(); // locationTag
-    s.str(); // categoryTag
+    if (version < 0x159) descTranslationTag = s.str();
+    locationTag = s.str();
+    categoryTag = s.str();
   }
-  if (version >= 0x195) s.i32(); // primaryIndex
+  if (version >= 0x195) primaryIndex = s.i32();
   const fluffCost = s.i32();
   const type = s.i32(); // a flags word
   const subType = s.i32();
-  s.u32(); // creationDate
+  const creationDate = s.u32();
   const icon = s.resource();
   // ⚠️ Never seen non-null on a level: a `PhotoMetadata` belongs to a photo, and
   // the reference costs one byte when it is null. It refuses if one turns up
@@ -74,7 +87,11 @@ export function readMetadata(s: Serializer): MetadataPart {
   s.reference(() => {
     throw new SerializerError('PMetadata carries a PhotoMetadata, which has no reader');
   });
-  if (version >= 0x15f) s.bool(); // referencable
-  if (version >= 0x205) s.bool(); // allowEmit
-  return { titleKey, descriptionKey, location, category, nameTag, fluffCost, type, subType, icon };
+  if (version >= 0x15f) referencable = s.bool();
+  if (version >= 0x205) allowEmit = s.bool();
+  return {
+    titleKey, descriptionKey, location, category, nameTag, fluffCost, type, subType, icon,
+    locationTag, categoryTag, creationDate, descTranslationTag, primaryIndex, referencable,
+    allowEmit,
+  };
 }

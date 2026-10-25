@@ -10,23 +10,38 @@ export interface PowerUpPart {
   readonly powerUpThing?: Thing;
   readonly powerUpHandle?: Thing;
   readonly flipped: boolean;
+  readonly spawnedRootMatrix: Float32Array;
+  readonly spawnedChipMatrix: Float32Array;
+  readonly rootHandle: readonly [number, number, number, number];
+  readonly justFlipped: boolean;
+  readonly fireStartTime: number;
+  readonly initialRotation: number;
+  readonly deterministicPosition: readonly [number, number, number];
+  readonly deterministicRotation: number;
+  readonly offsetForEmitters: number;
+  readonly prevAngle: number;
+  readonly currAngle: number;
 }
 
 export function readPowerUp(s: Serializer, readers: ReadonlyMap<string, PartReader>): PowerUpPart {
-  s.skipMatrix(); // spawnedRootMatrix
-  s.skipMatrix(); // spawnedChipMatrix
-  s.skipVector4(); // rootHandle
+  const spawnedRootMatrix = s.matrix();
+  const spawnedChipMatrix = s.matrix();
+  const rootHandle = s.vector4();
   const plan = s.resource(true);
   const powerUpThing = readThingRef(s, readers);
   const powerUpHandle = readThingRef(s, readers);
   const flipped = s.bool();
-  s.bool(); // justFlipped
-  s.i32(); // fireStartTime
-  s.f32(); // initialRotation
-  s.skipVector3(); // deterministicPosition
-  s.f32(); // deterministicRotation
-  s.f32(); // offsetForEmitters
-  s.f32(); // prevAngle
-  s.f32(); // currAngle
-  return { plan, powerUpThing, powerUpHandle, flipped };
+  const justFlipped = s.bool();
+  const fireStartTime = s.i32();
+  const initialRotation = s.f32();
+  const deterministicPosition = s.vector3();
+  const deterministicRotation = s.f32();
+  const offsetForEmitters = s.f32();
+  const prevAngle = s.f32();
+  const currAngle = s.f32();
+  return {
+    plan, powerUpThing, powerUpHandle, flipped, spawnedRootMatrix, spawnedChipMatrix, rootHandle,
+    justFlipped, fireStartTime, initialRotation, deterministicPosition, deterministicRotation,
+    offsetForEmitters, prevAngle, currAngle,
+  };
 }

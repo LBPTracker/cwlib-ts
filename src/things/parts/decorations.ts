@@ -22,6 +22,16 @@ export interface Decoration {
   /** -1 when the revision has none. */
   readonly playModeFrame: number;
   readonly planGUID: number;
+  readonly onCostumePiece: number;
+  readonly earthDecoration: number;
+  /** Version `0x214` on. */
+  readonly placedBy?: number;
+  /** subVersion `0xc4` on. */
+  readonly hasShadow?: boolean;
+  /** subVersion `0x16c` on. */
+  readonly isQuest?: boolean;
+  /** The Vita's, from its revision `0x7c`. */
+  readonly zBias?: number;
 }
 
 function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>): Decoration {
@@ -33,19 +43,19 @@ function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   const baryU = s.f32();
   const baryV = s.f32();
   const decorationAngle = s.f32();
-  s.s32(); // onCostumePiece
-  s.s32(); // earthDecoration
+  const onCostumePiece = s.s32();
+  const earthDecoration = s.s32();
   const decorationScale = s.f32();
-  if (version >= 0x214) s.i16(); // placedBy
+  const placedBy = version >= 0x214 ? s.i16() : undefined;
   const reversed = s.bool();
-  if (subVersion >= 0xc4) s.bool(); // hasShadow
-  if (subVersion >= 0x16c) s.bool(); // isQuest
+  const hasShadow = subVersion >= 0xc4 ? s.bool() : undefined;
+  const isQuest = subVersion >= 0x16c ? s.bool() : undefined;
   const playModeFrame = version >= 0x215 ? s.i32() : -1;
   const planGUID = version >= 0x25b ? s.guid() : 0;
-  if (vitaRevision(s.revision) >= 0x7c) s.f32(); // zBias
+  const zBias = vitaRevision(s.revision) >= 0x7c ? s.f32() : undefined;
   return {
     renderMesh, offset, parentBone, parentTriVert, baryU, baryV, decorationAngle, decorationScale,
-    reversed, playModeFrame, planGUID,
+    reversed, playModeFrame, planGUID, onCostumePiece, earthDecoration, placedBy, hasShadow, isQuest, zBias,
   };
 }
 

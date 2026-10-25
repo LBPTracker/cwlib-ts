@@ -7,7 +7,7 @@ import test from 'node:test';
 import { readThings } from '../src/things/level.ts';
 import type {
   AnimationTweakPart, AtmosphericTweakPart, AudioWorldPart, CameraTweakPart, ControlinatorPart, CreaturePart, NpcPart,
-  PhysicsTweakPart, SwitchInputPart, BodyPart, MaterialTweakPart, SwitchKeyPart, WindTweakPart, CheckpointPart, FaderPart, StreamingHintPart, CostumePart, EmitterPart, EnemyPart, MaterialOverridePart, ScriptInstance, ShapePart, TriggerPart,
+  PhysicsTweakPart, SwitchInputPart, SwitchPart, BodyPart, MaterialTweakPart, SwitchKeyPart, WindTweakPart, CheckpointPart, FaderPart, StreamingHintPart, CostumePart, EmitterPart, EnemyPart, MaterialOverridePart, ScriptInstance, ShapePart, TriggerPart,
 } from '../src/things/parts.ts';
 import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
@@ -41,6 +41,8 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   const scene = { cameras: 0, cameraNodes: 0, animTweaks: 0, animsPlayed: 0 };
   // And since 0.4.32, the last seven: creatures and what they list, sackbots, sensors, movers.
   const actors = { creatures: 0, creatureEyes: 0, npcs: 0, sensors: 0, controlinators: 0, physicsTweaks: 0 };
+  // Fields the parts walked and once dropped: a value from each kind, as the game's file has it.
+  const walked = { npcJumpSolvers: 0, finiteSpeedScales: 0, outputPorts: 0, contactCaches: 0 };
   let firstText = '';
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
@@ -87,7 +89,13 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
           actors.creatures += 1;
           actors.creatureEyes += creature.eyes.length;
         }
-        if (thing?.parts.get('NPC') as NpcPart | undefined) actors.npcs += 1;
+        const npc = thing?.parts.get('NPC') as NpcPart | undefined;
+        if (npc) actors.npcs += 1;
+        if (npc?.jumpSolver) walked.npcJumpSolvers += 1;
+        if (emitter && Number.isFinite(emitter.speedScale.activation)) walked.finiteSpeedScales += 1;
+        const sw = thing?.parts.get('SWITCH') as SwitchPart | undefined;
+        walked.outputPorts += sw?.outputPorts?.filter((o) => Number.isFinite(o?.activation.activation)).length ?? 0;
+        if ((thing?.parts.get('SHAPE') as ShapePart | undefined)?.contactCache) walked.contactCaches += 1;
         if (thing?.parts.get('SWITCH_INPUT') as SwitchInputPart | undefined) actors.sensors += 1;
         if (thing?.parts.get('CONTROLINATOR') as ControlinatorPart | undefined) actors.controlinators += 1;
         if (thing?.parts.get('PHYSICS_TWEAK') as PhysicsTweakPart | undefined) actors.physicsTweaks += 1;
@@ -130,6 +138,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   assert.deepEqual(scripts, { instances: 346, withFields: 346, texts: 36 });
   assert.equal(firstText, 'NP_TU01B_130_NEWTON');
   // The 24 eye parts belong to no creature: the three here list none.
+  assert.deepEqual(walked, { npcJumpSolvers: 3, finiteSpeedScales: 7, outputPorts: 2357, contactCaches: 2521 });
   assert.deepEqual(actors, { creatures: 3, creatureEyes: 0, npcs: 3, sensors: 58, controlinators: 2, physicsTweaks: 539 });
   assert.deepEqual(scene, { cameras: 65, cameraNodes: 65, animTweaks: 32, animsPlayed: 3 });
   assert.deepEqual(tweaks, { keys: 313, sounds: 154, materialTweaks: 287, shadowless: 2, winds: 9 });

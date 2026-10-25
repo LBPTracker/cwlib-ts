@@ -4,22 +4,50 @@ import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.
 import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { thingArray, things } from './common.ts';
 
+type V3 = readonly [number, number, number];
+
 /** `WhipSim`: the grappling hook's state, shared by pointer. */
-function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+export interface WhipSim {
+  readonly creatureThing?: Thing;
+  readonly baseHandleMatrix: Float32Array;
+  readonly prevDir: V3;
+  readonly currDir: V3;
+  readonly stateTimer: number;
+  readonly state: number;
+  readonly attachedThing?: Thing;
+  readonly attachedLocalPos: V3;
+  readonly attachedLocalNormal: V3;
+  readonly attachedLocalAngle: number;
+  readonly attachedScale: number;
+  readonly playedFailToFireSound: boolean;
+  readonly attachedZOffset: number;
+}
+
+function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): WhipSim {
   const thing = () => readThingRef(s, readers);
-  thing(); // creatureThing
-  s.skipMatrix(); // baseHandleMatrix
-  s.skipVector3(); // prevDir
-  s.skipVector3(); // currDir
-  s.i32(); // stateTimer
-  s.i32(); // state
-  thing(); // attachedThing
-  s.skipVector3(); // attachedLocalPos
-  s.skipVector3(); // attachedLocalNormal
-  s.f32(); // attachedLocalAngle
-  s.f32(); // attachedScale
-  s.bool(); // playedFailToFireSound
-  s.f32(); // attachedZOffset
+  return {
+    creatureThing: thing(),
+    baseHandleMatrix: s.matrix(),
+    prevDir: s.vector3(),
+    currDir: s.vector3(),
+    stateTimer: s.i32(),
+    state: s.i32(),
+    attachedThing: thing(),
+    attachedLocalPos: s.vector3(),
+    attachedLocalNormal: s.vector3(),
+    attachedLocalAngle: s.f32(),
+    attachedScale: s.f32(),
+    playedFailToFireSound: s.bool(),
+    attachedZOffset: s.f32(),
+  };
+}
+
+/** The spring a creature is on, shared by pointer. */
+export interface CreatureSpring {
+  readonly springThing?: Thing;
+  readonly springTimer: number;
+  readonly springDirection: V3;
+  readonly springThingPosition: V3;
 }
 
 /**
@@ -44,10 +72,191 @@ export interface CreaturePart {
   readonly eyes: readonly (Thing | undefined)[];
   readonly brainsAi: readonly (Thing | undefined)[];
   readonly brainsLife: readonly (Thing | undefined)[];
+  readonly jumpFrame: number;
+  readonly groundDistance: number;
+  readonly groundNormal: readonly [number, number, number];
+  readonly grabJoint: Thing | undefined;
+  readonly jumpingOff: Thing | undefined;
+  readonly stateTimer: number;
+  readonly zMode: number;
+  readonly playerAwareness: number;
+  readonly moveDirection: number;
+  readonly forceThatSmashedCreature: readonly [number, number, number];
+  readonly crushFrames: number;
+  readonly awarenessRadius: number;
+  readonly bouncepadThingUIDs?: readonly number[];
+  readonly grabbedThingUIDs?: readonly number[];
+  readonly lifeCreature?: Thing;
+  readonly aiCreature?: Thing;
+  readonly jumpInterval?: number;
+  readonly jumpIntervalPhase?: number;
+  readonly oldAnimMatrix?: Float32Array;
+  readonly animOffset?: number;
+  readonly groundNormalSmooth?: readonly [number, number, number];
+  readonly bodyAdjustApplied?: number;
+  readonly maxBulletCount?: number;
+  readonly ammoFillFactor?: number;
+  readonly fireRate?: number;
+  readonly gunAccuracy?: number;
+  readonly bulletEmitOffset?: readonly [number, number, number];
+  readonly bulletEmitRotation?: number;
+  readonly gunThing?: Thing;
+  readonly gunTrigger?: Thing;
+  readonly lastGunTriggerUID?: number;
+  readonly amountBodySubmerged?: number;
+  readonly amountHeadSubmerged?: number;
+  readonly headPiece?: ResourceRef;
+  readonly head?: Thing;
+  readonly toolTetherJoint?: Thing;
+  readonly toolTetherWidth?: number;
+  readonly jetpack?: Thing;
+  readonly wallJumpDir?: number;
+  readonly wallJumpPos?: readonly [number, number, number];
+  readonly gunType?: number;
+  readonly wallJumpMat?: boolean;
+  readonly smoothedDirectControlStick?: readonly [number, number, number];
+  readonly directControlAnimFrame?: number;
+  readonly directControlAnimState?: number;
+  readonly responsiblePlayer?: number;
+  readonly responsibleFramesLeft?: number;
+  readonly flyingLegScale?: number;
+  readonly flyingVels?: readonly [number, number, number, number];
+  readonly flyingFlapLockout?: boolean;
+  readonly flyingFallLockout?: boolean;
+  readonly flyingInWind?: boolean;
+  readonly flyingThrustLatched?: boolean;
+  readonly glidingTime?: number;
+  readonly springState?: number;
+  readonly springHasSprung?: boolean;
+  readonly springPower?: number;
+  readonly springSeparateForces?: boolean;
+  readonly springForce?: number;
+  readonly springStateTimer?: number;
+  readonly subState?: number;
+  readonly airTime?: number;
+  readonly haveNotTouchedGroundSinceUsingJetpack?: boolean;
+  readonly meshDirty?: boolean;
+  readonly reactToLethal?: boolean;
+  readonly groundNormalRaw?: readonly [number, number, number];
+  readonly switchScale?: number;
+  readonly gunDirAndDashVec?: readonly [number, number, number];
+  readonly gunDirAndDashVecW?: number;
+  readonly resourceThing?: Thing;
+  readonly gunFireFrame?: number;
+  readonly bulletCount?: number;
+  readonly bulletImmuneTimer?: number;
+  readonly bulletEmitter0?: Thing;
+  readonly bulletEmitter1?: Thing;
+  readonly bulletPosIndex?: number;
+  readonly gunDirPrecisionMode?: boolean;
+  readonly airTimeLeft?: number;
+  readonly hasScubaGear?: boolean;
+  readonly outOfWaterJumpBoost?: boolean;
+  readonly handPiece?: ResourceRef;
+  readonly lastDirectControlPrompt?: Thing;
+  readonly directControlPrompt?: Thing;
+  readonly directControlMode?: number;
+  readonly canDropPowerup?: boolean;
+  readonly capeExtraMaxVelocityCap?: number;
+  readonly behavior?: number;
+  readonly effectDestroy?: number;
+  readonly shootAtTouch?: number;
+  readonly alternateFormWorld?: Thing;
+  readonly hookHatState?: number;
+  readonly hookHatBogey?: Thing;
+  readonly whipSim?: WhipSim;
+  readonly spring?: CreatureSpring;
+  readonly bootContactForceList?: readonly V3[];
+  /** The seven flying timers, as cwlib reads them, one after another. */
+  readonly flyingTimers?: readonly number[];
 }
 
 export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartReader>): CreaturePart {
   const { version, subVersion } = s.revision;
+  let whipSim: WhipSim | undefined;
+  let bootContactForceList: V3[] | undefined;
+  let flyingTimers: number[] | undefined;
+  let spring: CreatureSpring | undefined;
+  let subState: number | undefined;
+  let airTime: number | undefined;
+  let haveNotTouchedGroundSinceUsingJetpack: boolean | undefined;
+  let meshDirty: boolean | undefined;
+  let reactToLethal: boolean | undefined;
+  let groundNormalRaw: readonly [number, number, number] | undefined;
+  let switchScale: number | undefined;
+  let gunDirAndDashVec: readonly [number, number, number] | undefined;
+  let gunDirAndDashVecW: number | undefined;
+  let resourceThing: Thing | undefined;
+  let gunFireFrame: number | undefined;
+  let bulletCount: number | undefined;
+  let bulletImmuneTimer: number | undefined;
+  let bulletEmitter0: Thing | undefined;
+  let bulletEmitter1: Thing | undefined;
+  let bulletPosIndex: number | undefined;
+  let gunDirPrecisionMode: boolean | undefined;
+  let airTimeLeft: number | undefined;
+  let hasScubaGear: boolean | undefined;
+  let outOfWaterJumpBoost: boolean | undefined;
+  let handPiece: ResourceRef | undefined;
+  let lastDirectControlPrompt: Thing | undefined;
+  let directControlPrompt: Thing | undefined;
+  let directControlMode: number | undefined;
+  let canDropPowerup: boolean | undefined;
+  let capeExtraMaxVelocityCap: number | undefined;
+  let behavior: number | undefined;
+  let effectDestroy: number | undefined;
+  let shootAtTouch: number | undefined;
+  let alternateFormWorld: Thing | undefined;
+  let hookHatState: number | undefined;
+  let hookHatBogey: Thing | undefined;
+  let bouncepadThingUIDs: readonly number[] | undefined;
+  let grabbedThingUIDs: readonly number[] | undefined;
+  let lifeCreature: Thing | undefined;
+  let aiCreature: Thing | undefined;
+  let jumpInterval: number | undefined;
+  let jumpIntervalPhase: number | undefined;
+  let oldAnimMatrix: Float32Array | undefined;
+  let animOffset: number | undefined;
+  let groundNormalSmooth: readonly [number, number, number] | undefined;
+  let bodyAdjustApplied: number | undefined;
+  let maxBulletCount: number | undefined;
+  let ammoFillFactor: number | undefined;
+  let fireRate: number | undefined;
+  let gunAccuracy: number | undefined;
+  let bulletEmitOffset: readonly [number, number, number] | undefined;
+  let bulletEmitRotation: number | undefined;
+  let gunThing: Thing | undefined;
+  let gunTrigger: Thing | undefined;
+  let lastGunTriggerUID: number | undefined;
+  let amountBodySubmerged: number | undefined;
+  let amountHeadSubmerged: number | undefined;
+  let headPiece: ResourceRef | undefined;
+  let head: Thing | undefined;
+  let toolTetherJoint: Thing | undefined;
+  let toolTetherWidth: number | undefined;
+  let jetpack: Thing | undefined;
+  let wallJumpDir: number | undefined;
+  let wallJumpPos: readonly [number, number, number] | undefined;
+  let gunType: number | undefined;
+  let wallJumpMat: boolean | undefined;
+  let smoothedDirectControlStick: readonly [number, number, number] | undefined;
+  let directControlAnimFrame: number | undefined;
+  let directControlAnimState: number | undefined;
+  let responsiblePlayer: number | undefined;
+  let responsibleFramesLeft: number | undefined;
+  let flyingLegScale: number | undefined;
+  let flyingVels: readonly [number, number, number, number] | undefined;
+  let flyingFlapLockout: boolean | undefined;
+  let flyingFallLockout: boolean | undefined;
+  let flyingInWind: boolean | undefined;
+  let flyingThrustLatched: boolean | undefined;
+  let glidingTime: number | undefined;
+  let springState: number | undefined;
+  let springHasSprung: boolean | undefined;
+  let springPower: number | undefined;
+  let springSeparateForces: boolean | undefined;
+  let springForce: number | undefined;
+  let springStateTimer: number | undefined;
   let legs: (Thing | undefined)[] = [];
   let lifeSources: (Thing | undefined)[] = [];
   let eyes: (Thing | undefined)[] = [];
@@ -56,161 +265,179 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   const thing = () => readThingRef(s, readers);
 
   const config = s.resource();
-  s.s32(); // jumpFrame
-  s.f32(); // groundDistance
-  s.skipVector3(); // groundNormal
-  thing(); // grabJoint
-  thing(); // jumpingOff
+  const jumpFrame = s.s32();
+  const groundDistance = s.f32();
+  const groundNormal = s.vector3();
+  const grabJoint = thing();
+  const jumpingOff = thing();
   const state = s.i32();
-  if (subVersion >= 0x132) s.i32(); // subState
-  s.i32(); // stateTimer
+  if (subVersion >= 0x132) subState = s.i32();
+  const stateTimer = s.i32();
   const speedModifier = s.f32();
   const jumpModifier = s.f32();
   const strengthModifier = s.f32();
-  s.i32(); // zMode
-  s.s32(); // playerAwareness
-  s.s32(); // moveDirection
-  s.skipVector3(); // forceThatSmashedCreature
-  s.i32(); // crushFrames
-  s.f32(); // awarenessRadius
-  if (version >= 0x1df) s.i32(); // airTime
+  const zMode = s.i32();
+  const playerAwareness = s.s32();
+  const moveDirection = s.s32();
+  const forceThatSmashedCreature = s.vector3();
+  const crushFrames = s.i32();
+  const awarenessRadius = s.f32();
+  if (version >= 0x1df) airTime = s.i32();
   if (version >= 0x354) {
-    s.intVector(); // bouncepadThingUIDs
-    s.intVector(); // grabbedThingUIDs
+    bouncepadThingUIDs = s.intVector();
+    grabbedThingUIDs = s.intVector();
   }
-  if (version >= 0x221) s.bool(); // haveNotTouchedGroundSinceUsingJetpack
+  if (version >= 0x221) haveNotTouchedGroundSinceUsingJetpack = s.bool();
   if (version >= 0x15d) {
     legs = thingArray(s, readers);
     lifeSources = thingArray(s, readers);
-    thing(); // lifeCreature
-    thing(); // aiCreature
+    lifeCreature = thing();
+    aiCreature = thing();
   }
   if (version >= 0x163) {
-    s.i32(); // jumpInterval
-    s.i32(); // jumpIntervalPhase
+    jumpInterval = s.i32();
+    jumpIntervalPhase = s.i32();
   }
-  if (version >= 0x169) s.bool(); // meshDirty
+  if (version >= 0x169) meshDirty = s.bool();
   if (version >= 0x166) {
     eyes = thingArray(s, readers);
     brainsAi = thingArray(s, readers);
     brainsLife = thingArray(s, readers);
   }
-  if (version >= 0x19c) s.bool(); // reactToLethal
+  if (version >= 0x19c) reactToLethal = s.bool();
   if (version >= 0x1a9) {
-    s.skipMatrix(); // oldAnimMatrix
-    s.f32(); // animOffset
+    oldAnimMatrix = s.matrix();
+    animOffset = s.f32();
   }
-  if (version >= 0x1fc) s.skipVector3(); // groundNormalRaw
+  if (version >= 0x1fc) groundNormalRaw = s.vector3();
   if (version >= 0x212) {
-    s.skipVector3(); // groundNormalSmooth
-    s.f32(); // bodyAdjustApplied
+    groundNormalSmooth = s.vector3();
+    bodyAdjustApplied = s.f32();
   }
-  if (version >= 0x240 && version < 0x2c4) s.f32(); // switchScale
-  if (version >= 0x243) s.skipVector3(); // gunDirAndDashVec
-  if (subVersion >= 0x19e) s.f32(); // gunDirAndDashVecW
-  if (version >= 0x246) thing(); // resourceThing
-  if (version >= 0x247) s.i32(); // gunFireFrame
-  if (version >= 0x248) s.i32(); // bulletCount
-  if (version >= 0x24a) s.i32(); // bulletImmuneTimer
-  if (version >= 0x24d) thing(); // bulletEmitter0
-  if (version >= 0x3a2) thing(); // bulletEmitter1
-  if (version >= 0x24e) s.i32(); // bulletPosIndex
+  if (version >= 0x240 && version < 0x2c4) switchScale = s.f32();
+  if (version >= 0x243) gunDirAndDashVec = s.vector3();
+  if (subVersion >= 0x19e) gunDirAndDashVecW = s.f32();
+  if (version >= 0x246) resourceThing = thing();
+  if (version >= 0x247) gunFireFrame = s.i32();
+  if (version >= 0x248) bulletCount = s.i32();
+  if (version >= 0x24a) bulletImmuneTimer = s.i32();
+  if (version >= 0x24d) bulletEmitter0 = thing();
+  if (version >= 0x3a2) bulletEmitter1 = thing();
+  if (version >= 0x24e) bulletPosIndex = s.i32();
   if (version >= 0x24f) {
-    s.i32(); // maxBulletCount
-    s.f32(); // ammoFillFactor
+    maxBulletCount = s.i32();
+    ammoFillFactor = s.f32();
   }
-  if (version >= 0x252) s.bool(); // gunDirPrecisionMode
+  if (version >= 0x252) gunDirPrecisionMode = s.bool();
   if (version >= 0x320) {
-    s.i32(); // fireRate
-    s.f32(); // gunAccuracy
-    s.skipVector3(); // bulletEmitOffset
-    s.f32(); // bulletEmitRotation
-    thing(); // gunThing
-    thing(); // gunTrigger
-    s.i32(); // lastGunTriggerUID
+    fireRate = s.i32();
+    gunAccuracy = s.f32();
+    bulletEmitOffset = s.vector3();
+    bulletEmitRotation = s.f32();
+    gunThing = thing();
+    gunTrigger = thing();
+    lastGunTriggerUID = s.i32();
   }
-  if (version >= 0x272) s.i32(); // airTimeLeft
+  if (version >= 0x272) airTimeLeft = s.i32();
   // ❗ **Three branch gates wearing version gates' clothes.** LEERDAMMER got the
   // submerged pair at its revision 15 and the two water bools at any revision at
   // all, so a 0x272 file on that branch carries ten bytes this reader used to
   // skip. `headPiece` is the mirror image: LEERDAMMER *removed* it at revision
   // 12, so a 0x17 file does not have it either way.
   if (version >= 0x2c9 || onLeerdammer(s.revision, LD_SUBMERGED)) {
-    s.f32(); // amountBodySubmerged
-    s.f32(); // amountHeadSubmerged
+    amountBodySubmerged = s.f32();
+    amountHeadSubmerged = s.f32();
   }
-  if (version >= 0x289 || onLeerdammer(s.revision, LD_ANY)) s.bool(); // hasScubaGear
+  if (version >= 0x289 || onLeerdammer(s.revision, LD_ANY)) hasScubaGear = s.bool();
   // cwlib `before(LEERDAMMER, LD_REMOVED_HEAD_PIECE)`: on the branch and older than 12.
   const headPieceGone = onLeerdammer(s.revision, LD_ANY) && s.revision.branchRevision >= 0xc;
   if ((version >= 0x289 && version < 0x2c8) || (onLeerdammer(s.revision, LD_ANY) && !headPieceGone)) {
-    s.resource(); // headPiece
+    headPiece = s.resource();
   }
-  if (version >= 0x289 || onLeerdammer(s.revision, LD_ANY)) s.bool(); // outOfWaterJumpBoost
-  if (version >= 0x2a9) s.resource(); // handPiece
+  if (version >= 0x289 || onLeerdammer(s.revision, LD_ANY)) outOfWaterJumpBoost = s.bool();
+  if (version >= 0x2a9) handPiece = s.resource();
   if (version >= 0x273) {
-    thing(); // head
-    thing(); // toolTetherJoint
-    s.f32(); // toolTetherWidth
-    thing(); // jetpack
-    s.s32(); // wallJumpDir
-    s.skipVector3(); // wallJumpPos
-    const contacts = s.count();
-    for (let i = 0; i < contacts; i += 1) s.skipVector3(); // bootContactForceList
-    s.s32(); // gunType
-    s.bool(); // wallJumpMat
+    head = thing();
+    toolTetherJoint = thing();
+    toolTetherWidth = s.f32();
+    jetpack = thing();
+    wallJumpDir = s.s32();
+    wallJumpPos = s.vector3();
+    bootContactForceList = Array.from({ length: s.count() }, () => s.vector3());
+    gunType = s.s32();
+    wallJumpMat = s.bool();
   }
-  if (version >= 0x29e && version < 0x336) thing(); // lastDirectControlPrompt
-  if (version > 0x2e4) thing(); // directControlPrompt
+  if (version >= 0x29e && version < 0x336) lastDirectControlPrompt = thing();
+  if (version > 0x2e4) directControlPrompt = thing();
   if (version >= 0x29e && version < 0x336) {
-    s.skipVector3(); // smoothedDirectControlStick
-    s.i16(); // directControlAnimFrame
-    s.u8(); // directControlAnimState
+    smoothedDirectControlStick = s.vector3();
+    directControlAnimFrame = s.i16();
+    directControlAnimState = s.u8();
   }
-  if (version >= 0x29f && version < 0x2c1) s.u8(); // directControlMode
+  if (version >= 0x29f && version < 0x2c1) directControlMode = s.u8();
   if (version >= 0x2c1 && version < 0x336) s.u8();
   if (version >= 0x2a5) {
-    s.i32(); // responsiblePlayer
-    s.i32(); // responsibleFramesLeft
+    responsiblePlayer = s.i32();
+    responsibleFramesLeft = s.i32();
   }
-  if (version >= 0x32c) s.bool(); // canDropPowerup
-  if (version >= 0x3f0) s.u8(); // capeExtraMaxVelocityCap
-  if (version >= 0x35a) s.i32(); // behavior
-  if (version >= 0x373) s.i32(); // effectDestroy
-  if (version >= 0x3c0) s.reference((self) => readWhipSim(self, readers));
+  if (version >= 0x32c) canDropPowerup = s.bool();
+  if (version >= 0x3f0) capeExtraMaxVelocityCap = s.u8();
+  if (version >= 0x35a) behavior = s.i32();
+  if (version >= 0x373) effectDestroy = s.i32();
+  if (version >= 0x3c0) whipSim = s.reference((self) => readWhipSim(self, readers));
   const vita = vitaRevision(s.revision);
   if (vita >= 0 && vita < 0x53) s.u8();
-  if (vita >= 0x53) s.i32(); // shootAtTouch
+  if (vita >= 0x53) shootAtTouch = s.i32();
   if (subVersion >= 0x88 && subVersion <= 0xa4) s.resource();
-  if (subVersion >= 0xaa) thing(); // alternateFormWorld
-  if (subVersion >= 0xd7) s.i32(); // hookHatState
+  if (subVersion >= 0xaa) alternateFormWorld = thing();
+  if (subVersion >= 0xd7) hookHatState = s.i32();
   if (subVersion >= 0xd7 && subVersion < 0xea) {
     thing();
     thing();
   }
-  if (subVersion >= 0xdf) thing(); // hookHatBogey
+  if (subVersion >= 0xdf) hookHatBogey = thing();
   if (subVersion >= 0x196) {
-    for (let i = 0; i < 7; i += 1) s.i32(); // the flying timers
-    s.f32(); // flyingLegScale
-    s.skipVector4(); // flyingVels
-    s.bool(); // flyingFlapLockout
-    s.bool(); // flyingFallLockout
-    s.bool(); // flyingInWind
-    s.bool(); // flyingThrustLatched
-    s.i16(); // glidingTime
+    flyingTimers = Array.from({ length: 7 }, () => s.i32());
+    flyingLegScale = s.f32();
+    flyingVels = s.vector4();
+    flyingFlapLockout = s.bool();
+    flyingFallLockout = s.bool();
+    flyingInWind = s.bool();
+    flyingThrustLatched = s.bool();
+    glidingTime = s.i16();
   }
   if (subVersion >= 0x20c) {
-    s.u8(); // springState
-    s.bool(); // springHasSprung
-    s.reference((self) => {
-      readThingRef(self, readers); // springThing
-      self.i32(); // springTimer
-      self.skipVector3(); // springDirection
-      self.skipVector3(); // springThingPosition
-    });
-    s.u8(); // springPower
-    s.bool(); // springSeparateForces
-    s.u8(); // springForce
-    s.u8(); // springStateTimer
+    springState = s.u8();
+    springHasSprung = s.bool();
+    spring = s.reference((self): CreatureSpring => ({
+      springThing: readThingRef(self, readers),
+      springTimer: self.i32(),
+      springDirection: self.vector3(),
+      springThingPosition: self.vector3(),
+    }));
+    springPower = s.u8();
+    springSeparateForces = s.bool();
+    springForce = s.u8();
+    springStateTimer = s.u8();
   }
-  return { config, state, speedModifier, jumpModifier, strengthModifier, legs, lifeSources, eyes, brainsAi, brainsLife };
+  return {
+    config, state, speedModifier, jumpModifier, strengthModifier, legs, lifeSources, eyes, brainsAi,
+    brainsLife, jumpFrame, groundDistance, groundNormal, grabJoint, jumpingOff, stateTimer, zMode,
+    playerAwareness, moveDirection, forceThatSmashedCreature, crushFrames, awarenessRadius,
+    bouncepadThingUIDs, grabbedThingUIDs, lifeCreature, aiCreature, jumpInterval, jumpIntervalPhase,
+    oldAnimMatrix, animOffset, groundNormalSmooth, bodyAdjustApplied, maxBulletCount,
+    ammoFillFactor, fireRate, gunAccuracy, bulletEmitOffset, bulletEmitRotation, gunThing,
+    gunTrigger, lastGunTriggerUID, amountBodySubmerged, amountHeadSubmerged, headPiece, head,
+    toolTetherJoint, toolTetherWidth, jetpack, wallJumpDir, wallJumpPos, gunType, wallJumpMat,
+    smoothedDirectControlStick, directControlAnimFrame, directControlAnimState, responsiblePlayer,
+    responsibleFramesLeft, flyingLegScale, flyingVels, flyingFlapLockout, flyingFallLockout,
+    flyingInWind, flyingThrustLatched, glidingTime, springState, springHasSprung, springPower,
+    springSeparateForces, springForce, springStateTimer, subState, airTime,
+    haveNotTouchedGroundSinceUsingJetpack, meshDirty, reactToLethal, groundNormalRaw, switchScale,
+    gunDirAndDashVec, gunDirAndDashVecW, resourceThing, gunFireFrame, bulletCount,
+    bulletImmuneTimer, bulletEmitter0, bulletEmitter1, bulletPosIndex, gunDirPrecisionMode,
+    airTimeLeft, hasScubaGear, outOfWaterJumpBoost, handPiece, lastDirectControlPrompt,
+    directControlPrompt, directControlMode, canDropPowerup, capeExtraMaxVelocityCap, behavior,
+    effectDestroy, shootAtTouch, alternateFormWorld, hookHatState, hookHatBogey, whipSim, spring, bootContactForceList, flyingTimers,
+  };
 }

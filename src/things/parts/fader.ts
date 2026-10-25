@@ -24,5 +24,8 @@ export function readFader(s: Serializer): FaderPart {
   const faderDisabled = subVersion >= 0x17 ? s.bool() : false;
   const fadeTimeSeconds = subVersion >= 0x39 ? s.f32() : 0;
   const inputBehavior = subVersion >= 0x3b ? s.i8() : 0;
-  return { includeRigidConnectors, includeLights, requirePlayerObscuration, fadeAmount, faderDisabled, fadeTimeSeconds, inputBehavior };
+  return {
+    includeRigidConnectors, includeLights, requirePlayerObscuration, fadeAmount, faderDisabled,
+    fadeTimeSeconds, inputBehavior,
+  };
 }

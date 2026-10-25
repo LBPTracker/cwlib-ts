@@ -1,28 +1,46 @@
 /** `POPPET_POWERUP`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
-import { readInventoryItemDetails } from '../../structs/inventory.ts';
+import { readInventoryItemDetails, type InventoryItemDetails } from '../../structs/inventory.ts';
 
 /**
  * `InventoryItem`: cwlib's `structs/profile/InventoryItem.java`, from version
  * 0x235 (`ITEM_FLAGS`). Its integers are fixed-width even in a compressed
  * stream, as cwlib forces them.
  */
-export function readInventoryItem(s: Serializer): void {
+export interface InventoryItem {
+  /** A descriptor. */
+  readonly plan?: ResourceRef;
+  /** subVersion `0x106` on. */
+  readonly guid?: number;
+  readonly details: InventoryItemDetails;
+  readonly uid: number;
+  /** Below version `0x36c`. */
+  readonly tutorialLevel?: number;
+  readonly tutorialVideo?: number;
+  readonly flags: number;
+  /** Version `0x34a` on. */
+  readonly userCategoryIndex?: number;
+}
+
+export function readInventoryItem(s: Serializer): InventoryItem {
   const { version, subVersion } = s.revision;
   if (version < 0x235) {
     throw new SerializerError(`InventoryItem at version 0x${version.toString(16)} is not ported`);
   }
-  s.resource(true); // plan
-  if (subVersion >= 0x106) s.guid(); // guid
-  readInventoryItemDetails(s);
-  s.i32(true); // UID
+  const plan = s.resource(true);
+  const guid = subVersion >= 0x106 ? s.guid() : undefined;
+  const details = readInventoryItemDetails(s);
+  const uid = s.i32(true);
+  let tutorialLevel: number | undefined;
+  let tutorialVideo: number | undefined;
   if (version < 0x36c) {
-    s.i32(true); // tutorialLevel
-    s.i32(true); // tutorialVideo
+    tutorialLevel = s.i32(true);
+    tutorialVideo = s.i32(true);
   }
-  s.i32(true); // flags
-  if (version >= 0x34a) s.i32(true); // userCategoryIndex
+  const flags = s.i32(true);
+  const userCategoryIndex = version >= 0x34a ? s.i32(true) : undefined;
+  return { plan, guid, details, uid, tutorialLevel, tutorialVideo, flags, userCategoryIndex };
 }
 
 /**
@@ -33,13 +51,36 @@ export function readInventoryItem(s: Serializer): void {
 /** `PPoppetPowerup`, kept: the plans a popit puzzle hands the player. */
 export interface PoppetPowerupPart {
   readonly plans: readonly (ResourceRef | undefined)[];
+  readonly goodies?: number;
+  readonly minLayer?: number;
+  readonly maxLayer?: number;
+  readonly nextUid?: number;
+  readonly vcrControlsEnabled?: boolean;
+  readonly gridSnapMode?: number;
+  readonly allowCursorToCopy?: number;
+  readonly sackFreeze?: boolean;
+  readonly vcrBackupTriggered?: boolean;
+  readonly filterContents?: boolean;
+  /** The tools the popit offers, a bit set; subVersion `0x125` on. A u64, read as a number: exact to 2^53. */
+  readonly tools?: number;
 }
 
 export function readPoppetPowerup(s: Serializer): PoppetPowerupPart {
   const { subVersion } = s.revision;
+  let nextUid: number | undefined;
+  let vcrControlsEnabled: boolean | undefined;
+  let gridSnapMode: number | undefined;
+  let allowCursorToCopy: number | undefined;
+  let sackFreeze: boolean | undefined;
+  let vcrBackupTriggered: boolean | undefined;
+  let filterContents: boolean | undefined;
+  let goodies: number | undefined;
+  let minLayer: number | undefined;
+  let maxLayer: number | undefined;
   const plans: (ResourceRef | undefined)[] = [];
+  let tools: number | undefined;
   if (subVersion > 0x124) {
-    s.u64(); // tools
+    tools = s.u64();
     const items = s.count();
     for (let i = 0; i < items; i += 1) plans.push(s.resource(true)); // a plan descriptor
   }
@@ -56,19 +97,22 @@ export function readPoppetPowerup(s: Serializer): PoppetPowerupPart {
     }
   }
   if (subVersion >= 0x8 && subVersion < 0x174) {
-    s.u8(); // goodies
+    goodies = s.u8();
     s.u8(); // tools
   }
-  if (subVersion >= 0xb && subVersion < 0x174) s.s32(); // nextUid
-  if (subVersion > 0x8b) s.bool(); // vcrControlsEnabled
-  if (subVersion > 0xa1) s.s32(); // gridSnapMode
-  if (subVersion >= 0xc1 && subVersion < 0x174) s.u8(); // allowCursorToCopy
-  if (subVersion > 0x12d) s.bool(); // sackFreeze
+  if (subVersion >= 0xb && subVersion < 0x174) nextUid = s.s32();
+  if (subVersion > 0x8b) vcrControlsEnabled = s.bool();
+  if (subVersion > 0xa1) gridSnapMode = s.s32();
+  if (subVersion >= 0xc1 && subVersion < 0x174) allowCursorToCopy = s.u8();
+  if (subVersion > 0x12d) sackFreeze = s.bool();
   if (subVersion > 0x12e) {
-    s.s32(); // minLayer
-    s.s32(); // maxLayer
+    minLayer = s.s32();
+    maxLayer = s.s32();
   }
-  if (subVersion > 0x14a) s.bool(); // vcrBackupTriggered
-  if (subVersion > 0x166) s.bool(); // filterContents
-  return { plans };
+  if (subVersion > 0x14a) vcrBackupTriggered = s.bool();
+  if (subVersion > 0x166) filterContents = s.bool();
+  return {
+    plans, goodies, minLayer, maxLayer, nextUid, vcrControlsEnabled, gridSnapMode,
+    allowCursorToCopy, sackFreeze, vcrBackupTriggered, filterContents, tools,
+  };
 }

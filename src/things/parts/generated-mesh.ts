@@ -14,6 +14,13 @@ export interface GeneratedMeshPart {
   readonly visibilityFlags: number;
   readonly noBevel: boolean;
   readonly includeSides: boolean;
+  readonly textureAnimationSpeed?: number;
+  readonly textureAnimationSpeedOff?: number;
+  readonly slideSteer?: number;
+  readonly slideSpeed?: number;
+  readonly uvMode?: number;
+  readonly sharded?: boolean;
+  readonly slideImpactDamping?: number;
 }
 
 /**
@@ -25,6 +32,13 @@ export interface GeneratedMeshPart {
  */
 export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   const { version, subVersion } = s.revision;
+  let uvMode: number | undefined;
+  let sharded: boolean | undefined;
+  let slideImpactDamping: number | undefined;
+  let textureAnimationSpeed: number | undefined;
+  let textureAnimationSpeedOff: number | undefined;
+  let slideSteer: number | undefined;
+  let slideSpeed: number | undefined;
   const gfxMaterial = s.resource();
   const bevel = s.resource();
   const uvOffset = s.vector4();
@@ -33,19 +47,23 @@ export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
   if (version >= 0x27c && subVersion < 0xfb) visibilityFlags = s.bool() ? 3 : 0;
   if (subVersion >= 0xfb) visibilityFlags = s.u8();
   if (version >= 0x305) {
-    s.f32(); // textureAnimationSpeed
-    s.f32(); // textureAnimationSpeedOff
+    textureAnimationSpeed = s.f32();
+    textureAnimationSpeedOff = s.f32();
   }
   const vita = vitaRevision(s.revision);
-  if (vita >= 0x6b) s.i32(); // uvMode
+  if (vita >= 0x6b) uvMode = s.i32();
   if (vita === 0x76) s.f32(); // textureScale, at that one revision
   const noBevel = subVersion >= 0x34 ? s.bool() : false;
-  if (subVersion >= 0x97) s.bool(); // sharded
+  if (subVersion >= 0x97) sharded = s.bool();
   const includeSides = subVersion >= 0x13d ? s.bool() : true;
-  if (subVersion >= 0x155) s.u8(); // slideImpactDamping
+  if (subVersion >= 0x155) slideImpactDamping = s.u8();
   if (subVersion >= 0x13d) {
-    s.u8(); // slideSteer
-    s.u8(); // slideSpeed
+    slideSteer = s.u8();
+    slideSpeed = s.u8();
   }
-  return { gfxMaterial, bevel, uvOffset, planGUID, visibilityFlags, noBevel, includeSides };
+  return {
+    gfxMaterial, bevel, uvOffset, planGUID, visibilityFlags, noBevel, includeSides,
+    textureAnimationSpeed, textureAnimationSpeedOff, slideSteer, slideSpeed, uvMode, sharded,
+    slideImpactDamping,
+  };
 }

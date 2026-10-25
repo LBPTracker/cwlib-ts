@@ -48,6 +48,18 @@ export interface Microchip {
    * `level.ts` rebuilds it from the Thing graph in that case.
    */
   readonly board?: Thing;
+  /** Version `0x283` on. */
+  readonly hideInPlayMode?: boolean;
+  /** Version `0x2b8` on. */
+  readonly wiresVisible?: boolean;
+  /** Version `0x2e4` on. */
+  readonly lastTouched?: number;
+  /** Version `0x2e9` on. */
+  readonly offset?: readonly [number, number, number, number];
+  /** subVersion `0x1d` on. */
+  readonly keepVisualVertical?: boolean;
+  /** subVersion `0x2d` on. */
+  readonly broadcastType?: number;
 }
 
 /**
@@ -64,10 +76,10 @@ export function readMicrochip(
 ): Microchip {
   const { version, subVersion } = s.revision;
   const board = readThingRef(s, readers); // circuitBoardThing
-  if (version >= 0x283) s.bool(); // hideInPlayMode
-  if (version >= 0x2b8) s.bool(); // wiresVisible
-  if (version >= 0x2e4) s.s32(); // lastTouched
-  if (version >= 0x2e9) s.skipVector4(); // offset
+  const hideInPlayMode = version >= 0x283 ? s.bool() : undefined;
+  const wiresVisible = version >= 0x2b8 ? s.bool() : undefined;
+  const lastTouched = version >= 0x2e4 ? s.s32() : undefined;
+  const offset = version >= 0x2e9 ? s.vector4() : undefined;
 
   let name = '';
   let sizeX = 0;
@@ -90,7 +102,10 @@ export function readMicrochip(
     sizeY = s.f32(); // circuitBoardSizeY
   }
 
-  if (subVersion >= 0x1d) s.bool(); // keepVisualVertical
-  if (subVersion >= 0x2d) s.u8(); // broadcastType
-  return { name, components, board, sizeX, sizeY };
+  const keepVisualVertical = subVersion >= 0x1d ? s.bool() : undefined;
+  const broadcastType = subVersion >= 0x2d ? s.u8() : undefined;
+  return {
+    name, components, board, sizeX, sizeY, hideInPlayMode, wiresVisible, lastTouched, offset,
+    keepVisualVertical, broadcastType,
+  };
 }

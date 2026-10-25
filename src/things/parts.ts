@@ -93,11 +93,11 @@ export { readCostume, type CostumePart, type CostumePiece, type CostumePrimitive
 export { readAnimation, type AnimationPart } from './parts/animation.ts';
 export { readMaterialOverride, type MaterialOverridePart, type RegionOverride } from './parts/material-override.ts';
 export { readAtmosphericTweak, type AtmosphericTweakPart } from './parts/atmospheric-tweak.ts';
-export { readCreature, type CreaturePart } from './parts/creature.ts';
+export { readCreature, type CreaturePart, type CreatureSpring, type WhipSim } from './parts/creature.ts';
 export { readDecorations, type Decoration } from './parts/decorations.ts';
 export { readEmitter, type EmittedObjectSource, type EmitterPart } from './parts/emitter.ts';
 export { readEnemy, type EnemyPart } from './parts/enemy.ts';
-export { readPoppetPowerup, type PoppetPowerupPart } from './parts/poppet-powerup.ts';
+export { readPoppetPowerup, type InventoryItem, type PoppetPowerupPart } from './parts/poppet-powerup.ts';
 export { readAnimationTweak, type AnimationTweakPart } from './parts/animation-tweak.ts';
 export { readHudElem, type HudDrawable, type HudElemPart } from './parts/hud-elem.ts';
 export { readConnectorHook, type ConnectorHookPart } from './parts/connector-hook.ts';
@@ -115,7 +115,7 @@ export { readTransition, type TransitionPart } from './parts/transition.ts';
 export { readEffector, type EffectorPart } from './parts/effector.ts';
 export { readWormhole, type WormholePart } from './parts/wormhole.ts';
 export { decodeEntities, escapeEntities } from './parts/entities.ts';
-export { readGameplayData, type GameplayDataPart } from './parts/gameplay-data.ts';
+export { readGameplayData, type EggLink, type GameplayDataPart } from './parts/gameplay-data.ts';
 export { readGeneratedMesh, type GeneratedMeshPart } from './parts/generated-mesh.ts';
 export { readGroup, type GroupPart } from './parts/group.ts';
 export { readInstrumentPart, type InstrumentPart } from './parts/instrument.ts';
@@ -127,20 +127,20 @@ export {
 } from './parts/level-settings.ts';
 export { readMaterialTweak, type MaterialTweakPart } from './parts/material-tweak.ts';
 export { readMicrochip, type Component, type Microchip } from './parts/microchip.ts';
-export { readNpc, type NpcPart } from './parts/npc.ts';
+export { readNpc, type ActingData, type InputRecording, type NpcBehavior, type NpcJumpSolver, type NpcPart } from './parts/npc.ts';
 export { readPhysicsTweak, type PhysicsTweakPart } from './parts/physics-tweak.ts';
 export { readPos } from './parts/pos.ts';
 export { readRenderMesh, type RenderMeshPart } from './parts/render-mesh.ts';
 export { readScript, type ScriptField, type ScriptFieldLayout, type ScriptInstance, type ScriptObject, type ScriptValue } from './parts/script.ts';
 export { readSequencerPart, type SequencerPart } from './parts/sequencer.ts';
-export { readShape, type ShapePart } from './parts/shape.ts';
+export { readShape, type ContactCache, type ShapePart } from './parts/shape.ts';
 export { readSpriteLight, type SpriteLightPart } from './parts/sprite-light.ts';
-export { readStickers, type Decal, type StickersPart } from './parts/stickers.ts';
-export { readSwitch, type SwitchPart, type SwitchTarget } from './parts/switch.ts';
+export { readStickers, type ColorCorrection, type Decal, type EyetoyData, type PaintControlPoint, type StickersPart } from './parts/stickers.ts';
+export { readSwitch, type SwitchOutput, type SwitchPart, type SwitchSignal, type SwitchTarget } from './parts/switch.ts';
 export { readSwitchInput, type SwitchInputPart } from './parts/switch-input.ts';
 export { readSwitchKey, type SwitchKeyPart } from './parts/switch-key.ts';
 export { readTrigger, type TriggerPart } from './parts/trigger.ts';
-export { readYellowHead, type YellowHeadPart } from './parts/yellowhead.ts';
+export { readYellowHead, type Poppet, type PoppetMaterialOverride, type PoppetMode, type PoppetShapeOverride, type RaycastResults, type YellowHeadPart } from './parts/yellowhead.ts';
 export { SerializerError } from '../io/serializer.ts';
 
 /** Everything implemented so far, ready to hand to `readLevel`. */
