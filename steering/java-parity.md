@@ -48,8 +48,8 @@ value on a reader that already reads every field.
 
 Java's one serializer reads and writes every resource. This library writes a sequencer `.plan` and
 the container around it (`src/sequencer/write-plan.ts`, `src/io/writer.ts`), a `FAR4` in the clear
-with a zeroed hashinate (`writeFar`), a toolkit `.mod` (`writeMod`), a FileDB (`writeFileDB`) and a ZIP — and nothing else: no
-level or other resource, no `FARC` rebuild (`FileArchive.save`), no mod
+with a zeroed hashinate (`writeFar`), a toolkit `.mod` (`writeMod`), a FileDB (`writeFileDB`), a FARC (`writeFarc`) and a ZIP — and nothing else: no
+level or other resource, no mod
 patches (`TranslationPatch`).
 
 ## Tools

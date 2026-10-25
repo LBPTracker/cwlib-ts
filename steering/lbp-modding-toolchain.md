@@ -172,6 +172,7 @@ never silently follow the toolkit against our own measurement.
 | 24 | `PSwitch` of type `GAME_LIVE_STREAMING_CHOICE` from subVersion 0x166 | throws; a comment guesses four wide strings, five from 0x187 | five wide strings at every subVersion from 0x166, the game's loader `v0xd0510a` | `gad_gamelivestreaming_choice.plan` (0x186) ends on its last byte with five ([level-files.md](level-files.md), *`playerMode` at 0x3eb*) |
 | 25 | `PStickers` at versions 0x3bc–0x3cb | nothing after `eyetoyData` | an array of descriptors, the game's loader `v0xcfff80` | the five Move DLC palette plans at 0x3c1 and 0x3c7 end on their last byte only with it ([level-files.md](level-files.md), *`playerMode` at 0x3eb*) |
 | 26 | `RSyncedProfile` on the Vita's branch | nothing after `playerID` and the creature references | one more integer after `playerID` | all 18 `PRFb` here, every one on the Vita's branch, end on their last byte only with it ([level-files.md](level-files.md), *Profiles*) |
+| 27 | a FARC's table, written | `FileArchive.save` appends the new rows after the old ones, unsorted | the whole table sorted by SHA-1 (`writeFarcTable`) | all four of the game's archives hold it sorted, and each table is written back as it is ([level-files.md](level-files.md), *FARC*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

@@ -477,6 +477,12 @@ tile `[0, fatOffset)` exactly — no gap, no overlap, no padding — and the tab
 - The entries are **not all resources**: the magics include `RIFF` (the sequencer's samples),
   PNG, JPEG, `GTF ` textures, and several hundred headerless blobs. 51 `INSb` instruments sit in
   `base_001.farc` alone.
+- ✔ **Written too** (`writeFarc`, `writeFarcTable`, 0.4.35): the resources back to back in the
+  order given, then the table sorted by SHA-1. **`intro_001.farc` comes back byte for byte** —
+  90,232,029 bytes — from its own entries read in the order they lie, and each of the four
+  archives' tables is written back as it is from its rows in any order (`test/farc.test.ts`). The
+  order the data lies in is not the SHA-1 order and is not measured here; a rebuild that must match
+  keeps the old offsets' order. `writeFarcTable` alone is the tail for an archive too big to hold.
 
 ### The GUID remap — `readGuidRemap` in `src/archives/filedb.ts`
 

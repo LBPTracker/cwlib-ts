@@ -84,3 +84,57 @@ export async function openFarc(source: RandomAccess): Promise<Farc> {
     },
   };
 }
+
+/**
+ * A FARC's table and footer for data already laid out as `rows` say: what goes
+ * at the end of the resources, for an archive too big to build in memory.
+ *
+ * ✔ **The rows go out sorted by SHA-1**, as all four of the game's archives
+ * hold them, whatever order the data lies in (`test/farc.test.ts`). cwlib's
+ * `FileArchive.save` instead appends new rows after the old ones, unsorted.
+ */
+export function writeFarcTable(rows: readonly FarcEntry[]): Uint8Array {
+  const sorted = [...rows].sort((a, b) => (a.sha1 < b.sha1 ? -1 : a.sha1 > b.sha1 ? 1 : 0));
+  const out = new Uint8Array(sorted.length * FAT_ROW + 8);
+  const view = new DataView(out.buffer);
+  sorted.forEach((row, i) => {
+    const at = i * FAT_ROW;
+    if (!/^[0-9a-f]{40}$/.test(row.sha1)) throw new Error(`a FARC row's SHA-1 is not 40 lower-case hex digits: ${row.sha1}`);
+    if (i > 0 && sorted[i - 1].sha1 === row.sha1) throw new Error(`FARC row ${row.sha1} twice`);
+    if (row.offset + row.size > 0xffffffff) throw new Error(`FARC entry ${row.sha1} runs to ${row.offset + row.size}, past a u32 offset`);
+    for (let k = 0; k < 20; k += 1) out[at + k] = parseInt(row.sha1.slice(k * 2, k * 2 + 2), 16);
+    view.setUint32(at + 20, row.offset, false);
+    view.setUint32(at + 24, row.size, false);
+  });
+  view.setUint32(sorted.length * FAT_ROW, sorted.length, false);
+  view.setUint32(sorted.length * FAT_ROW + 4, FARC_MAGIC, false);
+  return out;
+}
+
+/**
+ * A whole FARC: the resources back to back in the order given, a repeat of
+ * one already written dropped, then `writeFarcTable`.
+ *
+ * ✔ **`intro_001.farc` comes back byte for byte** from its own entries read in
+ * the order they lie (`test/farc.test.ts`).
+ */
+export async function writeFarc(resources: readonly Uint8Array[]): Promise<Uint8Array> {
+  const digests = await Promise.all(resources.map((bytes) => crypto.subtle.digest('SHA-1', bytes as BufferSource)));
+  const rows: FarcEntry[] = [];
+  const kept: Uint8Array[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+  resources.forEach((bytes, i) => {
+    const sha1 = toHex(new Uint8Array(digests[i]));
+    if (seen.has(sha1)) return;
+    seen.add(sha1);
+    rows.push({ sha1, offset, size: bytes.length });
+    kept.push(bytes);
+    offset += bytes.length;
+  });
+  const table = writeFarcTable(rows);
+  const out = new Uint8Array(offset + table.length);
+  rows.forEach((row, i) => out.set(kept[i], row.offset));
+  out.set(table, offset);
+  return out;
+}
