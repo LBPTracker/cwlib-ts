@@ -96,9 +96,10 @@ branch, into one that stands between a reader and a song. What is left:
   plans and 19 of its 25 Vita levels read, the levels to their last byte. ⚠️ The other 6
   contradict the reading, and their bytes cannot say where (*The Vita branch* in
   [level-files.md](level-files.md)); what the two parts are and their fields mean is open, and
-  the PS4 eboot cannot say: it has no code for the branch. The saves' one profile, a Vita `PRFb`, reads to its end only
-  with an integer after its PSN id that cwlib does not have, `5192869` there: what it is is open
-  too (*Profiles* in [level-files.md](level-files.md)). Before that: one level in the saves,
+  the PS4 eboot cannot say: it has no code for the branch. The 18 synced profiles, all Vita `PRFb`s (17 in crossplay `.cpv`s,
+  one in a save), read to their end only with an integer after the PSN id that cwlib does not
+  have; its values repeat across levels, and what it is is open too (*Profiles* in
+  [level-files.md](level-files.md)). Before that: one level in the saves,
   `f331efa7`, version `0x3e2`, and nothing in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a

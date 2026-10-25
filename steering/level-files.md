@@ -1205,6 +1205,30 @@ distinct strings of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPD
 ids: 478 of the 485 are the `contentId` of a pack in the game's eight `PCKb`s** (*Slots* below);
 the other seven name no pack there.
 
+## What the FARCs hold, by magic, and what has no reader
+
+Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the FileDB extension
+(scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
+tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
+`PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `DLCt`, `SLTb`, `ADCb`, `CCDb`, and the `.trans`. Without:
+
+| magic | count | what the FileDB calls them |
+|---|---|---|
+| none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | |
+| none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
+| `MUSt` | 225 | `.mus`, text |
+| `RIFF` | 216 | `.smp`, the instruments' samples |
+| `RECb` | 91 | `.rec` |
+| `SSPt` | 63 | `.sph`, text |
+| `ATXb` | 24 | `.atx` |
+| `VOPb` | 4 | inside crossplay `.cpv`s |
+| `ADSb` | 3 | `.ads`, the `ADCb`s' shared data |
+| `TUTb`, `GLTb` | 2 each | `.tut`, `.glst` |
+| text | 13 `ASTt`, 9 `CHAt`, 8 `PBRt`, 6 `SASt`, 5 `ABKt`, one each `SLTt`, `LMTt`, `AUMt`, `MIXt` | |
+
+Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
+
 ## Translation tables — `RTranslationTable`
 
 `readTranslationTable` in `src/resources/translation.ts` reads a `.trans` into a map from LAMS
@@ -1279,23 +1303,31 @@ array is `Name<tab>count` and then its elements `[i]` a level deeper. `TextResou
   `gmat.gsub`'s 575 pairs are none, and all 575 resolve through the PS4 GUID remap — it names
   the PS3 GUIDs. The DLC lists' 6,321 `GUIDS` are all FileDB rows, and 8,118 of their files' 8,119.
 
-## Profiles — `RSyncedProfile`
+## Profiles — `RSyncedProfile`, `RAdventureCreateProfile`
 
-`readSyncedProfile` in `src/resources/synced-profile.ts` reads a `PRFb` — time played, the
-Sackboy the player wears (a world Thing, read like a plan's), the creature avatars, the player's
-colours and PSN id — by cwlib's `RSyncedProfile` (ennuo/toolkit `d6a2ef8`), and requires the
-payload's last byte.
+`readSyncedProfile` (`src/resources/synced-profile.ts`) reads a `PRFb` — time played, the Sackboy
+the player wears (a world Thing, read like a plan's), the creature avatars, the colours, the PSN
+id — and `readAdventureCreateProfile` (`resources/adventure-create-profile.ts`) an `ADCb`: an
+adventure's level slots, its planet as a world Thing, the links between levels, the planet's areas,
+the play data it starts with, its `ADSb` and its photos. Both are cwlib's walks (ennuo/toolkit
+`d6a2ef8`) and require the payload's last byte.
 
-- **The corpus is one file.** The five PS3 save folders under `LBP_LEVELS` that open (635 resources)
-  hold one profile, a `PRFb` in `data4/BCES00850LEVEL01CFF33A`, and no `BPRb`, `IPRb` or
-  `ADCb`; the install holds none (2026-10-25).
-- ✔ It reads to its last byte (`test/synced-profile.test.ts`): the avatar's world holds four
-  Things — `YELLOWHEAD`, `CREATURE`, `COSTUME`, `JOINT` among their parts — the four colours
-  read as opaque ARGB (`ff5ab432`, …), and the id is `Offline_Player`.
-- ⚠️ **It is on the Vita's branch** (`0x3e2`, branch revision `0x87`), and it ends on its last
-  byte only with **one integer after the PSN id** that cwlib, with no Vita gate here, does not
-  read: `5192869` (`vitaValue`). One file cannot say what it is or from which branch revision it
-  is there — *28* in [open-questions.md](open-questions.md).
+- ❗ **The install holds both**, found by a census of the FARCs by magic (2026-10-25): **17 `PRFb`**,
+  each a crossplay `.cpv` (`…_crossplayvita_02.cpv`), and **3 `ADCb`** — the story's
+  `marketing_demo1/adventure.adc`, `marketing_demo2/demo.adc` and the Popit Puzzle planet's. The
+  PS3 saves under `LBP_LEVELS` add one `PRFb` (`data4/BCES00850LEVEL01CFF33A`).
+- ✔ **All 21 read to their last byte** (`test/profiles.test.ts`, `test/synced-profile.test.ts`).
+  A profile's Sackboy is a world of four or five Things (`YELLOWHEAD`, `CREATURE`, `COSTUME`,
+  `JOINT` among their parts), its colours opaque ARGB, its id `OfflinePlayer` or `Offline_Player`.
+  The story's `ADCb` (subVersion `0x1ab`) has 54 slots (`Introduction`, `Needlepoint Peaks`, …),
+  114 links and 15 areas, the first four each a world with its own `LEVEL_SETTINGS`.
+- ⚠️ **Every `PRFb` is on the Vita's branch** (`0x3e2`, branch revisions `0x7a`, `0x80` and `0x87`),
+  and all 18 end on their last byte only with **one integer after the PSN id** that cwlib, with no
+  Vita gate here, does not read (`vitaValue`). Its values repeat across levels — `2000712823` on
+  three, `61378691` on two — so it is an identity of some kind rather than a time; what it is is
+  *28* in [open-questions.md](open-questions.md). No profile off the branch exists here to show
+  cwlib's walk without it.
+- `PlayedLevelData` on the Vita's branch is not ported and refuses; the three `ADCb` are off it.
 
 ## Quests — `RQuest`
 

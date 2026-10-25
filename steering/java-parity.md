@@ -37,15 +37,16 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 `resources/` holds 28 classes and `resources/custom/` one, and `BigSave` is in `types/save/`.
 
-- **A reader here, on Java's walk** (23): `RLevel` and `RPlan` (`readThings`, `things/level.ts`; the plan's inventory details from 0.4.15),
+- **A reader here, on Java's walk** (24): `RLevel` and `RPlan` (`readThings`, `things/level.ts`; the plan's inventory details from 0.4.15),
   `RStreamingChunk` (`readChunk`, `readChunkIslands`), `RMesh`, `RTexture`, `RGfxMaterial`,
   `RBevel`, `RStaticMesh`, `RInstrument`, and from 2026-10-24 `RMaterial`
   (`readPhysicsMaterial`), `RPalette`, `ROutfitList`, `RJoint` (`readJointSettings`), `RPins`,
   `RCachedCostumeData`, `RSlotList`, `RPacks`, `RAnimation`, `RScript` (its instructions kept as
   64-bit words, not decoded per class), `RBoneSet` (the toolkit's own format: its one file,
   none of the game's) from 0.4.16 `RTranslationTable` (the binary layout; the text one is
-  refused, the game having none), from 0.4.17 `RFontFace` (the install's 11 loose fonts) and from 0.4.19
-  `RSyncedProfile` (the saves' one profile). Where one reads differently from Java, *Where we deliberately differ* in
+  refused, the game having none), from 0.4.17 `RFontFace` (the install's 11 loose fonts), from 0.4.19
+  `RSyncedProfile` (the install's 17 and a save's one) and from 0.4.20 `RAdventureCreateProfile`
+  (the install's three). Where one reads differently from Java, *Where we deliberately differ* in
   [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the row (numbered 1 to 26 on 2026-10-25, with a 3b).
 - **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
   `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
@@ -54,8 +55,8 @@ So any file in range walks to its end. What differs is what a reader returns:
   game holds only in the engine's text serialisation (`GSBt`, `DLCt`): `readGuidSubst` and
   `readDlc`, read to every file's last line ([level-files.md](level-files.md), *Text resources*);
   Java reads `RDLC`'s binary form and another text layout for `RGuidSubst`.
-- **No reader here** (3, and `BigSave`): `RBigProfile`, `RLocalProfile`, `RAdventureCreateProfile`,
-  none of which the saves on this machine or the install holds (2026-10-25). ⚠️ The resource census of 2026-10-24 went by magic, and
+- **No reader here** (2, and `BigSave`): `RBigProfile` and `RLocalProfile`, which neither the
+  saves on this machine nor the install holds (a census of the FARCs by magic, 2026-10-25). ⚠️ The resource census of 2026-10-24 went by magic, and
   `RTranslationTable` has none: it was in the FARCs all along (*Translation tables* in
   [level-files.md](level-files.md)). The profiles and `BigSave` are save data, so a reader would
   be proven on a save, not on the install.
