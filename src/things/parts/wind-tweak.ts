@@ -1,6 +1,8 @@
 /** `WIND_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PWindTweak`: a wind volume's strength, shape and behaviour. */
 /** `PWindTweak`, kept: a wind's strength, direction and reach. */
@@ -68,4 +70,36 @@ export function readWindTweak(s: Serializer): WindTweakPart {
     affectsCharacters, currentInput, occluders, effectType, horizontalSpeed, verticalSpeed,
     behavior, blowAtTag, blasterEffect,
   };
+}
+
+/** `readWindTweak`'s mirror; the discarded values of old subVersions are written as 0. */
+export function writeWindTweak(w: Writer, v: WindTweakPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.f32(v.windStrength);
+  w.vector3(v.direction);
+  w.f32(v.angle);
+  w.f32(v.decay);
+  if (subVersion <= 0x2a) w.u8(0);
+  w.f32(v.currentInput);
+  if (subVersion < 0xab) w.i32(0);
+  if (subVersion <= 0x26) {
+    w.i32(0);
+    w.wstr('');
+  }
+  w.f32(v.minRadius);
+  w.f32(v.maxRadius);
+  w.f32(v.angleRange);
+  if (subVersion > 0x2b) w.i32(v.behavior ?? 0);
+  if (subVersion > 0x84) w.f32(v.maxSpeed);
+  if (subVersion > 0x86) w.bool(v.affectsCharacters);
+  if (subVersion > 0xaa) w.bool(v.blowAtTag ?? false);
+  if (subVersion > 0xb3) w.bool(v.blasterEffect ?? false);
+  if (subVersion > 0x171) {
+    w.bool(v.occluders ?? false);
+    w.i8(v.effectType ?? 0);
+  }
+  if (subVersion > 0x211) {
+    w.i8(v.horizontalSpeed ?? 0);
+    w.i8(v.verticalSpeed ?? 0);
+  }
 }

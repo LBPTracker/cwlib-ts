@@ -2,6 +2,8 @@
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PPowerUp`: a power-up a player is holding, at subVersion >= 0x18d. */
 /** `PPowerUp`, kept: the power-up a Thing gives, and the Things it spawned. */
@@ -44,4 +46,23 @@ export function readPowerUp(s: Serializer, readers: ReadonlyMap<string, PartRead
     justFlipped, fireStartTime, initialRotation, deterministicPosition, deterministicRotation,
     offsetForEmitters, prevAngle, currAngle,
   };
+}
+
+/** `readPowerUp`'s mirror. */
+export function writePowerUp(w: Writer, v: PowerUpPart, ctx: PartWriteContext): void {
+  w.matrix(v.spawnedRootMatrix);
+  w.matrix(v.spawnedChipMatrix);
+  w.vector4(v.rootHandle);
+  w.ref(v.plan, { descriptor: true });
+  ctx.thing(w, v.powerUpThing);
+  ctx.thing(w, v.powerUpHandle);
+  w.bool(v.flipped);
+  w.bool(v.justFlipped);
+  w.i32(v.fireStartTime);
+  w.f32(v.initialRotation);
+  w.vector3(v.deterministicPosition);
+  w.f32(v.deterministicRotation);
+  w.f32(v.offsetForEmitters);
+  w.f32(v.prevAngle);
+  w.f32(v.currAngle);
 }

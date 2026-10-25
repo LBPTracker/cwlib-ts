@@ -1,6 +1,8 @@
 /** `AUDIO_WORLD`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PAudioWorld`: a sound object. */
 /** `PAudioWorld`, kept: the sound an object plays, and how. */
@@ -71,4 +73,33 @@ export function readAudioWorld(s: Serializer): AudioWorldPart {
     triggerByImpact, triggerBySwitch, paramAffectVol, paramAffectPitch, paramAffectParam,
     triggerByDestroy, behavior, activatedLastFrame,
   };
+}
+
+/** `readAudioWorld`'s mirror. */
+export function writeAudioWorld(w: Writer, v: AudioWorldPart, _ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  w.str(v.soundName);
+  w.f32(v.initialVolume);
+  w.f32(v.initialPitch);
+  w.f32(v.initialParam1);
+  w.f32(v.maxFalloff);
+  w.f32(v.impactTolerance);
+  if (version < 0x2c4) {
+    w.bool(v.triggerByFalloff ?? false);
+    w.bool(v.triggerByImpact ?? false);
+    w.bool(v.triggerBySwitch ?? false);
+    if (version >= 0x1ad) w.bool(v.triggerByDestroy ?? false);
+  } else w.i32(v.playMode);
+  w.bool(v.paramAffectVol);
+  w.bool(v.paramAffectPitch);
+  w.bool(v.paramAffectParam);
+  if (version >= 0x165) w.bool(v.isLocal);
+  if (version >= 0x198) w.bool(v.hideInPlayMode);
+  if (version >= 0x2c4) w.i32(v.behavior ?? 0);
+  if (version >= 0x380) {
+    w.guid(v.soundNames);
+    w.i32(v.meshColor);
+  }
+  if (subVersion >= 0x178) w.i32(v.categoryGuid);
+  if (subVersion >= 0x191) w.bool(v.activatedLastFrame ?? false);
 }

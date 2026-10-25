@@ -301,6 +301,36 @@ Things copied into a plan lose their mentions of the level's world. Copied Thing
 An island's bounds and the GUID and hash lists after its plan stay as read, whatever an edit moved
 or brought. Whether the game opens an edited file is question 66.
 
+## Parts written from their values — `write-parts.ts`
+
+Every part reader has its mirror beside it (`writeBody` beside `readBody`), found by that name
+(`partWriters()`); `setPart` writes a part from its value in place of its bytes, `addPart` gives a
+Thing a part it lacks (its mask bit, its parts revision raised, the part in declaration order) and
+`removePart` takes one off (`write-level.ts`; the Thing's parts revision and mask are marks).
+
+✔ **Every part of every Thing of the game writes back from its value byte for byte**
+(`dev/part-census.ts`, 2026-10-25): **3,309,707 parts of 54 kinds** in the 22,744 levels and plans
+of the install's FARCs and the 01.28 update's — 854,265 `POS`, 374,497 `SHAPE`, 291,828 `SWITCH`,
+274,337 `GENERATED_MESH`, 254,044 `GROUP`, down to 5 `YELLOWHEAD`. `WORLD` and the Vita's own
+`VITA_27`/`VITA_28` have no writer and stay their bytes on the tape.
+
+- ❗ **A shared struct is keyed on its tape object.** A switch's output, an NPC's behaviour, a
+  script's layout is named by more than one Thing; the tape writes it under its tape object
+  wherever another Thing names it, so a part writer writes it under the same key
+  (`tapeObjectOf` in `io/tape.ts`) and under its id from the file. Two keys for one id made the
+  second mention a second body: 13,007 `SCRIPT`s and 307 `NPC`/`CREATURE`s differed that way.
+- ❗ **Two readers held empty placeholders.** A struct named while it is still being read — an
+  NPC's behaviour names the NPC, whose part names the behaviour; a shape's contacts name shapes —
+  got the bare `{}` `Serializer.reference` registers for the build, never filled. A plain object now
+  becomes that placeholder (`Serializer.reference`), and a contact finds its shape by id.
+- **What cwlib writes as a constant, the files do not always hold.** Where the census found
+  other values, the reader keeps them and the writer writes them back — an animation tweaker's
+  byte at subVersions `0x5c`–`0x151` (40 of 772), a physics tweaker's Thing at `0x27a`–`0x326` (5),
+  an atmosphere's byte and float at `0xb9`–`0xd3`, a trigger's `zLayers` below `0x1d5`, a bool stored
+  as `0x0d` or `0x48` (an NPC's jump flag, a switch's and key's `hideInPlayMode`, a metadata's
+  `referencable`), a microchip's name with its apostrophes bare, a group creator's padding, a NaN
+  in a creature's retired float. Row 56 of *Where we deliberately differ*.
+
 ## Dependencies rewritten — `replaceDependency` and `hashinate`
 
 `src/archives/hashinate.ts`. `editResource` opens any resource whose reader reads it through

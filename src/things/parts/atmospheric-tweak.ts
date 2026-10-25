@@ -1,6 +1,8 @@
 /** `ATMOSPHERIC_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PAtmosphericTweak`: an island's weather -- rain, snow and the like -- and how strong. */
 export interface AtmosphericTweakPart {
@@ -16,6 +18,12 @@ export interface AtmosphericTweakPart {
   readonly directionStrengthOff: number;
   readonly disableAudio?: boolean;
   readonly currentInput?: number;
+  /**
+   * subVersions 0xb9..0xd3: a u8 and an f32 cwlib writes as 0 and does not name.
+   * Kept because the game's files hold other values there: `sack_town.bin` 0.5.
+   */
+  readonly legacyByte?: number;
+  readonly legacyFloat?: number;
 }
 
 export function readAtmosphericTweak(s: Serializer): AtmosphericTweakPart {
@@ -32,9 +40,11 @@ export function readAtmosphericTweak(s: Serializer): AtmosphericTweakPart {
   // instead, the part's 22 bytes ending on that f32's 0.5.
   const maxParticles = subVersion > 0x135 ? s.f32() : 0;
   if (subVersion > 0xb3) currentInput = s.f32();
+  let legacyByte: number | undefined;
+  let legacyFloat: number | undefined;
   if (subVersion >= 0xb9 && subVersion < 0xd4) {
-    s.u8();
-    s.f32();
+    legacyByte = s.u8();
+    legacyFloat = s.f32();
   }
   let intensityOff = intensity;
   let directionStrengthOff = directionStrength;
@@ -44,6 +54,26 @@ export function readAtmosphericTweak(s: Serializer): AtmosphericTweakPart {
   }
   return {
     atmosType, intensity, directionStrength, inputAction, maxParticles, intensityOff,
-    directionStrengthOff, disableAudio, currentInput,
+    directionStrengthOff, disableAudio, currentInput, legacyByte, legacyFloat,
   };
+}
+
+/** `readAtmosphericTweak`'s mirror. */
+export function writeAtmosphericTweak(w: Writer, v: AtmosphericTweakPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.s32(v.atmosType);
+  w.f32(v.intensity);
+  w.f32(v.directionStrength);
+  w.s32(v.inputAction);
+  if (subVersion < 0x1a8) w.bool(v.disableAudio ?? false);
+  if (subVersion > 0x135) w.f32(v.maxParticles);
+  if (subVersion > 0xb3) w.f32(v.currentInput ?? 0);
+  if (subVersion >= 0xb9 && subVersion < 0xd4) {
+    w.u8(v.legacyByte ?? 0);
+    w.f32(v.legacyFloat ?? 0);
+  }
+  if (subVersion > 0x19b) {
+    w.f32(v.intensityOff);
+    w.f32(v.directionStrengthOff);
+  }
 }

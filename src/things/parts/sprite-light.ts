@@ -1,7 +1,9 @@
 /** `SPRITE_LIGHT`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PSpriteLight`: a light placed in the level. steering/level-files.md, *Lights*. */
 export interface SpriteLightPart {
@@ -14,6 +16,8 @@ export interface SpriteLightPart {
   readonly sourceSize: number;
   readonly spotlight: boolean;
   readonly falloffTexture: ResourceRef | undefined;
+  /** cwlib's `lookAt`: the Thing the light is aimed at, where it names one. */
+  readonly lookAt?: Thing;
   readonly enableFogShadows?: boolean;
   readonly enableFog?: boolean;
   readonly onSpeed?: number;
@@ -72,7 +76,7 @@ export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, Part
   const farDist = s.f32();
   const sourceSize = s.f32();
   const falloffTexture = s.resource();
-  readThingRef(s, readers); // lookAt
+  const lookAt = readThingRef(s, readers);
   const spotlight = s.bool();
   if (version < 0x337) {
     enableFogShadows = s.bool();
@@ -104,9 +108,53 @@ export function readSpriteLight(s: Serializer, readers: ReadonlyMap<string, Part
     azimuth = s.vector3();
   }
   return {
-    color, multiplier, glowRadius, farDist, sourceSize, spotlight, falloffTexture, enableFogShadows,
+    color, multiplier, glowRadius, farDist, sourceSize, spotlight, falloffTexture, lookAt, enableFogShadows,
     enableFog, onSpeed, offSpeed, flickerProb, flickerAmount, causticStrength, causticWidth,
     trackingLimit, trackingAccel, trackingSpeed, movementInput, lightingInput, beamDir, azimuth,
     colorOff, multiplierOff, fogAmount, onDest, behavior, highBeam, tracker, trackerType,
   };
+}
+
+/** `readSpriteLight`'s mirror. */
+export function writeSpriteLight(w: Writer, v: SpriteLightPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  w.vector4(v.color);
+  if (version >= 0x2fd) w.vector4(v.colorOff ?? [0, 0, 0, 0]);
+  w.f32(v.multiplier);
+  if (version >= 0x30a) w.f32(v.multiplierOff ?? 0);
+  w.f32(v.glowRadius);
+  w.f32(v.farDist);
+  w.f32(v.sourceSize);
+  w.ref(v.falloffTexture);
+  ctx.thing(w, v.lookAt);
+  w.bool(v.spotlight);
+  if (version < 0x337) {
+    w.bool(v.enableFogShadows ?? false);
+    w.bool(v.enableFog ?? false);
+  }
+  if (version >= 0x139) w.f32(v.fogAmount ?? 0);
+  if (version >= 0x13a) {
+    if (version < 0x2c4) w.f32(v.onDest ?? 0);
+    w.f32(v.onSpeed ?? 0);
+    w.f32(v.offSpeed ?? 0);
+    w.f32(v.flickerProb ?? 0);
+    w.f32(v.flickerAmount ?? 0);
+  }
+  if (version >= 0x2c4) w.i32(v.behavior ?? 0);
+  if (subVersion >= 0x113) w.bool(v.highBeam ?? false);
+  if (subVersion >= 0x146) w.bool(v.tracker ?? false);
+  if (subVersion >= 0x14a) w.u8(v.trackerType ?? 0);
+  if (subVersion >= 0x151) {
+    w.f32(v.causticStrength ?? 0);
+    w.f32(v.causticWidth ?? 0);
+  }
+  if (subVersion >= 0x16f) {
+    w.f32(v.trackingLimit ?? 0);
+    w.f32(v.trackingAccel ?? 0);
+    w.f32(v.trackingSpeed ?? 0);
+    w.s32(v.movementInput ?? 0);
+    w.s32(v.lightingInput ?? 0);
+    w.vector3(v.beamDir ?? [0, 0, 0]);
+    w.vector3(v.azimuth ?? [0, 0, 0]);
+  }
 }

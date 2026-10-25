@@ -1,6 +1,8 @@
 /** `HUD_ELEM`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PHudElem` -- an element of a level's HUD. cwlib's `PHudElem.java` and `HUDDecal.java`. */
 /** One quad of a HUD element: a texture frame on four corners. */
@@ -105,4 +107,62 @@ export function readHudElem(s: Serializer): HudElemPart {
     layer, renderMode, scaleX, scaleY, offsetX, offsetY, brightness, alpha, color, colorIndex, name,
     drawables, inputType, transmitMode, zTest, onAnim, offAnim, highlightAnim, transform,
   };
+}
+
+/** `readHudElem`'s mirror; what the reader discards below subVersion 0x47 and 0x55 is written as 0. */
+export function writeHudElem(w: Writer, v: HudElemPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  if (subVersion > 0x23) {
+    w.i32(v.layer);
+    w.i32(v.inputType ?? 0);
+    w.i32(v.transmitMode ?? 0);
+  }
+  if (subVersion < 0x47) {
+    w.i32(0);
+    w.i32(0);
+    w.i32(0);
+  }
+  if (subVersion > 0x23) {
+    w.i32(v.renderMode);
+    w.i32(v.zTest ?? 0);
+  }
+  if (subVersion > 0x36) {
+    w.f32(v.scaleX);
+    w.f32(v.scaleY);
+    w.f32(v.offsetX);
+    w.f32(v.offsetY);
+  }
+  if (subVersion > 0x23) {
+    w.f32(v.brightness);
+    w.f32(v.alpha);
+    w.i32(v.color);
+  }
+  if (subVersion > 0x36) w.matrix(v.transform ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  if (subVersion >= 0x24) {
+    w.s32(v.colorIndex);
+    w.wstr(v.name);
+  }
+  if (subVersion > 0x23) {
+    w.i32(v.drawables.length);
+    for (const d of v.drawables) {
+      w.ref(d.texture);
+      w.i32(d.frameNo);
+      w.i32(d.gpuColor);
+      for (let i = 0; i < 4; i += 1) w.vector4(d.corners[i] ?? [0, 0, 0, 0]);
+    }
+  }
+  if (subVersion < 0x55) {
+    w.u8(0);
+    w.u8(0);
+    w.u8(0);
+    w.u8(0);
+    w.u16(0);
+    w.f32(0);
+    w.i32(0);
+  }
+  if (subVersion >= 0x47) {
+    w.i32(v.onAnim ?? 0);
+    w.i32(v.offAnim ?? 0);
+    w.i32(v.highlightAnim ?? 0);
+  }
 }

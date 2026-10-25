@@ -1,6 +1,8 @@
 /** `GENERATED_MESH`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PGeneratedMesh`: how a shape is drawn. */
 export interface GeneratedMeshPart {
@@ -69,4 +71,30 @@ export function readGeneratedMesh(s: Serializer): GeneratedMeshPart {
     textureAnimationSpeed, textureAnimationSpeedOff, slideSteer, slideSpeed, uvMode, textureScale, sharded,
     slideImpactDamping,
   };
+}
+
+/** `readGeneratedMesh`'s mirror. */
+export function writeGeneratedMesh(w: Writer, p: GeneratedMeshPart, _ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  w.ref(p.gfxMaterial);
+  w.ref(p.bevel);
+  w.vector4(p.uvOffset);
+  if (version >= 0x258) w.guid(p.planGUID);
+  if (version >= 0x27c && subVersion < 0xfb) w.bool((p.visibilityFlags & 1) !== 0);
+  if (subVersion >= 0xfb) w.u8(p.visibilityFlags);
+  if (version >= 0x305) {
+    w.f32(p.textureAnimationSpeed ?? 0);
+    w.f32(p.textureAnimationSpeedOff ?? 0);
+  }
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x6b) w.i32(p.uvMode ?? 0);
+  if (vita === 0x76) w.f32(p.textureScale ?? 0);
+  if (subVersion >= 0x34) w.bool(p.noBevel);
+  if (subVersion >= 0x97) w.bool(p.sharded ?? false);
+  if (subVersion >= 0x13d) w.bool(p.includeSides);
+  if (subVersion >= 0x155) w.u8(p.slideImpactDamping ?? 0);
+  if (subVersion >= 0x13d) {
+    w.u8(p.slideSteer ?? 0);
+    w.u8(p.slideSpeed ?? 0);
+  }
 }

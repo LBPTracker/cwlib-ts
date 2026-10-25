@@ -1,6 +1,8 @@
 /** `ANIMATION_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PAnimationTweak`: an animated mesh's playback settings.
@@ -45,6 +47,12 @@ export interface AnimationTweakPart {
   readonly blendAction?: number;
   readonly animResetOnInactive?: boolean;
   readonly rootRotationX?: number;
+  /**
+   * A byte from subVersion 0x5c to 0x151 that cwlib reads and writes as 0 and does
+   * not name. Not always 0 in the game's files: 40 of the 772 `ANIMATION_TWEAK`s in
+   * the FARCs hold something else (`dev/part-census.ts`, 2026-10-25).
+   */
+  readonly legacyByte?: number;
 }
 
 export function readAnimationTweak(s: Serializer): AnimationTweakPart {
@@ -63,6 +71,7 @@ export function readAnimationTweak(s: Serializer): AnimationTweakPart {
   let pitchPosition: number | undefined;
   let rollPosition: number | undefined;
   let rootRotationZ: number | undefined;
+  let legacyByte: number | undefined;
   const animSpeed = s.f32();
   const animPos = subVersion > 0x1d ? s.f32() : 0;
   const animBlendTime = subVersion >= 0x25 ? s.f32() : 0;
@@ -96,7 +105,7 @@ export function readAnimationTweak(s: Serializer): AnimationTweakPart {
     type = s.i32();
     animToOverride = s.i32();
   }
-  if (subVersion >= 0x5c && subVersion < 0x152) s.u8();
+  if (subVersion >= 0x5c && subVersion < 0x152) legacyByte = s.u8();
   const tweakMeshFile = subVersion > 0x66 ? s.guid() : 0;
   if (subVersion > 0x69) {
     containerType = s.i32();
@@ -118,6 +127,53 @@ export function readAnimationTweak(s: Serializer): AnimationTweakPart {
     animPlaying, type, animToOverride, tweakMeshFile, actorName,
   rootRotationY, usesRootRotation, containerType, subContainerIndex, yawRate, pitchRate, rollRate,
   yawPosition, pitchPosition, rollPosition, rootRotationZ,
-    blendAction, animResetOnInactive, rootRotationX,
+    blendAction, animResetOnInactive, rootRotationX, legacyByte,
   };
+}
+
+/** `readAnimationTweak`'s mirror, under the same `subVersion` gates. */
+export function writeAnimationTweak(w: Writer, value: AnimationTweakPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.f32(value.animSpeed);
+  if (subVersion > 0x1d) w.f32(value.animPos);
+  if (subVersion >= 0x25) w.f32(value.animBlendTime);
+  w.i32(value.behavior);
+  if (subVersion >= 0x25) w.i32(value.blendAction ?? 0);
+  if (subVersion > 0x1d) {
+    w.ref(value.anim);
+    w.bool(value.animLoop);
+  }
+  if (subVersion > 0x1f) w.guid(value.cachedMeshFile);
+  if (subVersion > 0x20) {
+    w.guid(value.containerFile);
+    w.f32(value.animStart);
+    w.f32(value.animEnd);
+  }
+  if (subVersion > 0x25) w.bool(value.animPlaying);
+  if (subVersion > 0x26) w.bool(value.animResetOnInactive ?? false);
+  if (subVersion > 0x146 || (subVersion > 0x13e && subVersion < 0x143)) w.f32(value.rootRotationX ?? 0);
+  if (subVersion > 0x39) {
+    w.f32(value.rootRotationY ?? 0);
+    w.bool(value.usesRootRotation ?? false);
+  }
+  if (subVersion > 0x42) {
+    w.i32(value.type);
+    w.i32(value.animToOverride);
+  }
+  if (subVersion >= 0x5c && subVersion < 0x152) w.u8(value.legacyByte ?? 0);
+  if (subVersion > 0x66) w.guid(value.tweakMeshFile);
+  if (subVersion > 0x69) {
+    w.i32(value.containerType ?? 0);
+    w.i32(value.subContainerIndex ?? 0);
+  }
+  if (subVersion > 0x6a) w.wstr(value.actorName);
+  if (subVersion > 0x151) {
+    w.f32(value.yawRate ?? 0);
+    w.f32(value.pitchRate ?? 0);
+    w.f32(value.rollRate ?? 0);
+    w.f32(value.yawPosition ?? 0);
+    w.f32(value.pitchPosition ?? 0);
+    w.f32(value.rollPosition ?? 0);
+    w.f32(value.rootRotationZ ?? 0);
+  }
 }

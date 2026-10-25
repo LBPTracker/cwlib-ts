@@ -403,7 +403,15 @@ export class Serializer {
     // itself, directly or through a child, would otherwise recurse forever.
     const placeholder = {} as T;
     this.referenced.set(id, placeholder);
-    const value = build(this);
+    let value = build(this);
+    // ❗ **A plain object becomes the placeholder**, so a back-reference made while it
+    // was being built -- an NPC's behaviour names the NPC, whose part names the
+    // behaviour -- holds the struct itself and not an empty object that is never
+    // filled. Only a plain object can be; anything else stays the placeholder's
+    // stand-in, as before.
+    if (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+      value = Object.assign(placeholder as object, value) as T;
+    }
     this.referenced.set(id, value);
     if (object) this.tape!.end(this.position, object, value);
     return value;

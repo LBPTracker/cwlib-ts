@@ -2,6 +2,8 @@
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PJoint`: a bolt, spring, piston, string or the like between two Things.
@@ -24,6 +26,8 @@ export interface JointPart {
   readonly settings?: ResourceRef;
   readonly offsetTime: number;
   readonly invertAngle: boolean;
+  /** cwlib's `boneIdx`, an `i32` array (its default `{ -1, -1 }`). */
+  readonly boneIdx?: readonly number[];
   readonly boneLengths: readonly [number, number, number, number];
   readonly strength: number;
   readonly stiff: boolean;
@@ -41,6 +45,7 @@ export interface JointPart {
   readonly modScale: number;
   readonly interactPlayMode?: number;
   readonly interactEditMode?: number;
+  /** Above 0x280 a float; from 0x21d to 0x280 an `i32` (cwlib rounds a float into it). */
   readonly tweakTargetMaxLength?: number;
   readonly tweakTargetMinLength?: number;
   readonly canBeTweakedByPoppetPowerup?: boolean;
@@ -81,7 +86,7 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   const offsetTime = s.f32();
   const invertAngle = s.bool();
   const settings = s.resource();
-  s.array((self) => self.i32()); // boneIdx
+  const boneIdx = s.array((self) => self.i32());
   const boneLengths = s.vector4();
   const type = s.i32();
   const strength = s.f32();
@@ -113,8 +118,8 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
     tweakTargetMaxLength = s.f32();
     tweakTargetMinLength = s.f32();
   } else if (jv > 0x21c) {
-    s.i32();
-    s.i32();
+    tweakTargetMaxLength = s.i32();
+    tweakTargetMinLength = s.i32();
   }
   if (jv > 0x21e) currentlyEditing = s.bool();
   if (jv > 0x22f && jv < 0x2c4) modScaleActive = s.bool();
@@ -131,11 +136,73 @@ export function readJoint(s: Serializer, readers: ReadonlyMap<string, PartReader
   if (s.revision.subVersion >= 0x1a4) oldJointOutputBehavior = s.bool();
   return {
     a, b, aContact, bContact, length, angle, type, renderScale, hideInPlayMode, settings,
-    offsetTime, invertAngle, boneLengths, strength, stiff, slideDir, animationPattern,
+    offsetTime, invertAngle, boneIdx, boneLengths, strength, stiff, slideDir, animationPattern,
     animationRange, animationTime, animationPhase, animationSpeed, animationPause, aAngleOffset,
     bAngleOffset, modStartFrames, modDeltaFrames, modScale, interactPlayMode, interactEditMode,
     tweakTargetMaxLength, tweakTargetMinLength, canBeTweakedByPoppetPowerup, createdByPoppetPowerup,
     modDriven, jointSoundEnum, currentlyEditing, modScaleActive, behaviour, railInteractions, railKnotVector,
     oldJointOutputBehavior,
   };
+}
+
+/** `readJoint`'s mirror. */
+export function writeJoint(w: Writer, value: JointPart, ctx: PartWriteContext): void {
+  const { version: jv, subVersion } = w.revision;
+  ctx.thing(w, value.a);
+  ctx.thing(w, value.b);
+  w.vector3(value.aContact);
+  w.vector3(value.bContact);
+  w.f32(value.length);
+  w.f32(value.angle);
+  w.f32(value.offsetTime);
+  w.bool(value.invertAngle);
+  w.ref(value.settings);
+  const boneIdx = value.boneIdx ?? [-1, -1];
+  w.i32(boneIdx.length);
+  for (const bone of boneIdx) w.i32(bone);
+  w.vector4(value.boneLengths);
+  w.i32(value.type);
+  w.f32(value.strength);
+  w.bool(value.stiff);
+  w.vector3(value.slideDir);
+  w.i32(value.animationPattern);
+  w.f32(value.animationRange);
+  w.f32(value.animationTime);
+  w.f32(value.animationPhase);
+  w.f32(value.animationSpeed);
+  w.f32(value.animationPause);
+  w.f32(value.aAngleOffset);
+  w.f32(value.bAngleOffset);
+  w.f32(value.modStartFrames);
+  w.f32(value.modDeltaFrames);
+  w.f32(value.modScale);
+  if (jv < 0x2c4) w.bool(value.modDriven ?? false);
+  if (jv < 0x307) {
+    w.u8(value.interactPlayMode ?? 0);
+    w.u8(value.interactEditMode ?? 0);
+  }
+  w.f32(value.renderScale);
+  if (jv > 0x169) w.i32(value.jointSoundEnum ?? 0);
+  if (jv > 0x280) {
+    w.f32(value.tweakTargetMaxLength ?? 0);
+    w.f32(value.tweakTargetMinLength ?? 0);
+  } else if (jv > 0x21c) {
+    w.i32(Math.round(value.tweakTargetMaxLength ?? 0));
+    w.i32(Math.round(value.tweakTargetMinLength ?? 0));
+  }
+  if (jv > 0x21e) w.bool(value.currentlyEditing ?? false);
+  if (jv > 0x22f && jv < 0x2c4) w.bool(value.modScaleActive ?? false);
+  if (jv > 0x25c) w.bool(value.hideInPlayMode);
+  if (jv > 0x2c3) w.i32(value.behaviour ?? 0);
+  if (subVersion >= 0xed) {
+    const knots = value.railKnotVector ?? [];
+    w.i32(knots.length);
+    for (const knot of knots) w.vector3(knot);
+  }
+  if (subVersion >= 0x197) w.u8(value.railInteractions ?? 0);
+  if (subVersion >= 0x19f) {
+    w.bool(value.canBeTweakedByPoppetPowerup ?? false);
+    w.bool(value.createdByPoppetPowerup ?? false);
+  }
+  if (subVersion >= 0x1a4) w.bool(value.oldJointOutputBehavior ?? false);
 }

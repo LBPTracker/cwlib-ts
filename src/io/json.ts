@@ -10,7 +10,8 @@
  * a `bigint` as `{ "$bigint": "<decimal>" }`, and a float that is no number
  * (NaN, ±Infinity) as `{ "$float": "NaN" }` -- the game's files hold some.
  * A Thing graph is a graph: a Thing seen twice is written once, then as
- * `{ "$ref": <its uid> }`, so a level's cycles end.
+ * `{ "$ref": <its uid> }`, so a level's cycles end; any other object seen twice is
+ * written once too, then as `{ "$ref": null }`.
  */
 
 import { toHex } from './hex.ts';
@@ -52,7 +53,10 @@ function encode(value: unknown, seen: Set<object>): Json {
   const out: Json = Array.isArray(value)
     ? value.map((v) => encode(v, seen))
     : Object.fromEntries(Object.entries(object).filter(([, v]) => v !== undefined).map(([k, v]) => [k, encode(v, seen)]));
-  if (!(typeof object.uid === 'number' && object.parts instanceof Map)) seen.delete(object);
+  // ❗ **Every object once, not only a Thing.** A struct shared by reference -- a
+  // script's layout, a shape a contact names -- used to be written again at each
+  // mention, and a level whose shapes name each other ran out of memory (ascetic.lvl,
+  // once contacts held their real shapes). A second sighting is `{ "$ref": null }`.
   return out;
 }
 

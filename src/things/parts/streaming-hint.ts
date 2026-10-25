@@ -2,7 +2,9 @@
 
 import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { thingArray } from './common.ts';
+import { thingArray, writeThingArray } from './common.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PStreamingHint`: the volume that asks for a chunk to be streamed in.
@@ -31,4 +33,13 @@ export function readStreamingHint(s: Serializer, readers: ReadonlyMap<string, Pa
   const relativeToThing = readThingRef(s, readers);
   const connected = thingArray(s, readers);
   return { type, offset, size, relativeToThing, connected };
+}
+
+/** `readStreamingHint`'s mirror. */
+export function writeStreamingHint(w: Writer, v: StreamingHintPart, ctx: PartWriteContext): void {
+  w.i32(v.type);
+  w.vector3(v.offset);
+  w.vector3(v.size);
+  ctx.thing(w, v.relativeToThing);
+  writeThingArray(w, ctx, v.connected);
 }

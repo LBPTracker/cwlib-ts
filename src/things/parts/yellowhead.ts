@@ -2,7 +2,9 @@
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { thingArray } from './common.ts';
+import { thingArray, writeThingArray } from './common.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 type V3 = readonly [number, number, number];
 type V4 = readonly [number, number, number, number];
@@ -215,4 +217,86 @@ export function readYellowHead(s: Serializer, readers: ReadonlyMap<string, PartR
     lastTimeSlappedAPlayer, monstrousHeadScale, legacyToolTetherJoint, poppet, legacyJetpack,
     recordee,
   };
+}
+
+function writeRaycastResults(w: Writer, r: RaycastResults, ctx: PartWriteContext): void {
+  w.vector4(r.hitpoint);
+  w.vector4(r.normal);
+  w.f32(r.baryU);
+  w.f32(r.baryV);
+  w.i32(r.triIndex);
+  ctx.thing(w, r.hitThing);
+  ctx.thing(w, r.refThing);
+  w.s32(r.onCostumePiece);
+  w.i32(r.decorationIdx);
+  w.bool(r.switchConnector);
+}
+
+function writePoppetMaterialOverride(w: Writer, m: PoppetMaterialOverride): void {
+  const { version, subVersion } = w.revision;
+  if (version >= 0x2ed) w.ref(m.plan, { descriptor: true });
+  w.ref(m.gfxMaterial);
+  w.ref(m.bevel);
+  w.ref(m.physicsMaterial);
+  w.i32(m.soundEnum);
+  w.f32(m.bevelSize);
+  if (version < 0x2ed) w.ref(m.plan, { descriptor: true });
+  if (subVersion > 0x62) w.bool(m.headDucking ?? false);
+}
+
+function writePoppetShapeOverride(w: Writer, o: PoppetShapeOverride): void {
+  w.i32(o.polygon.length);
+  for (const v of o.polygon) w.vector3(v);
+  w.intVector(o.loops);
+  w.s32(o.back);
+  w.s32(o.front);
+  w.f32(o.scale);
+  w.f32(o.angle);
+  if (w.revision.version > 0x317) w.matrix(o.worldMatrix ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+}
+
+function writePoppet(w: Writer, p: Poppet, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  w.bool(p.isInUse);
+  w.i32(p.modeStack.length);
+  for (const mode of p.modeStack) {
+    w.i32(mode.mode);
+    w.i32(mode.subMode);
+  }
+  writeRaycastResults(w, p.raycast, ctx);
+  if (version > 0x2ec) writeThingArray(w, ctx, p.frozenList);
+  if (version > 0x2f1) writeThingArray(w, ctx, p.hiddenList);
+  if (version >= 0x311) {
+    writePoppetMaterialOverride(w, p.materialOverride ?? {
+      soundEnum: 0, bevelSize: 0,
+    });
+    writePoppetShapeOverride(w, p.shapeOverride ?? { polygon: [], loops: [], back: 0, front: 0, scale: 0, angle: 0 });
+  }
+  if (version >= 0x3a0) writeThingArray(w, ctx, p.tweakObjects);
+}
+
+/** `readYellowHead`'s mirror; the popit goes in as a reference, as it is read. */
+export function writeYellowHead(w: Writer, value: YellowHeadPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  ctx.thing(w, value.head);
+  if (version > 0x1fc) ctx.thing(w, value.legacyToolTetherJoint);
+  w.f32(value.legacyToolTetherWidth);
+  w.s32(value.playerNumber);
+  w.reference(value.poppet, (self, poppet) => writePoppet(self, poppet, ctx));
+  if (version >= 0x16b) w.bool(value.requestedSuicide ?? false);
+  ctx.thing(w, value.legacyJetpack);
+  if (version > 0x193) w.f32(value.onScreenCounter ?? 0);
+  if (version > 0x1d0) w.i8(value.onScreenStatus ?? 0);
+  if (version > 0x1d3) w.bool(value.editJetpack ?? false);
+  if (version > 0x272) {
+    if (version < 0x2df) w.bool(value.recording ?? false);
+    ctx.thing(w, value.recordee);
+  }
+  if (version > 0x359) w.i32(value.lastTimeSlappedAPlayer ?? 0);
+  if (subVersion > 0xa5) w.i32(value.animSetKey);
+  if (subVersion > 0xd2) w.bool(value.monstrousHeadScale ?? false);
+  if (subVersion > 0x12a) {
+    w.i32(value.creatureToSpawnAs);
+    w.bool(value.spawnAsAlternateForm ?? false);
+  }
 }

@@ -2,6 +2,8 @@
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PEnemy`, kept: which part of a creature this Thing is, and how it is posed and drawn. */
 export interface EnemyPart {
@@ -71,4 +73,38 @@ export function readEnemy(s: Serializer, readers: ReadonlyMap<string, PartReader
     partType, radius, snapVertex, centerOffset, animThing, animSpeed, smokeColor, smokeBrightness,
     sourcePlayerNumber, newWalkConstraintMass, touchSensitive, touchType,
   };
+}
+
+/** `readEnemy`'s mirror; the reads it discards are written as cwlib writes them, 0 or null. */
+export function writeEnemy(w: Writer, v: EnemyPart, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  if (version >= 0x15d) w.s32(v.partType);
+  if (version > 0x15c && version < 0x19f) ctx.thing(w, undefined);
+  if (version >= 0x16d) w.f32(v.radius);
+  if (version < 0x19e) ctx.thing(w, undefined);
+  if (version >= 0x19f) w.i32(v.snapVertex);
+  if (version >= 0x1a9) {
+    w.vector3(v.centerOffset ?? [0, 0, 0]);
+    ctx.thing(w, v.animThing);
+    w.f32(v.animSpeed);
+  }
+  if (version > 0x1f1 && version < 0x21e) {
+    for (let i = 0; i < 4; i += 1) ctx.thing(w, undefined);
+    w.i32(0);
+    ctx.thing(w, undefined);
+    ctx.thing(w, undefined);
+    w.vector3([0, 0, 0]);
+    w.s32(0);
+    w.vector3([0, 0, 0]);
+    for (let i = 0; i < 3; i += 1) w.f32(0);
+    w.s32(0);
+    w.s32(0);
+  }
+  if (version >= 0x246) w.i32(v.sourcePlayerNumber ?? 0);
+  if (version >= 0x265) w.bool(v.newWalkConstraintMass ?? false);
+  if (version >= 0x31e) w.i32(v.smokeColor);
+  if (version >= 0x39a) w.f32(v.smokeBrightness);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x2) w.bool(v.touchSensitive ?? false);
+  if (vita >= 0x3) w.i32(v.touchType ?? 0);
 }

@@ -2,6 +2,8 @@
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PMaterialTweak`: the per-Thing material overrides. */
 /** `PMaterialTweak`, kept: how a material tweaker changes a shape's physics and its look. */
@@ -40,6 +42,14 @@ export interface MaterialTweakPart {
   readonly name?: string;
   readonly isUsableByPoppetAudio?: boolean;
   readonly ppMaterialMergeable?: boolean;
+  /**
+   * What cwlib reads from subVersion 0x8d and writes as 0, naming nothing: a
+   * float below 0x13d, a byte below 0x92, an `i32` from 0x92 below 0x13d. The
+   * game's own files hold other values there (`dev/part-census.ts`), so they are kept.
+   */
+  readonly unknownFloat?: number;
+  readonly unknownByte?: number;
+  readonly unknownInt?: number;
 }
 
 export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, PartReader>): MaterialTweakPart {
@@ -63,7 +73,7 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
   let ppRigidConnection: boolean | undefined;
   if (version < 0x2c4) activation = s.f32();
   const hideInPlayMode = s.bool();
-  if (version < 0x2cd) s.i32(); // colorIndex
+  if (version < 0x2cd) colorIndex = s.i32();
   const restitution = version > 0x2b6 ? s.f32() : 0;
   const frictionScale = version > 0x30c ? s.f32() : 1;
   if (version >= 0x2b7 && version < 0x343) {
@@ -98,10 +108,13 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
     ppTweakability = s.u8();
     ppRigidConnection = s.bool();
   }
+  let unknownFloat: number | undefined;
+  let unknownByte: number | undefined;
+  let unknownInt: number | undefined;
   if (subVersion >= 0x8d) {
-    if (subVersion < 0x13d) s.f32();
-    if (subVersion < 0x92) s.u8();
-    if (subVersion >= 0x92 && subVersion < 0x13d) s.i32();
+    if (subVersion < 0x13d) unknownFloat = s.f32();
+    if (subVersion < 0x92) unknownByte = s.u8();
+    if (subVersion >= 0x92 && subVersion < 0x13d) unknownInt = s.i32();
   }
   if (subVersion > 0xa7) ppMaterialMergeable = s.bool();
   return {
@@ -109,6 +122,54 @@ export function readMaterialTweak(s: Serializer, readers: ReadonlyMap<string, Pa
     noBevel, zSlice, climbability, tweakType, highlight, includeRigidConnectors, droppable, requiresTag, requiresNewTouch, maxSpeed, colorIndex, ppGrab, ppTweakability,
     ppRigidConnection, activation, grabFilter, noAutoDestruct, disablePhysicsAudio, touchability,
     touchRotationalStrength, touchabilityInvisible, name, isUsableByPoppetAudio,
-    ppMaterialMergeable,
+    ppMaterialMergeable, unknownFloat, unknownByte, unknownInt,
   };
+}
+
+/** `readMaterialTweak`'s mirror; what it reads and drops is written as cwlib writes it, 0 and null. */
+export function writeMaterialTweak(w: Writer, p: MaterialTweakPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  if (version < 0x2c4) w.f32(p.activation ?? 0);
+  w.bool(p.hideInPlayMode);
+  if (version < 0x2cd) w.i32(p.colorIndex ?? 0);
+  if (version > 0x2b6) w.f32(p.restitution);
+  if (version > 0x30c) w.f32(p.frictionScale);
+  if (version >= 0x2b7 && version < 0x343) {
+    w.u8(0);
+    w.u8(0);
+  }
+  if (version > 0x342) w.u8(p.grabbability);
+  if (version > 0x3bc) w.u8(p.grabFilter ?? 0);
+  if (version > 0x342) w.u8(p.stickiness);
+  if (version > 0x2b8) w.bool(p.noAutoDestruct ?? false);
+  if (subVersion > 0x2) w.bool(p.isProjectile);
+  if (version >= 0x2df && version < 0x327) ctx.thing(w, undefined);
+  if (version > 0x356) w.bool(p.disablePhysicsAudio ?? false);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x5) w.u8(p.touchability ?? 0);
+  if (vita >= 0x7) {
+    w.i32(p.tweakType ?? 0);
+    for (const b of [p.highlight, p.includeRigidConnectors, p.droppable, p.requiresTag, p.requiresNewTouch]) w.bool(b ?? false);
+    w.f32(p.maxSpeed ?? 0);
+    w.s32(p.colorIndex ?? 0);
+  }
+  if (vita >= 0x49) w.f32(p.touchRotationalStrength ?? 0);
+  if (vita >= 0x6c) w.bool(p.touchabilityInvisible ?? false);
+  if (vita >= 0x7) w.wstr(p.name ?? '');
+  if (subVersion > 0x3) w.bool(p.isUsableByPoppetAudio ?? false);
+  if (version > 0x3ec || subVersion > 5) w.bool(p.hasShadow);
+  if (subVersion > 0x33) w.bool(p.noBevel);
+  if (subVersion > 0xdb) w.bool(p.zSlice);
+  if (subVersion > 0x48) w.bool(p.climbability);
+  if (subVersion > 0x8c) {
+    w.bool(p.ppGrab ?? false);
+    w.u8(p.ppTweakability ?? 0);
+    w.bool(p.ppRigidConnection ?? false);
+  }
+  if (subVersion >= 0x8d) {
+    if (subVersion < 0x13d) w.f32(p.unknownFloat ?? 0);
+    if (subVersion < 0x92) w.u8(p.unknownByte ?? 0);
+    if (subVersion >= 0x92 && subVersion < 0x13d) w.i32(p.unknownInt ?? 0);
+  }
+  if (subVersion > 0xa7) w.bool(p.ppMaterialMergeable ?? false);
 }

@@ -2,7 +2,10 @@
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { thingArray, things } from './common.ts';
+import { thingArray, things, writeThingArray } from './common.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+import { readKept, writeKept } from './npc.ts';
 
 type V3 = readonly [number, number, number];
 
@@ -167,6 +170,13 @@ export interface CreaturePart {
   readonly whipSim?: WhipSim;
   readonly spring?: CreatureSpring;
   readonly bootContactForceList?: readonly V3[];
+  /**
+   * The four bytes of the float versions 0x178..0x1e2 hold after the brains, which
+   * cwlib reads unnamed and writes as 0, kept where they are not all zero: one
+   * creature in the game's first 400 levels and plans holds `ff 7f ff ff` there,
+   * a NaN, so they are kept as bytes rather than as a float.
+   */
+  readonly retiredFloat0x178?: Uint8Array;
   /** The seven flying timers, as cwlib reads them, one after another. */
   readonly flyingTimers?: readonly number[];
 }
@@ -327,7 +337,11 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     brainsAi = thingArray(s, readers);
     brainsLife = thingArray(s, readers);
   }
-  if (version > 0x177 && version < 0x1e3) s.f32();
+  let retiredFloat0x178: Uint8Array | undefined;
+  if (version > 0x177 && version < 0x1e3) {
+    const raw = s.bytes(4);
+    if (raw.some((b) => b !== 0)) retiredFloat0x178 = raw.slice();
+  }
   if (version >= 0x19c) reactToLethal = s.bool();
   if (version >= 0x1a9) {
     oldAnimMatrix = s.matrix();
@@ -410,7 +424,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (version >= 0x3f0) capeExtraMaxVelocityCap = s.u8();
   if (version >= 0x35a) behavior = s.i32();
   if (version >= 0x373) effectDestroy = s.i32();
-  if (version >= 0x3c0) whipSim = s.reference((self) => readWhipSim(self, readers));
+  if (version >= 0x3c0) whipSim = readKept(s, (self) => readWhipSim(self, readers));
   const vita = vitaRevision(s.revision);
   if (vita >= 0 && vita < 0x53) s.u8();
   if (vita >= 0x53) shootAtTouch = s.i32();
@@ -435,7 +449,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (subVersion >= 0x20c) {
     springState = s.u8();
     springHasSprung = s.bool();
-    spring = s.reference((self): CreatureSpring => ({
+    spring = readKept(s, (self): CreatureSpring => ({
       springThing: readThingRef(self, readers),
       springTimer: self.i32(),
       springDirection: self.vector3(),
@@ -465,5 +479,207 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     airTimeLeft, hasScubaGear, outOfWaterJumpBoost, handPiece, lastDirectControlPrompt,
     directControlPrompt, directControlMode, canDropPowerup, capeExtraMaxVelocityCap, behavior,
     effectDestroy, shootAtTouch, alternateFormWorld, hookHatState, hookHatBogey, whipSim, spring, bootContactForceList, flyingTimers,
+    ...(retiredFloat0x178 ? { retiredFloat0x178 } : {}),
   };
+}
+
+function writeWhipSim(w: Writer, v: WhipSim, ctx: PartWriteContext): void {
+  ctx.thing(w, v.creatureThing);
+  w.matrix(v.baseHandleMatrix);
+  w.vector3(v.prevDir);
+  w.vector3(v.currDir);
+  w.i32(v.stateTimer);
+  w.i8(v.state);
+  ctx.thing(w, v.attachedThing);
+  w.vector3(v.attachedLocalPos);
+  w.vector3(v.attachedLocalNormal);
+  w.f32(v.attachedLocalAngle);
+  w.f32(v.attachedScale);
+  w.bool(v.playedFailToFireSound);
+  w.f32(v.attachedZOffset);
+}
+
+const ZERO3 = [0, 0, 0] as const;
+const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+/** `readCreature`'s mirror; the reads it discards are written as cwlib writes them, 0, false or null. */
+export function writeCreature(w: Writer, v: CreaturePart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const thing = (t: Thing | undefined) => ctx.thing(w, t);
+  w.ref(v.config);
+  if (version < 0x155) w.i32(0);
+  w.s32(v.jumpFrame);
+  w.f32(v.groundDistance);
+  w.vector3(v.groundNormal);
+  thing(v.grabJoint);
+  if (version < 0x13c) thing(undefined);
+  thing(v.jumpingOff);
+  w.i32(v.state);
+  if (subVersion >= 0x132) w.i32(v.subState ?? 0);
+  w.i32(v.stateTimer);
+  w.f32(v.speedModifier);
+  w.f32(v.jumpModifier);
+  w.f32(v.strengthModifier);
+  if (version < 0x142) w.vector4([0, 0, 0, 0]);
+  w.i32(v.zMode);
+  if (version < 0x146) w.i32(0);
+  if (version > 0x145 && version < 0x1f0) {
+    w.i32(0);
+    w.i32(0);
+    w.bool(false);
+    w.bool(false);
+    w.i32(0);
+  }
+  w.s32(v.playerAwareness);
+  w.s32(v.moveDirection);
+  if (version < 0x15d) w.u8(0);
+  if (version < 0x1f0) {
+    w.i32(0);
+    w.f32(0);
+  }
+  w.vector3(v.forceThatSmashedCreature);
+  w.i32(v.crushFrames);
+  w.f32(v.awarenessRadius);
+  if (version >= 0x1df) w.i32(v.airTime ?? 0);
+  if (version >= 0x354) {
+    w.intVector(v.bouncepadThingUIDs ?? []);
+    w.intVector(v.grabbedThingUIDs ?? []);
+  }
+  if (version >= 0x221) w.bool(v.haveNotTouchedGroundSinceUsingJetpack ?? false);
+  if (version >= 0x15d) {
+    writeThingArray(w, ctx, v.legs);
+    if (version < 0x166) {
+      writeThingArray(w, ctx, []);
+      writeThingArray(w, ctx, []);
+    }
+    writeThingArray(w, ctx, v.lifeSources);
+    thing(v.lifeCreature);
+    thing(v.aiCreature);
+  }
+  if (version >= 0x163) {
+    w.i32(v.jumpInterval ?? 0);
+    w.i32(v.jumpIntervalPhase ?? 0);
+  }
+  if (version > 0x162 && version < 0x16d) w.bool(false);
+  if (version >= 0x169) w.bool(v.meshDirty ?? false);
+  if (version >= 0x166) {
+    writeThingArray(w, ctx, v.eyes);
+    writeThingArray(w, ctx, v.brainsAi);
+    writeThingArray(w, ctx, v.brainsLife);
+  }
+  if (version > 0x177 && version < 0x1e3) w.bytes(v.retiredFloat0x178 ?? new Uint8Array(4));
+  if (version >= 0x19c) w.bool(v.reactToLethal ?? false);
+  if (version >= 0x1a9) {
+    w.matrix(v.oldAnimMatrix ?? IDENTITY);
+    w.f32(v.animOffset ?? 0);
+  }
+  if (version > 0x1ed && version < 0x225) w.s32(0);
+  if (version >= 0x1fc) w.vector3(v.groundNormalRaw ?? ZERO3);
+  if (version >= 0x212) {
+    w.vector3(v.groundNormalSmooth ?? ZERO3);
+    w.f32(v.bodyAdjustApplied ?? 0);
+  }
+  if (version >= 0x240 && version < 0x2c4) w.f32(v.switchScale ?? 0);
+  if (version > 0x242 && version < 0x24d) w.ref(undefined);
+  if (version >= 0x243) w.vector3(v.gunDirAndDashVec ?? ZERO3);
+  if (subVersion >= 0x19e) w.f32(v.gunDirAndDashVecW ?? 0);
+  if (version >= 0x246) thing(v.resourceThing);
+  if (version >= 0x247) w.i32(v.gunFireFrame ?? 0);
+  if (version >= 0x248) w.i32(v.bulletCount ?? 0);
+  if (version >= 0x24a) w.i32(v.bulletImmuneTimer ?? 0);
+  if (version >= 0x24d) thing(v.bulletEmitter0);
+  if (version >= 0x3a2) thing(v.bulletEmitter1);
+  if (version >= 0x24e) w.i32(v.bulletPosIndex ?? 0);
+  if (version >= 0x24f) {
+    w.i32(v.maxBulletCount ?? 0);
+    w.f32(v.ammoFillFactor ?? 0);
+  }
+  if (version >= 0x252) w.bool(v.gunDirPrecisionMode ?? false);
+  if (version >= 0x320) {
+    w.i32(v.fireRate ?? 0);
+    w.f32(v.gunAccuracy ?? 0);
+    w.vector3(v.bulletEmitOffset ?? ZERO3);
+    w.f32(v.bulletEmitRotation ?? 0);
+    thing(v.gunThing);
+    thing(v.gunTrigger);
+    w.i32(v.lastGunTriggerUID ?? 0);
+  }
+  if (version >= 0x272) w.i32(v.airTimeLeft ?? 0);
+  if (version >= 0x2c9 || onLeerdammer(w.revision, LD_SUBMERGED)) {
+    w.f32(v.amountBodySubmerged ?? 0);
+    w.f32(v.amountHeadSubmerged ?? 0);
+  }
+  if (version >= 0x289 || onLeerdammer(w.revision, LD_ANY)) w.bool(v.hasScubaGear ?? false);
+  const headPieceGone = onLeerdammer(w.revision, LD_ANY) && w.revision.branchRevision >= 0xc;
+  if ((version >= 0x289 && version < 0x2c8) || (onLeerdammer(w.revision, LD_ANY) && !headPieceGone)) {
+    w.ref(v.headPiece);
+  }
+  if (version >= 0x289 || onLeerdammer(w.revision, LD_ANY)) w.bool(v.outOfWaterJumpBoost ?? false);
+  if (version >= 0x2a9) w.ref(v.handPiece);
+  if (version >= 0x273) {
+    thing(v.head);
+    thing(v.toolTetherJoint);
+    w.f32(v.toolTetherWidth ?? 0);
+    thing(v.jetpack);
+    w.s32(v.wallJumpDir ?? 0);
+    w.vector3(v.wallJumpPos ?? ZERO3);
+    const forces = v.bootContactForceList ?? [];
+    w.i32(forces.length);
+    for (const force of forces) w.vector3(force);
+    w.s32(v.gunType ?? 0);
+    w.bool(v.wallJumpMat ?? false);
+  }
+  if (version >= 0x29e && version < 0x336) thing(v.lastDirectControlPrompt);
+  if (version > 0x2e4) thing(v.directControlPrompt);
+  if (version >= 0x29e && version < 0x336) {
+    w.vector3(v.smoothedDirectControlStick ?? ZERO3);
+    w.i16(v.directControlAnimFrame ?? 0);
+    w.u8(v.directControlAnimState ?? 0);
+  }
+  if (version >= 0x29f && version < 0x2c1) w.u8(v.directControlMode ?? 0);
+  if (version >= 0x2c1 && version < 0x336) w.u8(0);
+  if (version >= 0x2a5) {
+    w.i32(v.responsiblePlayer ?? 0);
+    w.i32(v.responsibleFramesLeft ?? 0);
+  }
+  if (version >= 0x32c) w.bool(v.canDropPowerup ?? false);
+  if (version >= 0x3f0) w.u8(v.capeExtraMaxVelocityCap ?? 0);
+  if (version >= 0x35a) w.i32(v.behavior ?? 0);
+  if (version >= 0x373) w.i32(v.effectDestroy ?? 0);
+  if (version >= 0x3c0) writeKept(w, v.whipSim, (self, sim) => writeWhipSim(self, sim, ctx));
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0 && vita < 0x53) w.u8(0);
+  if (vita >= 0x53) w.i32(v.shootAtTouch ?? 0);
+  if (subVersion >= 0x88 && subVersion <= 0xa4) w.ref(undefined);
+  if (subVersion >= 0xaa) thing(v.alternateFormWorld);
+  if (subVersion >= 0xd7) w.i32(v.hookHatState ?? 0);
+  if (subVersion >= 0xd7 && subVersion < 0xea) {
+    thing(undefined);
+    thing(undefined);
+  }
+  if (subVersion >= 0xdf) thing(v.hookHatBogey);
+  if (subVersion >= 0x196) {
+    for (let i = 0; i < 7; i += 1) w.i32(v.flyingTimers?.[i] ?? 0);
+    w.f32(v.flyingLegScale ?? 0);
+    w.vector4(v.flyingVels ?? [0, 0, 0, 0]);
+    w.bool(v.flyingFlapLockout ?? false);
+    w.bool(v.flyingFallLockout ?? false);
+    w.bool(v.flyingInWind ?? false);
+    w.bool(v.flyingThrustLatched ?? false);
+    w.i16(v.glidingTime ?? 0);
+  }
+  if (subVersion >= 0x20c) {
+    w.u8(v.springState ?? 0);
+    w.bool(v.springHasSprung ?? false);
+    writeKept(w, v.spring, (self, spring) => {
+      ctx.thing(self, spring.springThing);
+      self.i32(spring.springTimer);
+      self.vector3(spring.springDirection);
+      self.vector3(spring.springThingPosition);
+    });
+    w.u8(v.springPower ?? 0);
+    w.bool(v.springSeparateForces ?? false);
+    w.u8(v.springForce ?? 0);
+    w.u8(v.springStateTimer ?? 0);
+  }
 }

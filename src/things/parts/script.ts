@@ -2,6 +2,54 @@
 
 import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+
+/**
+ * The id each shared object -- a layout, a boxed object, an instance behind a
+ * reference -- had in the file it was read from, so a writer names it the same.
+ * A `WeakMap` rather than a field: the values stay what they were, and an object
+ * made here has none and is numbered afresh.
+ */
+const IDS = new WeakMap<object, number>();
+
+/**
+ * The tape object each shared object was read as, where the stream was read
+ * onto a tape (`io/tape.ts`).
+ *
+ * ❗ **A writer has to name a shared object by the same key the tape does.** A
+ * Thing a script field points at is written through the tape (`ctx.thing`), and
+ * its own scripts' layouts and boxed objects go with it as tape objects; the
+ * same layout written here from its value is a second JavaScript object under
+ * the same id, so the `Writer` took the id as taken and renumbered whichever
+ * came second -- 13,007 of the game's 73,267 `PScript`s, until both sides
+ * used the tape object as the key. An instance behind a reference is mapped by
+ * the tape itself (`objectOf`); a layout or boxed object, behind a pointer, has
+ * no value on the tape, so it is looked up by its id.
+ */
+const TAPED = new WeakMap<object, object>();
+
+/** The tape object read for reference id `id`. ⚠️ `Tape.objects` is private: the tape has no public lookup by id. */
+function tapeObjectAt(s: Serializer, id: number): object | undefined {
+  return s.tape?.objectAt(id);
+}
+
+/** A shared object by reference: under its tape object's key where it has one, its file's id, its body from its value. */
+function writeShared<T extends object>(w: Writer, value: T | undefined, body: (self: Writer, value: T) => void): void {
+  if (!value) {
+    w.reference(undefined, () => {});
+    return;
+  }
+  w.reference<object>(TAPED.get(value) ?? value, (self) => body(self, value), IDS.get(value));
+}
+
+/** The id the next `i32` holds, without consuming it: what `s.reference` is about to read. */
+function peekId(s: Serializer): number {
+  const at = s.position;
+  const id = s.i32();
+  s.position = at;
+  return id;
+}
 
 /** `MachineType`: how a script field's value is stored. */
 const MACHINE_BOOL = 0x1;
@@ -26,6 +74,8 @@ const MODIFIER_DIVERGENT = 1 << 0xc;
 /** One field of a script instance's layout, as the stream describes it. */
 export interface ScriptFieldLayout {
   readonly name: string;
+  /** cwlib's `ModifierType` flags, as stored (an `i16` from 0x3d9, an `i32` below). */
+  readonly modifiers: number;
   /** cwlib's `MachineType`: 1 bool, 2 char, 3 s32, 4 f32, 5 v4, 6 m44, 10 a Thing, 11 a boxed object. */
   readonly machineType: number;
   /** cwlib's `BuiltinType`, the type the script declares; 0 below version 0x145. */
@@ -83,6 +133,25 @@ export interface ScriptInstance {
   readonly fields: readonly ScriptField[];
   /** The layout's instance size, where the instance has a layout. */
   readonly instanceSize?: number;
+  /** From version 0x1a1, whether the instance is stored at all (cwlib's `serialize`). */
+  readonly serialize?: boolean;
+  /**
+   * cwlib's `InstanceLayout`, the one object every instance of a script shares
+   * by pointer: kept by identity, so a writer names it once and points after.
+   */
+  readonly layout?: ScriptLayout;
+  /** From version 0x19d, whether `DIVERGENT` fields are in the value stream. */
+  readonly reflectDivergent?: boolean;
+  /** On a `PScript` between versions 0x17a and 0x1a0: the bool cwlib calls "unknown", kept where true. */
+  readonly unknown?: boolean;
+}
+
+/** cwlib's `InstanceLayout`: the field table, shared by pointer. */
+export interface ScriptLayout {
+  readonly fields: readonly ScriptFieldLayout[];
+  readonly instanceSize: number;
+  /** Below version 0x1ec, the reflection table: a field's name and its index. */
+  readonly reflection?: readonly { readonly name: string; readonly index: number }[];
 }
 
 /**
@@ -107,7 +176,7 @@ function readFieldLayout(s: Serializer): ScriptFieldLayout {
     const arrayBaseMachineType = s.u8();
     const instanceOffset = s.i32();
     const divergent = (flags & MODIFIER_DIVERGENT) !== 0;
-    return { name, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
+    return { name, modifiers: flags, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
   }
   const flags = s.i32();
   const machineType = s.i32();
@@ -116,7 +185,27 @@ function readFieldLayout(s: Serializer): ScriptFieldLayout {
   const arrayBaseMachineType = s.i32();
   const instanceOffset = s.i32();
   const divergent = (flags & MODIFIER_DIVERGENT) !== 0;
-  return { name, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
+  return { name, modifiers: flags, machineType, fishType, divergent, dimensionCount, arrayBaseMachineType, instanceOffset };
+}
+
+/** `readFieldLayout`'s mirror. */
+function writeFieldLayout(w: Writer, field: ScriptFieldLayout): void {
+  w.str(field.name);
+  if (w.revision.version >= 0x3d9) {
+    w.i16(field.modifiers);
+    w.u8(field.machineType);
+    w.u8(field.fishType);
+    w.i8(field.dimensionCount);
+    w.u8(field.arrayBaseMachineType);
+    w.i32(field.instanceOffset);
+    return;
+  }
+  w.i32(field.modifiers);
+  w.i32(field.machineType);
+  if (w.revision.version >= 0x145) w.i32(field.fishType);
+  w.i8(field.dimensionCount);
+  w.i32(field.arrayBaseMachineType);
+  w.i32(field.instanceOffset);
 }
 
 /**
@@ -142,7 +231,7 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
 
   let serialize = true;
   if (version > 0x1a0) serialize = s.bool();
-  if (!serialize) return { script, fields: [] };
+  if (!serialize) return { script, fields: [], serialize };
 
   // A layout is written once and named by pointer after; its instance size with it.
   const { id: pointer } = s.pointer((self, id) => {
@@ -151,21 +240,27 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
     for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(self));
     // Below 0x1ec the layout carries a reflection table: a name and an index each
     // (cwlib's `InstanceLayout`). Without it the LBP1 scripts read it as values.
+    let reflection: { name: string; index: number }[] | undefined;
     if (self.revision.version < 0x1ec) {
+      reflection = [];
       const names = self.count();
-      for (let i = 0; i < names; i += 1) {
-        self.str();
-        self.i32();
-      }
+      for (let i = 0; i < names; i += 1) reflection.push({ name: self.str(), index: self.i32() });
     }
-    self.pointers.set(id, { layout: fields, instanceSize: self.i32() });
+    const layout: ScriptLayout = reflection
+      ? { fields, reflection, instanceSize: self.i32() }
+      : { fields, instanceSize: self.i32() };
+    IDS.set(layout, id);
+    const taped = tapeObjectAt(self, id);
+    if (taped) TAPED.set(layout, taped);
+    self.pointers.set(id, layout);
   });
-  if (pointer === 0) return { script, fields: [] };
-  const { layout, instanceSize } = s.pointers.get(pointer) as { layout: ScriptFieldLayout[]; instanceSize: number };
+  if (pointer === 0) return { script, fields: [], serialize };
+  const layout = s.pointers.get(pointer) as ScriptLayout;
+  const { instanceSize } = layout;
 
   const reflectDivergent = version > 0x19c ? s.bool() : false;
   const fields: ScriptField[] = [];
-  for (const field of layout) {
+  for (const field of layout.fields) {
     if (field.divergent && !reflectDivergent) {
       fields.push({ ...field, stored: false, value: undefined });
       continue;
@@ -204,14 +299,81 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
     }
     fields.push({ ...field, stored: true, value });
   }
-  return { script, fields, instanceSize };
+  return { script, fields, instanceSize, serialize, layout, reflectDivergent };
+}
+
+/** `readScriptInstance`'s mirror: the layout by pointer, then each stored field's value. */
+function writeScriptInstance(w: Writer, instance: ScriptInstance, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  w.ref(instance.script);
+  const layout = instance.layout;
+  const serialize = instance.serialize ?? true;
+  if (version > 0x1a0) w.bool(serialize);
+  if (!serialize) return;
+  writeShared(w, layout, (self, value) => {
+    self.i32(value.fields.length);
+    for (const field of value.fields) writeFieldLayout(self, field);
+    if (self.revision.version < 0x1ec) {
+      const reflection = value.reflection ?? [];
+      self.i32(reflection.length);
+      for (const { name, index } of reflection) {
+        self.str(name);
+        self.i32(index);
+      }
+    }
+    self.i32(value.instanceSize);
+  });
+  if (!layout) return;
+  if (version > 0x19c) w.bool(instance.reflectDivergent ?? false);
+  for (const field of instance.fields) {
+    if (!field.stored) continue;
+    if (version > 0x198 && version < 0x19d) w.u8(0);
+    const value = field.value;
+    switch (field.machineType) {
+      case MACHINE_BOOL:
+        w.bool(value as boolean);
+        break;
+      case MACHINE_CHAR:
+        w.i16(value as number);
+        break;
+      case MACHINE_S32:
+        w.i32(value as number);
+        break;
+      case MACHINE_F32:
+        w.f32(value as number);
+        break;
+      case MACHINE_V4:
+        w.vector4(value as readonly number[]);
+        break;
+      case MACHINE_M44:
+        w.matrix(value as Float32Array);
+        break;
+      case MACHINE_SAFE_PTR:
+        ctx.thing(w, value as Thing | undefined);
+        break;
+      case MACHINE_OBJECT_REF:
+        writeScriptObject(w, value as ScriptObject | undefined, ctx);
+        break;
+      default:
+        throw new SerializerError(`script field machine type 0x${field.machineType.toString(16)} has no writer`);
+    }
+  }
 }
 
 /** `PScript`: a script attached to a Thing, and its fields' values. */
 export function readScript(s: Serializer, readers: ReadonlyMap<string, PartReader>): ScriptInstance {
   const { version } = s.revision;
-  if (version > 0x179 && version < 0x1a1) s.bool(); // cwlib's `PScript`: "unknown"
-  return readScriptInstance(s, readers);
+  // cwlib's `PScript`: "unknown", written false -- but one LBP1 chunk holds true.
+  const unknown = version > 0x179 && version < 0x1a1 ? s.bool() : undefined;
+  const instance = readScriptInstance(s, readers);
+  return unknown ? { ...instance, unknown } : instance;
+}
+
+/** `readScript`'s mirror: the unknown bool (cwlib writes false), then the instance. */
+export function writeScript(w: Writer, instance: ScriptInstance, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  if (version > 0x179 && version < 0x1a1) w.bool(instance.unknown ?? false);
+  writeScriptInstance(w, instance, ctx);
 }
 
 /** `ScriptObjectType`: what a boxed script value holds. */
@@ -253,14 +415,89 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
   const type = s.i32();
   if (type === OBJ_NULL) return undefined;
   if (type === OBJ_INSTANCE) {
-    return { type: 'instance', instance: s.reference((self) => readScriptInstance(self, readers)) };
+    const id = peekId(s);
+    const instance = s.reference((self) => readScriptInstance(self, readers));
+    if (instance) {
+      IDS.set(instance, id);
+      const taped = s.tape?.objectOf(instance);
+      if (taped) TAPED.set(instance, taped);
+    }
+    return { type: 'instance', instance };
   }
   const shared = OBJECTS.get(s) ?? OBJECTS.set(s, new Map()).get(s)!;
   const { id } = s.pointer((self, pointer) => {
     self.pointers.set(pointer, true);
-    shared.set(pointer, readScriptObjectBody(self, type, readers));
+    const object = readScriptObjectBody(self, type, readers);
+    IDS.set(object, pointer);
+    const taped = tapeObjectAt(self, pointer);
+    if (taped) TAPED.set(object, taped);
+    shared.set(pointer, object);
   });
   return id === 0 ? undefined : shared.get(id);
+}
+
+const OBJECT_TYPES: Record<ScriptObject['type'], number> = {
+  bools: OBJ_ARRAY_BOOL, s32s: OBJ_ARRAY_S32, f32s: OBJ_ARRAY_F32, vector4s: OBJ_ARRAY_VECTOR4,
+  things: OBJ_ARRAY_SAFE_PTR, objects: OBJ_ARRAY_OBJECT_REF, resource: OBJ_RESOURCE, instance: OBJ_INSTANCE,
+  stringW: OBJ_STRINGW, audioHandle: OBJ_AUDIOHANDLE, stringA: OBJ_STRINGA,
+};
+
+/** `readScriptObject`'s mirror: the type, then the object by pointer (an instance by reference). */
+function writeScriptObject(w: Writer, object: ScriptObject | undefined, ctx: PartWriteContext): void {
+  if (!object) {
+    w.i32(OBJ_NULL);
+    return;
+  }
+  w.i32(OBJECT_TYPES[object.type]);
+  if (object.type === 'instance') {
+    const { instance } = object;
+    writeShared(w, instance, (self, value) => writeScriptInstance(self, value, ctx));
+    return;
+  }
+  writeShared(w, object, (self, value) => writeScriptObjectBody(self, value, ctx));
+}
+
+/** `readScriptObjectBody`'s mirror. An audio handle writes nothing after its id. */
+function writeScriptObjectBody(w: Writer, object: ScriptObject, ctx: PartWriteContext): void {
+  switch (object.type) {
+    case 'bools':
+      w.i32(object.values.length);
+      for (const value of object.values) w.bool(value);
+      break;
+    case 's32s':
+      w.intVector(object.values, true);
+      break;
+    case 'f32s':
+      w.i32(object.values.length);
+      for (const value of object.values) w.f32(value);
+      break;
+    case 'vector4s':
+      w.i32(object.values.length);
+      for (const value of object.values) w.vector4(value);
+      break;
+    case 'stringW':
+      w.wstr(object.value);
+      break;
+    case 'stringA':
+      w.str(object.value);
+      break;
+    case 'resource':
+      w.i32(object.resourceType);
+      if (object.resourceType !== 0) w.ref(object.resource);
+      break;
+    case 'audioHandle':
+      break;
+    case 'things':
+      w.i32(object.values.length);
+      for (const value of object.values) ctx.thing(w, value);
+      break;
+    case 'objects':
+      w.i32(object.values.length);
+      for (const value of object.values) writeScriptObject(w, value, ctx);
+      break;
+    case 'instance':
+      throw new SerializerError('a script instance is not a pointer-shared object');
+  }
 }
 
 /** A boxed object's bytes after its pointer, on its first mention. */

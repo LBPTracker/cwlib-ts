@@ -1,6 +1,8 @@
 /** `COSTUME`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `Primitive`: one draw call of a mesh, with the material it is drawn in. */
 export interface CostumePrimitive {
@@ -89,4 +91,48 @@ export function readCostume(s: Serializer): CostumePart {
     mesh, material, materialPlan, meshPartsHidden, primitives, creatureFilter, pieces,
     temporaryPieces,
   };
+}
+
+function writePrimitive(w: Writer, p: CostumePrimitive): void {
+  w.ref(p.material);
+  if (w.revision.version >= 0x179) w.ref(p.textureAlternatives);
+  w.i32(p.minVert);
+  w.i32(p.maxVert);
+  w.i32(p.firstIndex);
+  w.i32(p.numIndices);
+  w.i32(p.region);
+}
+
+function writePrimitives(w: Writer, primitives: readonly CostumePrimitive[]): void {
+  w.i32(primitives.length);
+  for (const p of primitives) writePrimitive(w, p);
+}
+
+function writeCostumePiece(w: Writer, piece: CostumePiece): void {
+  const { version, subVersion } = w.revision;
+  w.ref(piece.mesh);
+  w.i32(piece.categoriesUsed);
+  const remap = piece.morphParamRemap;
+  w.i32(remap.length);
+  if (subVersion < 0x105) for (const v of remap) w.i32(v);
+  else w.bytes(remap instanceof Uint8Array ? remap : Uint8Array.from(remap));
+  writePrimitives(w, piece.primitives);
+  if (version >= 0x19a) w.ref(piece.plan, { descriptor: true });
+}
+
+/** `readCostume`'s mirror. */
+export function writeCostume(w: Writer, p: CostumePart, _ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  w.ref(p.mesh);
+  w.ref(p.material);
+  if (version >= 0x19a) w.ref(p.materialPlan, { descriptor: true });
+  w.intVector(p.meshPartsHidden);
+  writePrimitives(w, p.primitives);
+  if (subVersion >= 0xdb) w.i32(p.creatureFilter);
+  w.i32(p.pieces.length);
+  for (const piece of p.pieces) writeCostumePiece(w, piece);
+  if (version >= 0x2c5) {
+    w.i32(p.temporaryPieces.length);
+    for (const piece of p.temporaryPieces) writeCostumePiece(w, piece);
+  }
 }

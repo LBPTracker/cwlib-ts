@@ -1,7 +1,9 @@
 /** `INSTRUMENT`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
-import { decodeEntities } from './entities.ts';
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { decodeEntities, escapeEntities } from './entities.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** What an `INSTRUMENT` part yields — one placement on a sequencer's board. */
 export interface InstrumentPart {
@@ -36,6 +38,12 @@ export interface InstrumentPart {
    * table measured out of the corpus.
    */
   readonly icon: number;
+  /** The `RInstrument` reference as the file holds it (cwlib `instrument`): its hash and flags with the GUID. */
+  readonly instrument?: ResourceRef;
+  /** The icon reference as the file holds it (cwlib `icon`); version 0x379 on. */
+  readonly iconRef?: ResourceRef;
+  /** The name exactly as the file holds it, where `escapeEntities(name)` would not give it back (as `Microchip.rawName`). */
+  readonly rawName?: string;
   readonly scrollX?: number;
   readonly scrollY?: number;
   readonly cursorX?: number;
@@ -56,7 +64,8 @@ export function readInstrumentPart(s: Serializer): InstrumentPart {
   let cursorX: number | undefined;
   let cursorY: number | undefined;
   const resource = s.resource();
-  const name = version >= 0x35b ? decodeEntities(s.wstr()) : '';
+  const stored = version >= 0x35b ? s.wstr() : '';
+  const name = decodeEntities(stored);
   const colour = s.i32();
   const loops = s.i32();
   const key = s.i32();
@@ -88,5 +97,40 @@ export function readInstrumentPart(s: Serializer): InstrumentPart {
     reverbSend,
     notes,
   scrollX, scrollY, cursorX, cursorY,
+    instrument: resource, iconRef: icon,
+    ...(escapeEntities(name) !== stored ? { rawName: stored } : {}),
   };
+}
+
+/** A reference as kept, or one made of `guid` where the value names another. */
+function refOf(kept: ResourceRef | undefined, guid: number): ResourceRef | undefined {
+  if (kept && (kept.guid ?? 0) === guid) return kept;
+  if (!kept && guid === 0) return undefined;
+  return guid === 0 ? undefined : { guid, flags: kept?.flags };
+}
+
+/** `readInstrumentPart`'s mirror; the name escaped again (`escapeEntities`). */
+export function writeInstrumentPart(w: Writer, v: InstrumentPart, _ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  w.ref(refOf(v.instrument, v.guid));
+  if (version >= 0x35b) {
+    w.wstr(v.rawName !== undefined && decodeEntities(v.rawName) === v.name ? v.rawName : escapeEntities(v.name));
+  }
+  w.i32(v.colour);
+  w.i32(v.loops);
+  w.i32(v.key);
+  w.i32(v.scale);
+  w.f32(v.level);
+  w.f32(v.pan);
+  w.f32(v.echoSend);
+  w.f32(v.reverbSend);
+  if (version >= 0x389) {
+    w.i16(v.scrollX ?? 0);
+    w.i16(v.scrollY ?? 0);
+    w.i16(v.cursorX ?? 0);
+    w.i16(v.cursorY ?? 0);
+  }
+  w.i32(v.notes.length / 4);
+  w.bytes(v.notes);
+  if (version >= 0x379) w.ref(refOf(v.iconRef, v.icon));
 }

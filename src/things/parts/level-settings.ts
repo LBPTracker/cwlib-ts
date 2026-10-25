@@ -1,6 +1,8 @@
 /** `LEVEL_SETTINGS`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef, vitaRevision } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * One set of a level's lighting -- cwlib's `LevelSettings`, the superclass
@@ -117,4 +119,56 @@ export function readLevelSettingsPart(s: Serializer): LevelSettingsPart {
     ...lighting, presets, backdropAmbience, backdropMesh, backgroundRepeatFlags,
     backgroundSkyHeight, nonLinearFog,
   };
+}
+
+/** `readLevelSettings`' mirror: one lighting preset under the same version gates. */
+function writeLevelSettings(w: Writer, l: LevelLighting): void {
+  const { version, subVersion } = w.revision;
+  w.vector3(l.sunPosition);
+  w.f32(l.sunPositionScale);
+  w.vector4(l.sunColor);
+  w.vector4(l.ambientColor);
+  w.f32(l.sunMultiplier);
+  w.f32(l.exposure);
+  w.vector4(l.fogColor);
+  w.f32(l.fogNear);
+  w.f32(l.fogFar);
+  w.vector4(l.rimColor);
+  w.vector4(l.rimColor2);
+  if (version >= 0x325) {
+    w.f32(l.bakedShadowAmount ?? 0);
+    w.f32(l.bakedShadowBlur ?? 0);
+    w.f32(l.bakedAOBias ?? 0);
+    w.f32(l.bakedAOScale ?? 0);
+    w.f32(l.dynamicAOAmount ?? 0);
+    w.f32(l.dofNear ?? 0);
+  }
+  if (version >= 0x326) w.f32(l.dofFar ?? 0);
+  if (version >= 0x331) {
+    w.f32(l.zEffectAmount ?? 0);
+    w.f32(l.zEffectBright ?? 0);
+    w.f32(l.zEffectContrast ?? 0);
+  }
+  if (subVersion >= 0x7a) {
+    w.f32(l.dofNear2 ?? 0);
+    w.f32(l.dofFar2 ?? 0);
+    if (subVersion >= 0xce) w.f32(l.dofFar3 ?? 0);
+  }
+}
+
+/** `readLevelSettingsPart`'s mirror. */
+export function writeLevelSettingsPart(w: Writer, value: LevelSettingsPart, _ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  writeLevelSettings(w, value);
+  if (version >= 0x153) {
+    w.i32(value.presets.length);
+    for (const preset of value.presets) writeLevelSettings(w, preset);
+  }
+  if (vitaRevision(w.revision) >= 0x78) w.bool(value.nonLinearFog ?? false);
+  w.str(value.backdropAmbience);
+  if (version >= 0x2f3) w.ref(value.backdropMesh);
+  if (subVersion >= 0xaf) {
+    w.i32(value.backgroundRepeatFlags);
+    w.f32(value.backgroundSkyHeight);
+  }
 }

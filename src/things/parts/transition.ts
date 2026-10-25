@@ -1,6 +1,8 @@
 /** `TRANSITION`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PTransition`: the doorway between two islands of a streaming level.
@@ -31,4 +33,18 @@ export function readTransition(s: Serializer): TransitionPart {
     playAudio = s.bool();
   }
   return { colorIndex, label, enabled, showColor, playAudio };
+}
+
+/** `readTransition`'s mirror; the discarded words are written as 0. */
+export function writeTransition(w: Writer, v: TransitionPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.s32(v.colorIndex);
+  if (subVersion <= 0xf) w.i32(0);
+  if (subVersion >= 0x1a) w.wstr(v.label);
+  if (subVersion > 0x18) w.bool(v.enabled);
+  if (subVersion >= 0x14e && subVersion < 0x156) w.i32(0);
+  if (subVersion > 0x17c) {
+    w.bool(v.showColor);
+    w.bool(v.playAudio);
+  }
 }

@@ -1,6 +1,8 @@
 /** `EFFECTOR`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PEffector`: the volume physics behaves differently inside — gravity, and
@@ -47,4 +49,17 @@ export function readEffector(s: Serializer): EffectorPart {
     viscosityCheap: s.f32(),
     modScale: s.f32(),
   };
+}
+
+/** `readEffector`'s mirror: the nine fields, ungated. */
+export function writeEffector(w: Writer, value: EffectorPart, _ctx: PartWriteContext): void {
+  w.vector3(value.posVel);
+  w.f32(value.angVel);
+  w.f32(value.viscosity);
+  w.f32(value.density);
+  w.vector3(value.gravity);
+  w.bool(value.pushBack);
+  w.bool(value.swimmable);
+  w.f32(value.viscosityCheap);
+  w.f32(value.modScale);
 }

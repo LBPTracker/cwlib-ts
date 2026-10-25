@@ -1,6 +1,8 @@
 /** `GAMEPLAY_DATA`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `EggLink`: the plan a prize bubble gives.
@@ -22,6 +24,23 @@ function readEggLink(s: Serializer): EggLink {
   const shareable = version > 0x23b ? s.bool() : undefined;
   const painting = version > 0x3e0 && s.bool() ? s.resource(true) : undefined;
   return { plan, shareable, painting };
+}
+
+/**
+ * The id each in-stream reference read here had in its file, so a writer names it
+ * the same: the game does not number in first-mention order (`Writer.reference`).
+ * A `WeakMap`, so the values stay what they are; an object made afresh has none.
+ */
+const IDS = new WeakMap<object, number>();
+
+/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
+function keepId<T>(s: Serializer, read: () => T | undefined): T | undefined {
+  const at = s.position;
+  const id = s.i32();
+  s.position = at;
+  const value = read();
+  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
+  return value;
 }
 
 /** `PGameplayData`: what a Thing is worth when collected. steering/level-files.md, *Prize bubbles*. */
@@ -47,12 +66,40 @@ export function readGameplayData(s: Serializer): GameplayDataPart {
   if (subVersion >= 0xef && version > 0x2d0) gameplayType = s.i32();
   const fluffCost = s.s32();
   // A reference: a second Thing naming the same link gets the plan read the first time.
-  const eggLink = s.reference(readEggLink);
-  const slot = s.reference((self) => ({ slotType: self.i32(), slotNumber: self.u32() }));
+  const eggLink = keepId(s, () => s.reference(readEggLink));
+  const slot = keepId(s, () => s.reference((self) => ({ slotType: self.i32(), slotNumber: self.u32() })));
   if (version >= 0x2d1 && subVersion < 0xef) gameplayType = s.i32();
   if (subVersion >= 0xf3) {
     treasureType = s.i32();
     treasureCount = s.i16();
   }
   return { gameplayType, fluffCost, prize: eggLink?.plan, eggLink, slot, treasureType, treasureCount };
+}
+
+/** `readEggLink`'s mirror. */
+function writeEggLink(w: Writer, link: EggLink): void {
+  const { version } = w.revision;
+  w.ref(link.plan);
+  if (version > 0x23b) w.bool(link.shareable ?? false);
+  if (version > 0x3e0) {
+    w.bool(link.painting !== undefined);
+    if (link.painting !== undefined) w.ref(link.painting, { descriptor: true });
+  }
+}
+
+/** `readGameplayData`'s mirror: the egg link and the slot are in-stream references. */
+export function writeGameplayData(w: Writer, v: GameplayDataPart, _ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  if (subVersion >= 0xef && version > 0x2d0) w.i32(v.gameplayType);
+  w.s32(v.fluffCost);
+  w.reference(v.eggLink, writeEggLink, v.eggLink && IDS.get(v.eggLink));
+  w.reference(v.slot, (self, slot) => {
+    self.i32(slot.slotType);
+    self.u32(slot.slotNumber);
+  }, v.slot && IDS.get(v.slot));
+  if (version >= 0x2d1 && subVersion < 0xef) w.i32(v.gameplayType);
+  if (subVersion >= 0xf3) {
+    w.i32(v.treasureType ?? 0);
+    w.i16(v.treasureCount ?? 0);
+  }
 }

@@ -2,8 +2,20 @@
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { hasPlayerMode, things } from './common.ts';
-import { readNetworkOnlineId } from '../../structs/network.ts';
+import { hasPlayerMode, thingArray, writeThingArray } from './common.ts';
+import { readNetworkOnlineId, writeNetworkOnlineId } from '../../structs/network.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+import { Tape } from '../../io/tape.ts';
+
+/**
+ * Tape objects by the value read from them (every tape shares the table), so an
+ * output written from its value takes the identity of the object a Thing's tape
+ * body names: a target Thing written inline can refer back to the very output
+ * that names it, and that has to come out as a back-reference.
+ */
+const TAPE = new Tape(new Uint8Array(0));
+export const keyOf = (value: object): object => TAPE.objectOf(value) ?? value;
 
 /** `SwitchType` values this reader has to branch on. */
 const SWITCH_STICKER = 5;
@@ -33,6 +45,14 @@ export function readSwitchSignal(s: Serializer): SwitchSignal {
   return { activation, ternary, player };
 }
 
+/** `readSwitchSignal`'s mirror. */
+export function writeSwitchSignal(w: Writer, signal: SwitchSignal | undefined): void {
+  const { version } = w.revision;
+  w.f32(signal?.activation ?? 0);
+  if (version >= 0x310) w.s32(signal?.ternary ?? 0);
+  if (version >= 0x2a3) w.i32(signal?.player ?? 0);
+}
+
 /** `SwitchTarget`: one wire, to a Thing's input port. */
 export interface SwitchTarget {
   readonly thing?: Thing;
@@ -47,12 +67,19 @@ function readSwitchTarget(s: Serializer, readers: ReadonlyMap<string, PartReader
   return { thing, port };
 }
 
+function writeSwitchTarget(w: Writer, target: SwitchTarget, ctx: PartWriteContext): void {
+  ctx.thing(w, target.thing);
+  if (w.revision.version > 0x326) w.i32(target.port ?? 0);
+}
+
 /** `SwitchOutput`: one output port, its signal, everything wired to it, and its name. */
 export interface SwitchOutput {
   readonly activation: SwitchSignal;
   readonly targets: SwitchTarget[];
   /** Version `0x34d` on. */
   readonly userDefinedName?: string;
+  /** The reference id the file gave this output, kept so it is written back under it. */
+  readonly id?: number;
 }
 
 function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchOutput {
@@ -64,11 +91,24 @@ function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader
   return { activation, targets, userDefinedName };
 }
 
+function writeSwitchOutput(w: Writer, output: SwitchOutput, ctx: PartWriteContext): void {
+  writeSwitchSignal(w, output.activation);
+  w.i32(output.targets.length);
+  for (const target of output.targets) writeSwitchTarget(w, target, ctx);
+  if (w.revision.version >= 0x34d) w.wstr(output.userDefinedName ?? '');
+}
+
 /** `PSwitch`, what a renderer needs of it: its kind and its wires. steering/level-files.md, *Wires*. */
 export interface SwitchPart {
   /** cwlib's `SwitchType`; 0 below `0x1a5`. */
   readonly type: number;
   readonly hideInPlayMode: boolean;
+  /**
+   * The byte `hideInPlayMode` was read from, where it is neither 0 nor 1 (0x48
+   * on two switches of `base_001.farc` `b27f0573`): only it writes the part back
+   * as it was.
+   */
+  readonly hideInPlayModeByte?: number;
   /** Each output port's wires, in port order; one output below `0x329`. */
   readonly outputs: SwitchTarget[][];
   /** Each output's signal and name, as `outputs` orders them; from version `0x329`. */
@@ -81,7 +121,30 @@ export interface SwitchPart {
   readonly looseConnectorPos?: readonly [number, number, number, number];
   readonly looseConnectorBaseOffset?: readonly [number, number, number, number];
   readonly angleRange?: number;
+  /**
+   * cwlib's `stickerPlan`, wherever the file holds one: below 0x398 always (from
+   * 0x140), from it on a sticker switch, a pocket item, or a microchip whose
+   * `includeTouching` is 1.
+   */
   readonly stickerPlan?: ResourceRef;
+  /** cwlib's `referenceThing`; version 0x1a5 on. */
+  readonly referenceThing?: Thing;
+  /** cwlib's `manualActivation`; version 0x1a5 on. */
+  readonly manualActivation?: SwitchSignal;
+  /** Below 0x329: the single output's activation (cwlib `outputs[0].activation.activation`). */
+  readonly singleOutputActivation?: number;
+  /** The connector block, versions 0x1fb..0x326 (cwlib `connectorPos`, `connectorGrabbed`, `looseConnectorGrabbed`). */
+  readonly connectorPos?: readonly (readonly [number, number, number, number])[];
+  readonly connectorGrabbed?: readonly boolean[];
+  readonly looseConnectorGrabbed?: boolean;
+  /** cwlib's `includeTouching`; version 0x23e on. */
+  readonly includeTouching?: number;
+  /** A live-streaming choice's five option labels (cwlib throws there). */
+  readonly liveStreamingChoiceLabels?: readonly string[];
+  /** cwlib's `inputList`; version 0x273 on. */
+  readonly inputList?: readonly (Thing | undefined)[];
+  /** cwlib's `portThing`; versions 0x277..0x326. */
+  readonly portThing?: Thing;
   readonly customPortOffset?: readonly [number, number, number, number];
   readonly customConnectorOffset?: readonly [number, number, number, number];
   readonly timerCount?: number;
@@ -229,6 +292,15 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   let glowColours: number[] | undefined;
   let creatorID: string | undefined;
   let behavior: number | undefined;
+  let referenceThing: Thing | undefined;
+  let manualActivation: SwitchSignal | undefined;
+  let singleOutputActivation: number | undefined;
+  let connectorPos: [number, number, number, number][] | undefined;
+  let connectorGrabbed: boolean[] | undefined;
+  let looseConnectorGrabbed: boolean | undefined;
+  let liveStreamingChoiceLabels: string[] | undefined;
+  let inputList: (Thing | undefined)[] | undefined;
+  let portThing: Thing | undefined;
   let analogue: number[] | undefined;
   let ternary: number[] | undefined;
   let breakSound: boolean | undefined;
@@ -244,7 +316,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   const outputs: SwitchTarget[][] = [];
   let outputPorts: (SwitchOutput | undefined)[] | undefined;
   if (version < 0x329) {
-    s.f32(); // the single output's activation
+    singleOutputActivation = s.f32();
     if (version > 0x2a2) player = s.i32();
     const count = s.count();
     const targets: SwitchTarget[] = [];
@@ -254,16 +326,22 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     const count = s.count();
     outputPorts = [];
     for (let i = 0; i < count; i += 1) {
-      const output = s.reference((self) => readSwitchOutput(self, readers));
+      // The id is peeked and kept, so a writer puts the output back under it.
+      const at = s.position;
+      const id = s.i32();
+      s.position = at;
+      const read = s.reference((self) => readSwitchOutput(self, readers));
+      const output = read && read.id === undefined && id !== 0 ? Object.assign(read, { id }) : read;
       outputPorts.push(output);
       outputs.push(output?.targets ?? []);
     }
   }
 
  
-  if (version < 0x398 && version >= 0x140) s.resource(true); // stickerPlan
+  if (version < 0x398 && version >= 0x140) stickerPlan = s.resource(true);
 
-  const hideInPlayMode = version > 0x197 ? s.bool() : false;
+  const hideByte = version > 0x197 ? s.u8() : 0;
+  const hideInPlayMode = hideByte !== 0;
   let type = 0;
   if (version > 0x1a4) {
     // ⚠️ `enum32(type, true)` — the second argument is **signed**, not "force
@@ -273,8 +351,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     // whether a sticker plan follows. A wrong type here costs one byte, one
     // Thing later.
     type = s.s32();
-    readThingRef(s, readers); // referenceThing
-    readSwitchSignal(s); // manualActivation
+    referenceThing = readThingRef(s, readers);
+    manualActivation = readSwitchSignal(s);
   }
 
   // ⚠️ Data-dependent: only a sticker switch (or a pocket item, above subVersion
@@ -283,7 +361,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     version >= 0x398 &&
     (type === SWITCH_STICKER || (type === SWITCH_POCKET_ITEM && subVersion > 0x10))
   ) {
-    s.resource(true);
+    stickerPlan = s.resource(true);
   }
 
   if (version > 0x1a4 && version < 0x368) platformVisualFactor = s.f32();
@@ -299,16 +377,18 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x1fa && version < 0x327) {
     const positions = s.count();
     // ⚠️ cwlib `vectorarray` returns Vector4f[], so these are v4 and not v3.
-    for (let i = 0; i < positions; i += 1) s.skipVector4(); // connectorPos
+    connectorPos = [];
+    for (let i = 0; i < positions; i += 1) connectorPos.push(s.vector4());
     const grabbed = s.count();
-    for (let i = 0; i < grabbed; i += 1) s.bool(); // connectorGrabbed
+    connectorGrabbed = [];
+    for (let i = 0; i < grabbed; i += 1) connectorGrabbed.push(s.bool());
     portPosOffset = s.vector4();
     looseConnectorPos = s.vector4();
     looseConnectorBaseOffset = s.vector4();
-    s.bool();
+    looseConnectorGrabbed = s.bool();
   }
 
-  let includeTouching = 0;
+  let includeTouching: number | undefined;
   if (version > 0x23d) {
     angleRange = s.f32();
     includeTouching = s.s32();
@@ -321,7 +401,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   // one), read by the game's loader `v0xd0510a` in `eboot-v128.bin`; cwlib
   // throws here. steering/level-files.md, *`playerMode` at 0x3eb*.
   if (subVersion > 0x165 && type === SWITCH_GAME_LIVE_STREAMING_CHOICE) {
-    for (let i = 0; i < 5; i += 1) s.wstr();
+    liveStreamingChoiceLabels = [];
+    for (let i = 0; i < 5; i += 1) liveStreamingChoiceLabels.push(s.wstr());
   }
 
   if (version > 0x243) bulletsRequired = s.s32();
@@ -333,8 +414,8 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   if (version > 0x24a && version < 0x327) hideConnectors = s.bool();
   if (version > 0x272 && version < 0x398) logicType = s.i32();
   if (version > 0x272 && version < 0x369) updateFrame = s.i32();
-  if (version > 0x272) things(s, readers); // inputList
-  if (version > 0x276 && version < 0x327) readThingRef(s, readers);
+  if (version > 0x272) inputList = thingArray(s, readers);
+  if (version > 0x276 && version < 0x327) portThing = readThingRef(s, readers);
   if (version > 0x283) includeRigidConnectors = s.bool();
   if (version > 0x284 && version < 0x327) {
     customPortOffset = s.vector4();
@@ -437,5 +518,196 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     cursorInteractionType, cursorScreenArea, cursorTouchPanels, cursorTouchIndex, flags, outputAndOr,
     includeSameChipTags, playerFilter, playerMode, relativeToSequencer, layerRange, isLbp3Switch,
     randomNonRepeating, stickerSwitchMode, outputPorts, labelName, analogue, ternary, glowColours, creatorID, behavior,
+    referenceThing, manualActivation, singleOutputActivation, connectorPos, connectorGrabbed,
+    looseConnectorGrabbed, includeTouching, liveStreamingChoiceLabels, inputList, portThing,
+    ...(hideByte > 1 ? { hideInPlayModeByte: hideByte } : {}),
   };
+}
+
+/**
+ * `readSwitch`'s mirror. What the reader steps over is written as cwlib writes
+ * it: the `i32` at exactly 0x244, the `s32` from 0x2c4 to 0x328 and the Vita's
+ * unnamed bytes as 0.
+ */
+export function writeSwitch(w: Writer, v: SwitchPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const type = v.type ?? 0;
+  w.bool(v.inverted);
+  w.f32(v.radius);
+  if (version >= 0x382) w.f32(v.minRadius ?? 0);
+  w.s32(v.colorIndex);
+  if (version >= 0x2dc) w.wstr(v.name ?? '');
+  if (version >= 0x38f) w.bool(v.crappyOldLbp1Switch ?? false);
+  w.s32(v.behaviorOld);
+
+  if (version < 0x329) {
+    w.f32(v.singleOutputActivation ?? v.outputPorts?.[0]?.activation.activation ?? 0);
+    if (version > 0x2a2) w.i32(v.player ?? 0);
+    const targets = v.outputs[0] ?? [];
+    w.i32(targets.length);
+    for (const target of targets) writeSwitchTarget(w, target, ctx);
+  } else {
+    const ports: (SwitchOutput | undefined)[] = v.outputPorts
+      ? [...v.outputPorts]
+      : v.outputs.map((targets) => ({ activation: { activation: 0, ternary: 0, player: 0 }, targets, userDefinedName: '' }));
+    w.i32(ports.length);
+    for (const port of ports) {
+      const key = port && keyOf(port);
+      const id = port?.id ?? (key as { id?: number } | undefined)?.id;
+      w.reference(key, (self) => writeSwitchOutput(self, port!, ctx), id);
+    }
+  }
+
+  if (version < 0x398 && version >= 0x140) w.ref(v.stickerPlan, { descriptor: true });
+
+  if (version > 0x197) w.u8(v.hideInPlayMode ? (v.hideInPlayModeByte ?? 1) : 0);
+  if (version > 0x1a4) {
+    w.s32(type);
+    ctx.thing(w, v.referenceThing);
+    writeSwitchSignal(w, v.manualActivation);
+  }
+
+  if (
+    version >= 0x398 &&
+    (type === SWITCH_STICKER || (type === SWITCH_POCKET_ITEM && subVersion > 0x10))
+  ) {
+    w.ref(v.stickerPlan, { descriptor: true });
+  }
+
+  if (version > 0x1a4 && version < 0x368) w.f32(v.platformVisualFactor ?? 0);
+  if (version > 0x1a4 && version < 0x2a0) w.f32(v.oldActivation ?? 0);
+  if (version > 0x1a4) w.s32(v.activationHoldTime ?? 0);
+  if (version > 0x1a4) w.bool(v.requireAll ?? false);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x2a) w.u8(v.impactSensorMode ?? 0);
+  if (version > 0x1fa && version < 0x327) {
+    const positions = v.connectorPos ?? [];
+    w.i32(positions.length);
+    for (const position of positions) w.vector4(position);
+    const grabbed = v.connectorGrabbed ?? [];
+    w.i32(grabbed.length);
+    for (const g of grabbed) w.bool(g);
+    w.vector4(v.portPosOffset ?? [0, 0, 0, 0]);
+    w.vector4(v.looseConnectorPos ?? [0, 0, 0, 0]);
+    w.vector4(v.looseConnectorBaseOffset ?? [0, 0, 0, 0]);
+    w.bool(v.looseConnectorGrabbed ?? false);
+  }
+
+  const includeTouching = v.includeTouching ?? 0;
+  if (version > 0x23d) {
+    w.f32(v.angleRange ?? 0);
+    w.s32(includeTouching);
+    if (version >= 0x398 && type === SWITCH_MICROCHIP && includeTouching === 1) {
+      w.ref(v.stickerPlan, { descriptor: true });
+    }
+  }
+
+  if (subVersion > 0x165 && type === SWITCH_GAME_LIVE_STREAMING_CHOICE) {
+    for (let i = 0; i < 5; i += 1) w.wstr(v.liveStreamingChoiceLabels?.[i] ?? '');
+  }
+
+  if (version > 0x243) w.s32(v.bulletsRequired ?? 0);
+  if (version === 0x244) w.i32(0);
+  if (version > 0x244) w.s32(v.bulletsDetected ?? 0);
+  if (version > 0x245 && version < 0x398) w.i32(v.bulletPlayerNumber ?? 0);
+  if (version > 0x248) w.i32(v.bulletRefreshTime ?? 0);
+  if (version >= 0x2f5) w.bool(v.resetWhenFull ?? false);
+  if (version > 0x24a && version < 0x327) w.bool(v.hideConnectors ?? false);
+  if (version > 0x272 && version < 0x398) w.i32(v.logicType ?? 0);
+  if (version > 0x272 && version < 0x369) w.i32(v.updateFrame ?? 0);
+  if (version > 0x272) writeThingArray(w, ctx, v.inputList);
+  if (version > 0x276 && version < 0x327) ctx.thing(w, v.portThing);
+  if (version > 0x283) w.bool(v.includeRigidConnectors ?? false);
+  if (version > 0x284 && version < 0x327) {
+    w.vector4(v.customPortOffset ?? [0, 0, 0, 0]);
+    w.vector4(v.customConnectorOffset ?? [0, 0, 0, 0]);
+  }
+  if (version > 0x28c) {
+    w.f32(v.timerCount ?? 0);
+    if (version < 0x2c4) w.u8(v.timerAutoCount ?? 0);
+  }
+  if (version > 0x2ad && subVersion < 0x100) w.i32(v.teamFilter ?? 0);
+  if (version > 0x2c3) w.i32(v.behavior ?? 0);
+  if (version < 0x329 && version > 0x2c3) w.s32(0);
+  if (version > 0x2c3) {
+    w.i32(v.randomBehavior ?? 0);
+    w.i32(v.randomPattern ?? 0);
+    w.i32(v.randomOnTimeMin ?? 0);
+    w.i32(v.randomOnTimeMax ?? 0);
+    w.i32(v.randomOffTimeMin ?? 0);
+    w.i32(v.randomOffTimeMax ?? 0);
+    if (version < 0x3ad) {
+      w.u8(v.randomPhaseOn ?? 0);
+      w.s32(v.randomPhaseTime ?? 0);
+    }
+    w.bool(v.retardedOldJoint ?? false);
+  }
+  if (version > 0x30f) w.i32(v.keySensorMode ?? 0);
+  if (version > 0x34c) {
+    w.i32(v.userDefinedColour ?? 0);
+    w.bool(v.wiresVisible ?? false);
+  }
+  if (version > 0x34f) w.u8(v.bulletTypes ?? 0);
+  if (version > 0x390) w.bool(v.detectUnspawnedPlayers ?? false);
+  if (subVersion > 0x216) w.u8(v.unspawnedBehavior ?? 0);
+  if (version > 0x3a4) w.bool(v.playSwitchAudio ?? false);
+  if (vita >= 0) {
+    if (vita >= 0x1) w.i32(v.switchTouchType ?? 0);
+    if (vita >= 0x6 && vita < 0x36) w.u8(0);
+    if (vita >= 0x9 && vita < 0x2c) w.u32((v.cursorScreenArea ?? 0) & 0xff);
+    else if (vita >= 0x2c) w.i8(v.cursorScreenArea ?? 0);
+    if (vita >= 0xb) w.u8(v.cursorInteractionType ?? 0);
+    if (vita >= 0xc) w.u8(v.cursorTouchPanels ?? 0);
+    if (vita >= 0x23) w.u8(v.cursorTouchIndex ?? 0);
+    if (vita < 0x36) {
+      if (vita >= 0x23) w.u8(0);
+      if (vita >= 0x13) w.u8(0);
+      if (vita >= 0x7) w.u8(0);
+      if (vita >= 0x15) w.u8(0);
+      if (vita >= 0x24) w.u8(0);
+    }
+    if (vita >= 0x36) w.u8(v.flags ?? 0);
+    if (vita >= 0x2b) w.s32(v.outputAndOr ?? 0);
+    if (vita >= 0x2b && vita < 0x36) w.u8(0);
+    if (type === 0x2f) {
+      if (vita >= 0x45) w.i32(v.labelIndex ?? 0);
+      if (vita >= 0x46) {
+        writeNetworkOnlineId(w, v.creatorID ?? '');
+        w.wstr(v.labelName ?? '');
+      }
+      if (vita >= 0x33) {
+        w.i32(v.analogue?.length ?? 0);
+        for (const a of v.analogue ?? []) w.f32(a);
+      } else if (vita >= 0x2e) w.f32(v.analogue?.[0] ?? 0);
+      if (vita >= 0x3c) {
+        w.i32(v.ternary?.length ?? 0);
+        for (const t of v.ternary ?? []) w.u8(t);
+      }
+    }
+    if (vita >= 0x38 && vita < 0x41) w.u8(0);
+    if (vita >= 0x41) w.u8(v.includeSameChipTags ?? 0);
+    if (vita >= 0x43) for (let i = 0; i < 3; i += 1) w.i32(v.glowColours?.[i] ?? 0);
+    if (vita >= 0x54) w.u8(v.playerFilter ?? 0);
+  }
+  if (hasPlayerMode(version)) w.u8(v.playerMode ?? 0);
+
+  if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
+    w.i32(v.labelIndex ?? 0);
+    writeNetworkOnlineId(w, v.creatorID ?? '');
+    w.wstr(v.labelName ?? '');
+    w.i32(v.analogue?.length ?? 0);
+    for (const a of v.analogue ?? []) w.f32(a);
+    w.i32(v.ternary?.length ?? 0);
+    for (const t of v.ternary ?? []) w.u8(t);
+  }
+
+  if (subVersion > 0x21) w.bool(v.relativeToSequencer ?? false);
+  if (subVersion > 0x2f) w.u8(v.layerRange ?? 0);
+  if (subVersion > 0x7a) {
+    w.bool(v.breakSound ?? false);
+    w.s32(v.colorTimer ?? 0);
+  }
+  if (subVersion > 0x67) w.bool(v.isLbp3Switch ?? false);
+  if (subVersion > 0x68) w.bool(v.randomNonRepeating ?? false);
+  if (subVersion > 0x102) w.i32(v.stickerSwitchMode ?? 0);
 }

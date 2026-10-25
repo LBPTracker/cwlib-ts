@@ -1,6 +1,8 @@
 /** `QUEST`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, SerializerError } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PQuest`, as the game's own loader reads it: `v0xdc0290` in `eboot-v128.bin`.
@@ -67,4 +69,37 @@ export function readQuest(s: Serializer): QuestPart {
     s.wstr();
   }
   return part;
+}
+
+/**
+ * `readQuest`'s mirror. The bytes it discards -- the u8 below subVersion 0x52 and
+ * the per-type block of types 1 to 4, never seen in a file -- are written as 0 and
+ * empty strings.
+ */
+export function writeQuest(w: Writer, v: QuestPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.i32(v.type);
+  if (subVersion > 0x9c) {
+    w.wstr(v.questId);
+    w.wstr(v.objectiveId);
+  }
+  if (subVersion > 0x140) {
+    w.u32(v.questKey);
+    w.u32(v.objectiveKey);
+  }
+  if (subVersion < 0x52) w.u8(0);
+  if (v.type === 5 || subVersion < 0x47) return;
+  if (v.type === 1) {
+    w.wstr('');
+    w.wstr('');
+    w.u8(0);
+    if (subVersion >= 0x5e && subVersion < 0x127) w.u8(0);
+  } else if (v.type === 2) {
+    w.wstr('');
+  } else {
+    w.i32(0);
+    w.wstr('');
+    w.wstr('');
+    w.wstr('');
+  }
 }

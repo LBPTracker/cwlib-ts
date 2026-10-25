@@ -1,6 +1,8 @@
 /** `ANIMATION`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PAnimation`: the animation a Thing plays, and where in it it is.
@@ -22,4 +24,11 @@ export function readAnimation(s: Serializer): AnimationPart {
   const velocity = s.f32();
   const position = s.f32();
   return { animation, velocity, position };
+}
+
+/** `readAnimation`'s mirror. */
+export function writeAnimation(w: Writer, value: AnimationPart, _ctx: PartWriteContext): void {
+  w.ref(value.animation);
+  w.f32(value.velocity);
+  w.f32(value.position);
 }

@@ -1,6 +1,8 @@
 /** `MATERIAL_OVERRIDE`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `RegionOverride`: one material swapped onto one region of a mesh. */
 export interface RegionOverride {
@@ -52,4 +54,27 @@ export function readMaterialOverride(s: Serializer): MaterialOverridePart {
     if (subVersion >= 0x191) brightness = s.i8();
   }
   return { overrides, mesh, color, brightness };
+}
+
+function writeRegionOverride(w: Writer, r: RegionOverride): void {
+  w.i32(r.region);
+  w.ref(r.materialPlan, { descriptor: true });
+  w.ref(r.material);
+  w.vector3(r.uvScale);
+  if (w.revision.subVersion >= 0x158) {
+    w.i32(r.color);
+    w.i8(r.brightness);
+  }
+}
+
+/** `readMaterialOverride`'s mirror. */
+export function writeMaterialOverride(w: Writer, p: MaterialOverridePart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.i32(p.overrides.length);
+  for (const r of p.overrides) writeRegionOverride(w, r);
+  w.ref(p.mesh);
+  if (subVersion >= 0x15f) {
+    w.i32(p.color);
+    if (subVersion >= 0x191) w.i8(p.brightness);
+  }
 }

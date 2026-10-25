@@ -1,7 +1,9 @@
 /** `SEQUENCER`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** What a `SEQUENCER` part yields. */
 export interface SequencerPart {
@@ -22,6 +24,8 @@ export interface SequencerPart {
   readonly triggerPlayer?: number;
   readonly animationSequencer?: boolean;
   readonly behavior?: number;
+  /** cwlib's `previewThing`; version 0x3a1 on. */
+  readonly previewThing?: Thing;
 }
 
 /**
@@ -38,6 +42,7 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
   let playHead: number | undefined;
   let isPlaying: boolean | undefined;
   let triggerPlayer: number | undefined;
+  let previewThing: Thing | undefined;
   const tempo = s.f32();
   const swing = s.f32();
   const echoFeedback = s.f32();
@@ -58,7 +63,7 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
   if (version > 0x371) behavior = s.i32();
   if (version > 0x3a0) {
     triggerPlayer = s.i32();
-    readThingRef(s, readers); // previewThing
+    previewThing = readThingRef(s, readers);
   }
   return {
     tempo,
@@ -73,6 +78,32 @@ export function readSequencerPart(s: Serializer, readers: ReadonlyMap<string, Pa
     volumes,
     musicSequencer,
   playHead, isPlaying, triggerPlayer,
-    animationSequencer, behavior,
+    animationSequencer, behavior, previewThing,
   };
+}
+
+/** `readSequencerPart`'s mirror. */
+export function writeSequencerPart(w: Writer, v: SequencerPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  w.f32(v.tempo);
+  w.f32(v.swing);
+  w.f32(v.echoFeedback);
+  w.f32(v.echoTime);
+  w.f32(v.echoMix);
+  if (version > 0x370) w.i32(v.reverbSettings);
+  if (version > 0x36e) w.bool(v.loop);
+  w.f32(v.startPoint);
+  w.i32(v.numChannels);
+  for (let i = 0; i < 6; i += 1) w.f32(v.volumes[i] ?? 0);
+  if (version > 0x369) {
+    w.f32(v.playHead ?? 0);
+    w.bool(v.isPlaying ?? false);
+  }
+  if (version > 0x36c) w.bool(v.musicSequencer);
+  if (subVersion > 0x28) w.bool(v.animationSequencer ?? false);
+  if (version > 0x371) w.i32(v.behavior ?? 0);
+  if (version > 0x3a0) {
+    w.i32(v.triggerPlayer ?? 0);
+    ctx.thing(w, v.previewThing);
+  }
 }

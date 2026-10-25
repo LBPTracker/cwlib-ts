@@ -3,6 +3,8 @@
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { hasPlayerMode } from './common.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PControlinator`: the controller seat. */
 /** `PControlinator`, kept: a controlinator's colour, reach and the switch it drives. */
@@ -81,4 +83,33 @@ export function readControlinator(s: Serializer, readers: ReadonlyMap<string, Pa
     parentBoneIndex, parentBoneOffset, killRiderOnCreatureDeath, tiltMax, tiltMin, remotePlayer,
     playAudio, playerMode, layerRange,
   };
+}
+
+/** `readControlinator`'s mirror. */
+export function writeControlinator(w: Writer, v: ControlinatorPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  ctx.thing(w, v.attachedPlayer);
+  ctx.thing(w, v.lastAttachedPlayer);
+  ctx.thing(w, v.prompt);
+  ctx.thing(w, v.promptPlayer);
+  w.i32(v.colorIndex);
+  w.f32(v.radius);
+  w.bool(v.sideMode);
+  w.i32(v.remoteControlState);
+  w.bool(v.disablePoppetControls);
+  w.bool(v.autoDock);
+  w.bool(v.overrideSackbot);
+  if (subVersion > 0x6e) w.bool(v.killRiderOnCreatureDeath ?? false);
+  ctx.thing(w, v.padSwitch);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0xd) w.f32(v.tiltMax ?? 0);
+  if (vita >= 0xe) w.f32(v.tiltMin ?? 0);
+  if (vita >= 0x1d) w.i32(v.remotePlayer ?? 0);
+  if (vita >= 0x51) w.bool(v.playAudio ?? false);
+  if (subVersion > 0x4b) {
+    w.u8(v.parentBoneIndex ?? 0);
+    w.matrix(v.parentBoneOffset ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  }
+  if (hasPlayerMode(version)) w.u8(v.playerMode ?? 0);
+  if (subVersion > 0x189) w.u8(v.layerRange ?? 0);
 }

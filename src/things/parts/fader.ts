@@ -1,6 +1,8 @@
 /** `FADER`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PFader`: the scenery fade an island applies when the player is behind it. */
 /** `PFader`, kept: how far the Thing is faded out, and what fades it. */
@@ -28,4 +30,16 @@ export function readFader(s: Serializer): FaderPart {
     includeRigidConnectors, includeLights, requirePlayerObscuration, fadeAmount, faderDisabled,
     fadeTimeSeconds, inputBehavior,
   };
+}
+
+/** `readFader`'s mirror. */
+export function writeFader(w: Writer, v: FaderPart, _ctx: PartWriteContext): void {
+  const { subVersion } = w.revision;
+  w.bool(v.includeRigidConnectors);
+  if (subVersion >= 0xe0) w.bool(v.includeLights);
+  w.bool(v.requirePlayerObscuration);
+  w.f32(v.fadeAmount);
+  if (subVersion >= 0x17) w.bool(v.faderDisabled);
+  if (subVersion >= 0x39) w.f32(v.fadeTimeSeconds);
+  if (subVersion >= 0x3b) w.i8(v.inputBehavior);
 }

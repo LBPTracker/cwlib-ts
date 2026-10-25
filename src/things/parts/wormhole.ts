@@ -1,6 +1,8 @@
 /** `WORMHOLE`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * `PWormhole`: the door between two islands.
@@ -39,4 +41,17 @@ export function readWormhole(s: Serializer): WormholePart {
     type, playerMode, audioEnabled, activated, trigger, finished, exitCount, exitDelay,
     activeTypeForTwoWayHole,
   };
+}
+
+/** `readWormhole`'s mirror. */
+export function writeWormhole(w: Writer, value: WormholePart, _ctx: PartWriteContext): void {
+  w.s32(value.type);
+  if (w.revision.subVersion >= 0x111) w.i8(value.activeTypeForTwoWayHole ?? 0);
+  w.s32(value.playerMode);
+  w.bool(value.audioEnabled);
+  w.bool(value.trigger);
+  w.bool(value.finished);
+  w.bool(value.activated);
+  w.i32(value.exitCount);
+  w.i32(value.exitDelay);
 }

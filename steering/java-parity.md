@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 55 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 56 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -56,8 +56,8 @@ Java's one serializer writes every resource it reads, from its fields. Here a le
 streaming chunk are written back from the bytes they were read from, with a few edits (*Writing a
 level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
-- **Things from their values**: a field of a part changed and written, or a part added to a Thing —
-  every edit but a `PPos` matrix, the list of Things and the Things in it.
+- **A world from its values**: `PWorld` has no part writer (every other part has one, *Parts
+  written from their values* in level-files.md); it stays its bytes on the tape.
 - **Any other resource written** from its values: a mesh, a texture, a profile, an adventure…
   Their dependencies can be rewritten in place, and `hashinate` is ported (*Dependencies
   rewritten*, level-files.md).

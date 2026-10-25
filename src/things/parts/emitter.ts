@@ -2,7 +2,14 @@
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { thingArray } from './common.ts';
+import { thingArray, writeThingArray } from './common.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+
+/** The reference id each `EmittedObjectSource` had in its file, so a writer names it the same. */
+const IDS = new WeakMap<object, number>();
+/** And its tape object, where read onto a tape: the key the tape writes it under (see `script.ts`, `TAPED`). */
+const TAPED = new WeakMap<object, object>();
 
 /** `EmittedObjectSource`: Things already in the level an emitter copies, and a plan. */
 export interface EmittedObjectSource {
@@ -64,8 +71,20 @@ export interface EmitterPart {
   /** Version 0x3ae on; and, subVersion 0x18e on, whether the emitter uses it. */
   readonly backupZOffset?: number;
   readonly useBackupZOffset?: boolean;
+  /**
+   * The doubled booleans (see `readEmitter`), under cwlib's `PEmitter` names;
+   * undefined where the revision has none.
+   */
+  readonly recycleEmittedObjects?: boolean;
+  readonly emitFlip?: boolean;
+  readonly hideInPlayMode?: boolean;
+  readonly ignoreParentsVelocity?: boolean;
+  readonly editorEmitter?: boolean;
+  readonly isLimboFlippedForGunEmitter?: boolean;
+  /** Versions 0x137..0x313: cwlib's `parentThing`. */
+  readonly parentThing?: Thing;
 }
-import { readSwitchSignal, type SwitchSignal } from './switch.ts';
+import { readSwitchSignal, writeSwitchSignal, type SwitchSignal } from './switch.ts';
 
 /** `EmittedObjectSource`: what an emitter emits. */
 function readEmittedObjectSource(s: Serializer, readers: ReadonlyMap<string, PartReader>): EmittedObjectSource {
@@ -104,16 +123,16 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   let effectCreate: number | undefined;
   let effectDestroy: number | undefined;
   /** One of the doubled booleans described above. */
-  const doubled = (since: number) => {
-    if ((version >= since && subVersion < 0x64) || subVersion > 0x64) s.bool();
-  };
+  const doubled = (since: number): boolean | undefined =>
+    (version >= since && subVersion < 0x64) || subVersion > 0x64 ? s.bool() : undefined;
+  let parentThing: Thing | undefined;
 
   if (version < 0x368) posVel = s.vector3();
   const angVel = s.f32();
   const frequency = s.i32();
   const phase = s.i32();
   const lifetime = s.i32();
-  doubled(0x2fe); // recycleEmittedObjects
+  const recycleEmittedObjects = doubled(0x2fe);
   const plan = s.resource();
   const maxEmitted = s.i32();
   const maxEmittedAtOnce = version >= 0x1c8 ? s.i32() : 0;
@@ -131,10 +150,10 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
     if (version >= 0x38e) worldRotationForEditorEmitters = s.f32();
     emitScale = s.f32();
     linearVel = s.f32();
-    if (version < 0x314) readThingRef(s, readers);
+    if (version < 0x314) parentThing = readThingRef(s, readers);
   }
   if (version >= 0x13f) currentEmitted = s.i32();
-  doubled(0x144); // emitFlip
+  const emitFlip = doubled(0x144);
   let parentRelativeOffset: [number, number, number, number] | undefined;
   let parentRelativeRotation = 0;
   let worldZ = 0;
@@ -147,7 +166,7 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
     emitFrontZ = s.f32();
     emitBackZ = s.f32();
   }
-  doubled(0x226); // hideInPlayMode
+  const hideInPlayMode = doubled(0x226);
   if (version >= 0x230 && version < 0x2c4) modScaleActive = s.bool();
   const behavior = version >= 0x2c4 ? s.i32() : 0;
   if (version >= 0x308) {
@@ -155,14 +174,25 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
       effectCreate = s.u8();
       effectDestroy = s.u8();
     } else {
-      s.i32();
-      s.i32();
+      effectCreate = s.i32();
+      effectDestroy = s.i32();
     }
   }
-  doubled(0x32e); // ignoreParentsVelocity
-  const source = version >= 0x340 ? s.reference((self) => readEmittedObjectSource(self, readers)) : undefined;
-  doubled(0x361); // editorEmitter
-  doubled(0x38d); // isLimboFlippedForGunEmitter
+  const ignoreParentsVelocity = doubled(0x32e);
+  let source: EmittedObjectSource | undefined;
+  if (version >= 0x340) {
+    const at = s.position;
+    const id = s.i32();
+    s.position = at;
+    source = s.reference((self) => readEmittedObjectSource(self, readers));
+    if (source) {
+      IDS.set(source, id);
+      const taped = s.tape?.objectOf(source);
+      if (taped) TAPED.set(source, taped);
+    }
+  }
+  const editorEmitter = doubled(0x361);
+  const isLimboFlippedForGunEmitter = doubled(0x38d);
   // cwlib names it less politely; the Vita's build, `backupZOffset`.
   const backupZOffset = version >= 0x3ae ? s.f32() : undefined;
   const vita = vitaRevision(s.revision);
@@ -180,5 +210,86 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   emitBackZ, effectCreate, effectDestroy,
     posVel, lastUpdateFrame, worldRotationForEditorEmitters, currentEmitted, modScaleActive,
     emitNode, cleanUpOnDestroyed, soundEnabled, emitByReferenceInPlayMode, emitToNearestRearLayer, backupZOffset, useBackupZOffset,
+    recycleEmittedObjects, emitFlip, hideInPlayMode, ignoreParentsVelocity, editorEmitter,
+    isLimboFlippedForGunEmitter, parentThing,
   };
+}
+
+/** `readEmittedObjectSource`'s mirror. */
+function writeEmittedObjectSource(w: Writer, source: EmittedObjectSource, ctx: PartWriteContext): void {
+  writeThingArray(w, ctx, source.things);
+  w.ref(source.plan);
+  if (w.revision.subVersion <= 0xcc) return;
+  for (const f of [source.f0, source.f1, source.f2, source.f3, source.f4, source.f5]) w.f32(f ?? 0);
+  w.i8(source.b0 ?? 0);
+}
+
+/** `readEmitter`'s mirror; the bool cwlib writes false between subVersions 0x41 and 0x1a6 is written so. */
+export function writeEmitter(w: Writer, e: EmitterPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const doubled = (since: number, value: boolean | undefined): void => {
+    if ((version >= since && subVersion < 0x64) || subVersion > 0x64) w.bool(value ?? false);
+  };
+  if (version < 0x368) w.vector3(e.posVel ?? [0, 0, 0]);
+  w.f32(e.angVel);
+  w.i32(e.frequency);
+  w.i32(e.phase);
+  w.i32(e.lifetime);
+  doubled(0x2fe, e.recycleEmittedObjects);
+  w.ref(e.plan);
+  w.i32(e.maxEmitted);
+  if (version >= 0x1c8) w.i32(e.maxEmittedAtOnce);
+  w.f32(e.speedScaleStartFrame);
+  w.f32(e.speedScaleDeltaFrames);
+  writeSwitchSignal(w, e.speedScale);
+  if (version < 0x2c4) w.f32(e.lastUpdateFrame ?? 0);
+  if (version >= 0x137) {
+    if (version < 0x314) {
+      w.vector4(e.worldOffset ?? [0, 0, 0, 0]);
+      w.f32(e.worldRotation ?? 0);
+    }
+    if (version >= 0x38e) w.f32(e.worldRotationForEditorEmitters ?? 0);
+    w.f32(e.emitScale);
+    w.f32(e.linearVel);
+    if (version < 0x314) ctx.thing(w, e.parentThing);
+  }
+  if (version >= 0x13f) w.i32(e.currentEmitted ?? 0);
+  doubled(0x144, e.emitFlip);
+  if (version >= 0x1ce) {
+    w.vector4(e.parentRelativeOffset ?? [0, 0, 0, 0]);
+    w.f32(e.parentRelativeRotation);
+    w.f32(e.worldZ);
+    w.f32(e.zOffset);
+    w.f32(e.emitFrontZ ?? 0);
+    w.f32(e.emitBackZ ?? 0);
+  }
+  doubled(0x226, e.hideInPlayMode);
+  if (version >= 0x230 && version < 0x2c4) w.bool(e.modScaleActive ?? false);
+  if (version >= 0x2c4) w.i32(e.behavior);
+  if (version >= 0x308) {
+    if (version >= 0x38d) {
+      w.u8(e.effectCreate ?? 0);
+      w.u8(e.effectDestroy ?? 0);
+    } else {
+      w.i32(e.effectCreate ?? 0);
+      w.i32(e.effectDestroy ?? 0);
+    }
+  }
+  doubled(0x32e, e.ignoreParentsVelocity);
+  if (version >= 0x340) {
+    const { source } = e;
+    if (!source) w.reference(undefined, () => {});
+    else w.reference<object>(TAPED.get(source) ?? source, (self) => writeEmittedObjectSource(self, source, ctx), IDS.get(source));
+  }
+  doubled(0x361, e.editorEmitter);
+  doubled(0x38d, e.isLimboFlippedForGunEmitter);
+  if (version >= 0x3ae) w.f32(e.backupZOffset ?? 0);
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0xf) w.u8(e.emitNode ?? 0);
+  if (vita >= 0x2f) w.u8(e.cleanUpOnDestroyed ?? 0);
+  if (subVersion >= 0x18e) w.bool(e.useBackupZOffset ?? false);
+  if ((subVersion >= 0x31 && subVersion < 0x65) || subVersion >= 0x65) w.bool(e.soundEnabled ?? false);
+  if (subVersion >= 0x41 && subVersion < 0x1a7) w.bool(false);
+  if (subVersion > 0x64) w.bool(e.emitByReferenceInPlayMode ?? false);
+  if (subVersion > 0x75) w.bool(e.emitToNearestRearLayer ?? false);
 }

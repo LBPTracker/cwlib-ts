@@ -2,7 +2,14 @@
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import { readPhotoMetadata, type PhotoMetadata } from '../../structs/inventory.ts';
-import { readSlotId, type SlotId } from '../../structs/slot.ts';
+import { readSlotId, writeSlotId, type SlotId } from '../../structs/slot.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+
+/** The reference id each `PhotoMetadata` had in its file, so a writer names it the same. */
+const IDS = new WeakMap<object, number>();
+/** And its tape object, where read onto a tape: the key the tape writes it under (see `script.ts`, `TAPED`). */
+const TAPED = new WeakMap<object, object>();
 
 /**
  * `PMetadata`: what an inventory item calls itself.
@@ -32,6 +39,8 @@ export interface MetadataPart {
   readonly descTranslationTag?: string;
   readonly primaryIndex?: number;
   readonly referencable?: boolean;
+  /** The byte `referencable` was read from, where it is neither 0 nor 1. */
+  readonly referencableByte?: number;
   readonly allowEmit?: boolean;
   /** The deprecated `CValue`, below version 0x297. */
   readonly value?: MetadataValue;
@@ -117,12 +126,93 @@ export function readMetadata(s: Serializer): MetadataPart {
   const subType = s.i32();
   const creationDate = s.u32();
   const icon = s.resource();
+  const at = s.position;
+  const photoId = s.i32();
+  s.position = at;
   const photoMetadata = s.reference(readPhotoMetadata);
-  if (version >= 0x15f) referencable = s.bool();
+  if (photoMetadata) {
+    IDS.set(photoMetadata, photoId);
+    const taped = s.tape?.objectOf(photoMetadata);
+    if (taped) TAPED.set(photoMetadata, taped);
+  }
+  let referencableByte: number | undefined;
+  if (version >= 0x15f) {
+    // A bool, but one LBP1 plan stores 0x0d there: the byte is kept where it is neither 0 nor 1.
+    const byte = s.u8();
+    referencable = byte !== 0;
+    if (byte > 1) referencableByte = byte;
+  }
   if (version >= 0x205) allowEmit = s.bool();
   return {
     titleKey, descriptionKey, location, category, nameTag, fluffCost, type, subType, icon,
     locationTag, categoryTag, creationDate, descTranslationTag, primaryIndex, referencable,
-    allowEmit, value, photoMetadata,
+    allowEmit, value, photoMetadata, referencableByte,
   };
+}
+
+/** `readValue`'s mirror. */
+function writeValue(w: Writer, v: MetadataValue): void {
+  w.i32(v.fluff);
+  w.ref(v.icon);
+  w.i32(v.type);
+  w.i32(v.subType);
+  w.ref(v.linkTo.level, { descriptor: true, classPointer: false });
+  w.i32(v.linkTo.uid);
+  writeSlotId(w, v.linkSlot);
+  w.i32(v.linkType);
+  w.i32(v.lastUsed);
+  w.i32(v.numUses);
+  w.str(v.name);
+  w.str(v.location);
+  w.str(v.category);
+  w.i8(v.color);
+  w.i8(v.size);
+}
+
+/** `readPhotoMetadata`'s mirror (`structs/inventory.ts`), kept here beside its one writer. */
+function writePhotoMetadata(w: Writer, photo: PhotoMetadata): void {
+  w.ref(photo.photo, { descriptor: true });
+  writeSlotId(w, photo.level);
+  w.wstr(photo.levelName);
+  w.sha1(photo.levelHash);
+  w.s64Big(photo.timestamp);
+  w.i32(photo.users.length);
+  for (const user of photo.users) {
+    const psid = new Uint8Array(0x14);
+    for (let i = 0; i < Math.min(0x14, user.psid.length); i += 1) psid[i] = user.psid.charCodeAt(i) & 0xff;
+    w.bytes(psid);
+    w.wstr(user.user);
+    w.vector4(user.bounds);
+  }
+}
+
+/** `readMetadata`'s mirror; the `i32` cwlib writes 0 after the fluff cost of an old file is written so. */
+export function writeMetadata(w: Writer, m: MetadataPart, _ctx: PartWriteContext): void {
+  const { version, branchId, branchRevision } = w.revision;
+  const leerdammer = branchId === 0x4c44;
+  const deprecatedValue = leerdammer ? branchRevision < 0x2 : version < 0x297;
+  if (deprecatedValue) writeValue(w, m.value!);
+  if ((leerdammer && branchRevision >= 0x8) || version > 0x2ba) {
+    w.u32(m.titleKey);
+    w.u32(m.descriptionKey);
+    w.u32(m.location);
+    w.u32(m.category);
+  } else {
+    w.str(m.nameTag ?? '');
+    if (version < 0x159) w.str(m.descTranslationTag ?? '');
+    w.str(m.locationTag ?? '');
+    w.str(m.categoryTag ?? '');
+  }
+  if (version >= 0x195) w.i32(m.primaryIndex ?? 0);
+  w.i32(m.fluffCost);
+  if (deprecatedValue) w.i32(0);
+  w.i32(m.type);
+  w.i32(m.subType);
+  w.u32(m.creationDate);
+  w.ref(m.icon);
+  const photo = m.photoMetadata;
+  if (!photo) w.reference(undefined, () => {});
+  else w.reference<object>(TAPED.get(photo) ?? photo, (self) => writePhotoMetadata(self, photo), IDS.get(photo));
+  if (version >= 0x15f) w.u8(m.referencable ? m.referencableByte ?? 1 : 0);
+  if (version >= 0x205) w.bool(m.allowEmit ?? false);
 }

@@ -2,6 +2,9 @@
 
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+import { writeThingArray } from './common.ts';
 
 /** What `readRenderMesh` keeps: everything a renderer needs to draw the Thing. */
 export interface RenderMeshPart {
@@ -33,6 +36,8 @@ export interface RenderMeshPart {
   readonly poppetRenderScale: number;
   readonly parentDistanceFront?: number;
   readonly parentDistanceSide?: number;
+  /** At and below version 0x31a: `editorColor` as the file's four floats, which the packed form rounds. */
+  readonly editorColorVector?: readonly [number, number, number, number];
 }
 
 const channel = (x: number): number => Math.max(0, Math.min(255, Math.round(x * 255)));
@@ -56,9 +61,11 @@ export function readRenderMesh(s: Serializer, readers: ReadonlyMap<string, PartR
   // so above a line that always read the packed form -- 15 bytes short on every
   // pre-0x31b Thing, which is the same mistake `PShape`'s colour made.
   let editorColor: number;
+  let editorColorVector: [number, number, number, number] | undefined;
   if (version > 0x31a) editorColor = s.i32() >>> 0;
   else {
-    const [r, g, b, a] = s.vector4();
+    editorColorVector = s.vector4();
+    const [r, g, b, a] = editorColorVector;
     editorColor = ((channel(a) << 24) | (channel(r) << 16) | (channel(g) << 8) | channel(b)) >>> 0;
   }
   const castShadows = s.u8(); // enum8
@@ -73,6 +80,33 @@ export function readRenderMesh(s: Serializer, readers: ReadonlyMap<string, PartR
   return {
     mesh, boneThings, anim, animPos, animSpeed, animLoop, loopStart, loopEnd, editorColor,
     castShadows, rttEnable, visibilityFlags, poppetRenderScale,
-  parentDistanceFront, parentDistanceSide,
+    parentDistanceFront, parentDistanceSide, editorColorVector,
   };
+}
+
+/** `readRenderMesh`'s mirror. */
+export function writeRenderMesh(w: Writer, p: RenderMeshPart, ctx: PartWriteContext): void {
+  const { version } = w.revision;
+  w.ref(p.mesh);
+  writeThingArray(w, ctx, p.boneThings);
+  w.ref(p.anim);
+  w.f32(p.animPos);
+  w.f32(p.animSpeed);
+  w.bool(p.animLoop);
+  w.f32(p.loopStart);
+  w.f32(p.loopEnd);
+  if (version > 0x31a) w.i32(p.editorColor | 0);
+  else {
+    const c = p.editorColor;
+    w.vector4(p.editorColorVector ?? [(c >>> 16) & 0xff, (c >>> 8) & 0xff, c & 0xff, c >>> 24].map((x) => x / 255));
+  }
+  w.u8(p.castShadows);
+  w.bool(p.rttEnable);
+  if (version > 0x2e2) w.u8(p.visibilityFlags);
+  else w.bool((p.visibilityFlags & 1) !== 0);
+  w.f32(p.poppetRenderScale);
+  if (version > 0x1f5 && version < 0x34d) {
+    w.f32(p.parentDistanceFront ?? 0);
+    w.f32(p.parentDistanceSide ?? 0);
+  }
 }

@@ -1,6 +1,8 @@
 /** `TAG_SYNCHRONIZER`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /** `PTagSynchroniser` -- a tag, as the crossplay levels use them. cwlib's `PTagSynchroniser.java`. */
 /** `PTagSynchroniser`, kept: the tag's kind, colour, name and reach. */
@@ -28,4 +30,17 @@ export function readTagSynchroniser(s: Serializer): TagSynchronizerPart {
     useLayers: s.bool(),
     visible: s.bool(),
   };
+}
+
+/** `readTagSynchroniser`'s mirror. */
+export function writeTagSynchroniser(w: Writer, v: TagSynchronizerPart, _ctx: PartWriteContext): void {
+  w.s32(v.type);
+  w.s32(v.colorIndex);
+  if (w.revision.version >= 0x2dc) w.wstr(v.name);
+  w.f32(v.radius);
+  w.f32(v.minRadius);
+  w.f32(v.scaleX);
+  w.f32(v.scaleY);
+  w.bool(v.useLayers);
+  w.bool(v.visible);
 }

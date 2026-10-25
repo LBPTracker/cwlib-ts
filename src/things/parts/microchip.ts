@@ -2,7 +2,9 @@
 
 import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { decodeEntities } from './entities.ts';
+import { decodeEntities, escapeEntities } from './entities.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * One component placed on a circuit board: which Thing, and where on the grid.
@@ -50,6 +52,19 @@ export interface Microchip {
   readonly board?: Thing;
   /** Version `0x283` on. */
   readonly hideInPlayMode?: boolean;
+  /**
+   * The byte `hideInPlayMode` was read from, where it is neither 0 nor 1: the
+   * game's own boards hold others (0x74 on a board in `base_001.farc`
+   * `024be227`), and only it writes the part back as it was.
+   */
+  readonly hideInPlayModeByte?: number;
+  /**
+   * The name exactly as the file holds it, where `escapeEntities(name)` would
+   * not give it back: the game does not always escape (`'Wood Ringer'`, its
+   * apostrophes bare, on a board of `chunk1_001.farc` `9f349085`). Written while
+   * `name` is still what it decodes to.
+   */
+  readonly rawName?: string;
   /** Version `0x2b8` on. */
   readonly wiresVisible?: boolean;
   /** Version `0x2e4` on. */
@@ -76,17 +91,21 @@ export function readMicrochip(
 ): Microchip {
   const { version, subVersion } = s.revision;
   const board = readThingRef(s, readers); // circuitBoardThing
-  const hideInPlayMode = version >= 0x283 ? s.bool() : undefined;
+  const hideByte = version >= 0x283 ? s.u8() : undefined;
+  const hideInPlayMode = hideByte === undefined ? undefined : hideByte !== 0;
   const wiresVisible = version >= 0x2b8 ? s.bool() : undefined;
   const lastTouched = version >= 0x2e4 ? s.s32() : undefined;
   const offset = version >= 0x2e9 ? s.vector4() : undefined;
 
   let name = '';
+  let rawName: string | undefined;
   let sizeX = 0;
   let sizeY = 0;
   const components: Component[] = [];
   if (version >= 0x34d) {
-    name = decodeEntities(s.wstr());
+    const stored = s.wstr();
+    name = decodeEntities(stored);
+    if (escapeEntities(name) !== stored) rawName = stored;
     const count = s.count();
     for (let i = 0; i < count; i += 1) {
       const thing = readThingRef(s, readers);
@@ -107,5 +126,34 @@ export function readMicrochip(
   return {
     name, components, board, sizeX, sizeY, hideInPlayMode, wiresVisible, lastTouched, offset,
     keepVisualVertical, broadcastType,
+    ...(hideByte !== undefined && hideByte > 1 ? { hideInPlayModeByte: hideByte } : {}),
+    ...(rawName !== undefined ? { rawName } : {}),
   };
+}
+
+/** `readMicrochip`'s mirror; the name escaped again (`escapeEntities`). */
+export function writeMicrochip(w: Writer, v: Microchip, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  ctx.thing(w, v.board);
+  if (version >= 0x283) w.u8(v.hideInPlayMode ? (v.hideInPlayModeByte ?? 1) : 0);
+  if (version >= 0x2b8) w.bool(v.wiresVisible ?? false);
+  if (version >= 0x2e4) w.s32(v.lastTouched ?? 0);
+  if (version >= 0x2e9) w.vector4(v.offset ?? [0, 0, 0, 0]);
+  if (version >= 0x34d) {
+    w.wstr(v.rawName !== undefined && decodeEntities(v.rawName) === v.name ? v.rawName : escapeEntities(v.name));
+    w.i32(v.components.length);
+    for (const c of v.components) {
+      ctx.thing(w, c.thing);
+      w.f32(c.x);
+      w.f32(c.y);
+      w.f32(c.angle);
+      w.f32(c.scaleX);
+      w.f32(c.scaleY);
+      w.bool(c.flipped);
+    }
+    w.f32(v.sizeX);
+    w.f32(v.sizeY);
+  }
+  if (subVersion >= 0x1d) w.bool(v.keepVisualVertical ?? false);
+  if (subVersion >= 0x2d) w.u8(v.broadcastType ?? 0);
 }

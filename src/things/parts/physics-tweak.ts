@@ -1,7 +1,28 @@
 /** `PHYSICS_TWEAK`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
+
+/**
+ * cwlib's `attractorData`: the attract-o-gel block, present when `configuration`
+ * is 0xe. cwlib reads it as constants and names only some fields (its comments);
+ * the two unnamed `i32`s are `unknown1` and `unknown2` here.
+ */
+export interface AttractorData {
+  readonly attractDistance: number;
+  readonly unknown1: number;
+  readonly visualEffectBrightnessOn: number;
+  readonly visualEffectSpeedOn: number;
+  readonly unknown2: number;
+  readonly visualEffectBrightnessOff: number;
+  readonly visualEffectSpeedOff: number;
+  readonly attractorManualDetach: number;
+  readonly attractorSoundEffects: number;
+  readonly attractorVisualEffect: number;
+  readonly attractorAffectConnected: number;
+}
 
 /**
  * `PPhysicsTweak`: the movement tweaker.
@@ -67,6 +88,14 @@ export interface PhysicsTweakPart {
   readonly gridGoal?: readonly [number, number, number];
   /** Below version 0x3e8, or below subVersion 0x132. */
   readonly teamFilter?: number;
+  /**
+   * The Thing between versions 0x27a and 0x326 that cwlib reads and writes as
+   * null and does not name. Not always null: 5 of the FARCs' LBP2 tweakers hold
+   * one, a whole Thing inline (`dev/part-census.ts`, 2026-10-25).
+   */
+  readonly legacyThing?: Thing;
+  /** The attract-o-gel block, when `configuration` is 0xe from version 0x3e4. */
+  readonly attractorData?: AttractorData;
 }
 
 export function readPhysicsTweak(s: Serializer, readers: ReadonlyMap<string, PartReader>): PhysicsTweakPart {
@@ -145,7 +174,7 @@ export function readPhysicsTweak(s: Serializer, readers: ReadonlyMap<string, Par
   if (version > 0x278) configuration = s.i32();
   // ❗ A Thing between 0x27a and 0x326, which cwlib reads and does not name; the
   // LBP2 plans at 0x300 and 0x319 ran one byte short without it.
-  if (version >= 0x27a && version < 0x327) readThingRef(s, readers);
+  const legacyThing = version >= 0x27a && version < 0x327 ? readThingRef(s, readers) : undefined;
   if (version > 0x282) hideInPlayMode = s.bool();
   if (version > 0x28d) colorIndex = s.i32();
   if (version > 0x2db) name = s.wstr();
@@ -207,18 +236,21 @@ export function readPhysicsTweak(s: Serializer, readers: ReadonlyMap<string, Par
     s.u8();
     s.u8();
   }
+  let attractorData: AttractorData | undefined;
   if (configuration === 0xe && version > 0x3e3) {
-    s.f32();
-    s.i32();
-    s.f32();
-    s.f32();
-    s.i32();
-    s.f32();
-    s.f32();
-    s.u8();
-    s.u8();
-    s.u8();
-    s.u8();
+    attractorData = {
+      attractDistance: s.f32(),
+      unknown1: s.i32(),
+      visualEffectBrightnessOn: s.f32(),
+      visualEffectSpeedOn: s.f32(),
+      unknown2: s.i32(),
+      visualEffectBrightnessOff: s.f32(),
+      visualEffectSpeedOff: s.f32(),
+      attractorManualDetach: s.u8(),
+      attractorSoundEffects: s.u8(),
+      attractorVisualEffect: s.u8(),
+      attractorAffectConnected: s.u8(),
+    };
   }
   if (subVersion > 0x56) {
     gridSnap = s.i16();
@@ -234,6 +266,119 @@ export function readPhysicsTweak(s: Serializer, readers: ReadonlyMap<string, Par
     dir, prevDesiredPos, prevDesiredPosSet, startOrientation, speed, gridSnap, gridStrength,
     tweakDampening, velRange, decelStrength, angleRange, flee, stabiliser, isLBP2PhysicsTweak,
     zPhase, pathIsAbsolute, usePanel, followType, followerDeceleration, playerFilter, gridGoalW,
-    gridGoal, teamFilter,
+    gridGoal, teamFilter, attractorData, legacyThing,
   };
+}
+
+/**
+ * `readPhysicsTweak`'s mirror. The reads it drops -- the legacy movement below
+ * 0x281, the constant blocks -- are written as cwlib writes them.
+ */
+export function writePhysicsTweak(w: Writer, value: PhysicsTweakPart, ctx: PartWriteContext): void {
+  const { version, subVersion } = w.revision;
+  const legacy = version < 0x281;
+  const zero3 = [0, 0, 0] as const;
+  if (version < 0x2c4) w.f32(0); // activation
+  w.f32(value.tweakGravity);
+  if (version > 0x2ff) w.f32(value.tweakBuoyancy);
+  if (legacy) w.f32(0); // legacyTweakDampening
+  if (version > 0x280) w.vector3(value.tweakDampening ?? zero3);
+  w.vector3(value.input);
+  w.vector3(value.middleVel);
+  if (legacy) w.vector3(zero3);
+  if (version > 0x280) w.f32(value.velRange ?? 0);
+  if (legacy) w.vector3(zero3);
+  if (version > 0x280) {
+    w.f32(value.accelStrength ?? 0);
+    if (version > 0x285) w.f32(value.decelStrength ?? 0);
+  }
+  if (legacy) {
+    w.vector3(zero3);
+    w.i32(0);
+  }
+  if (subVersion > 0xa3) {
+    w.u8(value.directionModifier ?? 0);
+    w.u8(value.movementModifier ?? 0);
+  }
+  w.bool(value.localSpace);
+  if (version > 0x278) w.i32(value.configuration);
+  if (version >= 0x27a && version < 0x327) ctx.thing(w, value.legacyThing);
+  if (version > 0x282) w.bool(value.hideInPlayMode);
+  if (version > 0x28d) w.i32(value.colorIndex);
+  if (version > 0x2db) w.wstr(value.name);
+  if (version < 0x3e8) {
+    if (version > 0x2ad) w.u8(value.teamFilter ?? 0);
+  } else if (subVersion < 0x132) {
+    if (version >= 0x2ae) w.u8(value.teamFilter ?? 0);
+  } else {
+    w.i32(value.followerPlayerMode ?? 0);
+  }
+  if (version > 0x2c5) w.i32(value.behavior);
+  if (version > 0x2dc) {
+    w.bool(value.allowInOut ?? false);
+    w.bool(value.allowUpDown ?? false);
+    w.f32(value.minRange ?? 0);
+    w.f32(value.maxRange ?? 0);
+    w.bool(value.followKey ?? false);
+  }
+  if (version > 0x381) w.f32(value.angleRange ?? 0);
+  if (version > 0x2fe) w.bool(value.flee ?? false);
+  if (subVersion > 0x6f) w.bool(value.stabiliser ?? false);
+  if (subVersion > 0x12f) {
+    w.bool(value.shardDephysicalised ?? false);
+    w.bool(value.shardPhysicsAudio ?? false);
+  }
+  if (subVersion > 0x43) w.bool(value.isLBP2PhysicsTweak ?? false);
+  if (version > 0x36a) {
+    w.f32(value.maximumMass ?? 0);
+    w.bool(value.canPush ?? false);
+    w.s32(value.zBehavior ?? 0);
+    w.f32(value.lastKnownActivation ?? 0);
+    w.bool(value.waitingToMove ?? false);
+  }
+  if (subVersion > 0xf6) w.u8(value.zPhase ?? 0);
+  if (version > 0x3b8 && value.configuration === 0xd) {
+    w.ref(value.recording);
+    w.f32(value.playHead ?? 0);
+    if (version < 0x3c4) w.u8(0);
+    w.u8(value.type ?? 0);
+    w.u8(value.dir ?? 0);
+    w.vector3(value.prevDesiredPos ?? zero3);
+    w.u8(value.prevDesiredPosSet ?? 0);
+    w.matrix(value.startOrientation ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    w.f32(value.speed ?? 0);
+    if (version > 0x3c4) w.u8(value.pathIsAbsolute ?? 0);
+  }
+  const vita = vitaRevision(w.revision);
+  if (vita >= 0x11) w.i32(value.usePanel ?? 0);
+  if (vita >= 0x11 && vita < 0x4b) w.u8(0);
+  if (vita >= 0x1f) w.i32(value.followType ?? 0);
+  if (vita >= 0x4b) w.f32(value.followerDeceleration ?? 0);
+  if (vita >= 0x55) w.u8(value.playerFilter ?? 0);
+  if (subVersion >= 0x1 && subVersion < 0x17) for (let i = 0; i < 9; i += 1) w.s32(0);
+  if (subVersion >= 0x5 && subVersion < 0x17) {
+    w.f32(0);
+    w.u8(0);
+    w.u8(0);
+  }
+  if (value.configuration === 0xe && version > 0x3e3) {
+    const a = value.attractorData;
+    w.f32(a?.attractDistance ?? 0);
+    w.i32(a?.unknown1 ?? 0);
+    w.f32(a?.visualEffectBrightnessOn ?? 0);
+    w.f32(a?.visualEffectSpeedOn ?? 0);
+    w.i32(a?.unknown2 ?? 0);
+    w.f32(a?.visualEffectBrightnessOff ?? 0);
+    w.f32(a?.visualEffectSpeedOff ?? 0);
+    w.u8(a?.attractorManualDetach ?? 0);
+    w.u8(a?.attractorSoundEffects ?? 0);
+    w.u8(a?.attractorVisualEffect ?? 0);
+    w.u8(a?.attractorAffectConnected ?? 0);
+  }
+  if (subVersion > 0x56) {
+    w.i16(value.gridSnap ?? 0);
+    w.i16(value.gridStrength ?? 0);
+  }
+  if (subVersion > 0x99) w.f32(value.gridGoalW ?? 0);
+  if (subVersion > 0x98) w.vector3(value.gridGoal ?? zero3);
 }
