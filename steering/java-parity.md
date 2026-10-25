@@ -13,7 +13,7 @@ Measured 2026-10-24 and 2026-10-25 by listing the classes under `lib/cwlib/src/m
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
 to touch `lib/cwlib/`) against this repository's
 modules and the return type of every reader `partReaders()` binds; revised as each gap closed, last
-at 0.4.50. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
+at 0.4.51. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
 on this machine is at `fee2239`, but its `lib/cwlib/` is `bb79e81` (2024-04-30), 147 files'
 worth behind — `RTranslationTable.patch`, `MeshExporter` and `RMesh` among them. Name the commit
 whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` with `git show`.
@@ -64,7 +64,8 @@ and so needs a writer for every resource.
 - **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
   `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
 - **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).
-- **JSON**: any resource to and from JSON (`gson/`).
+- **JSON** (`gson/`): any resource back from JSON, and Java's own field names. To JSON is `toJson`
+  (`src/io/json.ts`), of this library's objects; back needs a writer for every resource.
 - **The resource system** (`ResourceSystem`): saving its databases and archives, and adding a
   resource to one. Here the installs open read-only — one (`openGame`) or several stacked
   (`stackGames`).

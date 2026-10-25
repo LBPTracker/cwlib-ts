@@ -22,6 +22,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `stream.ts`, `serializer.ts` | the big-endian readers: the fixed-width header one, and the payload's with its revision gates and compressed integers |
 | `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`, `MUSt`, `SSPt`, … 19 magics): tab-indented fields, arrays of `[i]`, read typed or as a tree |
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
+| `json.ts` | any reader's result as JSON text: typed arrays, maps, big integers, NaN and a Thing graph's cycles spelled out |
 | `png.ts` | RGBA8 pixels as a PNG, for an export that carries images |
 | **`archives/`** | |
 | `game.ts` | one install opened: a GUID or SHA-1 to bytes, through the FileDB, the remap, the FARCs and the loose files; several stacked, an update over the game |
