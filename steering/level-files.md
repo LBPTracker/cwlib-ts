@@ -1217,10 +1217,10 @@ text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 
 | magic | count | what the FileDB calls them |
 |---|---|---|
-| none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | |
+| none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | 812 of the FileDB's `.raw` are `gamedata/subtitles/<line>.raw`, 12 to 44 bytes of big-endian `u32`s, the first 0 or 3 and the rest rising (`create_thermometer.raw`: 3, 135, 318, 399, 516, 603): a dialogue line's subtitle timings, unit and meaning not measured. Two are `data/colcorrectpresets*.raw`, 904 bytes of mostly floats. Each `languages/<lang>_export.subt` is a `u32` count (587 in English) and then data of no fixed record size that looks compressed or ciphered |
 | none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
-| `RIFF` | 216 | `.smp`, the instruments' samples |
-| `RECb` | 91 | `.rec` |
+| `RIFF` | 216 | `.smp`, the instruments' samples — read by lbptracker (`packages/lbp-tracker-lib/src/wav.ts`), whose `steering/game-assets.md` has them |
+| `RECb` | 91 | `.rec`, cwlib's `THING_RECORDING` with no class: the Move DLC cutscenes' recordings, versions `0x3c5`–`0x3d8`, a layout that changes between them (floats with zero low halves at `0x3c5`, a packed bit stream at `0x3d5`); the eboot names `RThingRecording` only in its type table |
 | `TUTb` | 2 | `.tut` (*Small resources*) |
 
 Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
