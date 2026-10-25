@@ -237,7 +237,7 @@ export function setWorldPosition(target: EditableThings, thing: Thing, matrix: A
   mark.write = (w) => w.matrix(value);
   // The bone and its animation stay with the Thing: only the matrix moved.
   const old = thing.parts.get('POS') as PosPart | undefined;
-  thing.parts.set('POS', withBone(value, { thingOfWhichIAmABone: old?.thingOfWhichIAmABone, animHash: old?.animHash ?? 0 }));
+  thing.parts.set('POS', withBone(value, { thingOfWhichIAmABone: old?.thingOfWhichIAmABone, animHash: old?.animHash ?? 0, localPosition: old?.localPosition }));
   target.edited = true;
 }
 

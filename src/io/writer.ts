@@ -35,7 +35,7 @@
  * `inflate` is -- `src/platform/` holds the two adapters.
  */
 
-import type { RevisionInfo } from './serializer.ts';
+import type { ResourceRef, RevisionInfo } from './serializer.ts';
 import { COMPRESSED_INTEGERS, COMPRESSED_MATRICES, COMPRESSED_VECTORS } from './serializer.ts';
 import { toHex } from './hex.ts';
 
@@ -343,6 +343,36 @@ export class Writer {
     write(this, value);
   }
 
+  /** A zigzagged `s64` when integers are compressed, eight bytes otherwise: `Serializer.s64Big`'s pair. */
+  s64Big(value: bigint): void {
+    if (!this.compressedIntegers) {
+      this.u64Big(BigInt.asUintN(64, value), true);
+      return;
+    }
+    this.u64Big(BigInt.asUintN(64, (value << 1n) ^ (value >> 63n)));
+  }
+
+  /**
+   * A resource reference exactly as `Serializer.resource` reads it: the flags
+   * word before a live one from version 0x22f (`ref.flags`), the flag byte --
+   * its two bits swapped below 0x191 for a class pointer -- the GUID and hash,
+   * and `type`, where given, inline after. The dependency table is not touched:
+   * a part written from its value inside a tape keeps the file's.
+   */
+  ref(
+    value: ResourceRef | undefined,
+    { descriptor = false, classPointer = true, type }: { descriptor?: boolean; classPointer?: boolean; type?: number } = {},
+  ): void {
+    if (this.revision.version > 0x22e && !descriptor) this.i32(value?.flags ?? 0);
+    const guid = value?.guid ?? 0;
+    const hash = value?.hash;
+    const [GUID, HASH] = this.revision.version < 0x191 && classPointer ? [1, 2] : [2, 1];
+    this.u8((guid !== 0 ? GUID : 0) | (hash ? HASH : 0));
+    if (guid !== 0) this.u32(guid);
+    if (hash) this.sha1(hash);
+    if (type !== undefined) this.i32(type);
+  }
+
   /** A length-prefixed array of references, which is what most Thing lists are. */
   references<T extends object>(
     values: readonly T[],
@@ -378,6 +408,10 @@ export class Writer {
     }
     let mask = 0;
     for (let i = 0; i < 16; i += 1) if (value[i] !== identity[i]) mask |= 1 << i;
+    // A matrix read from a file keeps the components it stored (`Serializer.matrix`),
+    // where they still cover every one that differs from the identity.
+    const stored = (value as { mask?: number }).mask;
+    if (stored !== undefined && (mask & ~stored) === 0) mask = stored;
     this.u16(mask);
     for (let i = 0; i < 16; i += 1) if ((mask & (1 << i)) !== 0) this.f32(value[i]);
   }
@@ -388,12 +422,17 @@ export class Writer {
    * The width is the number of bytes the widest value needs, and a width of 0
    * means every value is zero.
    */
-  intVector(values: readonly number[]): void {
+  intVector(input: readonly number[], signed = false): void {
     if ((this.compressionFlags & COMPRESSED_VECTORS) === 0) {
-      this.i32(values.length);
-      for (const value of values) this.i32(value);
+      this.i32(input.length);
+      for (const value of input) {
+        if (signed) this.s32(value);
+        else this.i32(value);
+      }
       return;
     }
+    // A signed vector is zigzagged before its planes (`Serializer.intVector(true)`).
+    const values = signed ? input.map((v) => ((v << 1) ^ (v >> 31)) >>> 0) : input;
     this.i32(values.length);
     if (values.length === 0) return;
     let width = 0;

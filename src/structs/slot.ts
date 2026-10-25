@@ -11,6 +11,7 @@
 
 import { SerializerError, type ResourceRef, type Serializer } from '../io/serializer.ts';
 import { readNetworkOnlineId } from './network.ts';
+import type { Writer } from '../io/writer.ts';
 
 /** cwlib's `SlotID`: a `SlotType` and a number. */
 export interface SlotId {
@@ -172,4 +173,10 @@ export function readSlot(s: Serializer): Slot {
     if (subVersion >= 0x206) slot.thumbPath = s.str();
   }
   return slot;
+}
+
+/** `readSlotId`'s mirror. */
+export function writeSlotId(w: Writer, slot: SlotId): void {
+  w.i32(slot.type);
+  w.u32(slot.number);
 }

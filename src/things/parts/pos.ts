@@ -2,6 +2,8 @@
 
 import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import type { Writer } from '../../io/writer.ts';
+import type { PartWriteContext } from '../write-parts.ts';
 
 /**
  * The rest of `PPos` (cwlib `PPos.java`): whose bone the Thing is, and which of
@@ -16,6 +18,8 @@ export interface PosBone {
    * ❗ Not a GUID (steering/level-files.md, *Dependencies rewritten*).
    */
   readonly animHash: number;
+  /** Below version 0x341 the file stores the local matrix too (cwlib `PPos.localPosition`). */
+  readonly localPosition?: Float32Array;
 }
 
 /**
@@ -31,6 +35,7 @@ export function withBone(matrix: Float32Array, bone: PosBone): PosPart {
   return Object.defineProperties(matrix, {
     thingOfWhichIAmABone: { value: bone.thingOfWhichIAmABone, enumerable: false },
     animHash: { value: bone.animHash, enumerable: false },
+    localPosition: { value: bone.localPosition, enumerable: false },
   }) as PosPart;
 }
 
@@ -54,6 +59,14 @@ export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   // "localPosition is regenerated above 0x341", which is true and was written as
   // if it were true everywhere -- so every pre-0x341 Thing was read 64 bytes
   // short. cwlib `PPos.serialize`.
-  if (s.revision.version < 0x341) s.skipMatrix(); // localPosition
-  return withBone(s.mark('worldPosition', (self) => self.matrix()), { thingOfWhichIAmABone, animHash });
+  const localPosition = s.revision.version < 0x341 ? s.matrix() : undefined;
+  return withBone(s.mark('worldPosition', (self) => self.matrix()), { thingOfWhichIAmABone, animHash, localPosition });
+}
+
+/** `readPos`'s mirror: the bone, its `animHash`, the local matrix below 0x341, the world matrix. */
+export function writePos(w: Writer, pos: PosPart, ctx: PartWriteContext): void {
+  ctx.thing(w, pos.thingOfWhichIAmABone);
+  w.i32(pos.animHash ?? 0);
+  if (w.revision.version < 0x341) w.matrix(pos.localPosition ?? pos);
+  w.matrix(pos);
 }

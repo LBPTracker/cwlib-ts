@@ -114,6 +114,12 @@ export interface ResourceRef {
   readonly guid: number;
   /** 20 bytes, or undefined. A hash means the resource ships inside the level. */
   readonly hash?: Uint8Array;
+  /**
+   * The word before a live reference from version 0x22f (cwlib's
+   * `ResourceDescriptor` flags), where it is not 0: kept so a part written from
+   * its values writes it back.
+   */
+  readonly flags?: number;
 }
 
 /**
@@ -346,7 +352,7 @@ export class Serializer {
    * material slots come out as a GUID and three garbage hashes.
    */
   resource(isDescriptor = false, includeType = false, isClassPointer = true): ResourceRef | undefined {
-    if (this.revision.version > 0x22e && !isDescriptor) this.i32();
+    const flags = this.revision.version > 0x22e && !isDescriptor ? this.i32() : 0;
     const start = this.position;
     const flag = this.u8();
     // ✔ **A null descriptor still carries its type when the type is inline.**
@@ -369,7 +375,7 @@ export class Serializer {
     const [GUID, HASH] = this.revision.version < 0x191 && isClassPointer ? [1, 2] : [2, 1];
     if ((flag & GUID) !== 0) guid = this.u32();
     if ((flag & HASH) !== 0) hash = this.sha1();
-    const ref = guid === 0 && !hash ? undefined : { guid, hash };
+    const ref = guid === 0 && !hash ? undefined : flags !== 0 ? { guid, hash, flags } : { guid, hash };
     // The flag, GUID and hash are what a dependency rewritten in place replaces
     // (`archives/hashinate.ts`); the flags word before and the type after stay.
     if (ref) this.tape?.mark('resource', start, this.position, ref);
@@ -599,7 +605,13 @@ export class Serializer {
     const out = new Float32Array(16);
     out[0] = out[5] = out[10] = out[15] = 1;
     let mask = 0xffff;
-    if ((this.compressionFlags & COMPRESSED_MATRICES) !== 0) mask = this.u16();
+    if ((this.compressionFlags & COMPRESSED_MATRICES) !== 0) {
+      mask = this.u16();
+      // Which components the file stored, kept out of sight of the 16 floats, so
+      // a matrix written from its value stores the same ones (`Writer.matrix`):
+      // a stored component can equal the identity's.
+      Object.defineProperty(out, 'mask', { value: mask, enumerable: false });
+    }
     for (let i = 0; i < 16; i += 1) {
       if ((mask & (1 << i)) !== 0) out[i] = this.f32();
     }
