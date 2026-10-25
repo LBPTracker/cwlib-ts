@@ -31,6 +31,12 @@
  *   no glTF mesh.
  * - **A mesh's node sits at the scene's root**, beside the armature, as glTF
  *   advises for a skinned mesh; Java hangs it under the armature.
+ * - **A tangent's w is the vertex's handedness, made from the geometry**,
+ *   where Java writes 1: the stream stores none. glTF's normal map has +Y up in
+ *   the image, toward `v = 0`, so w is the sign that turns `normal × tangent`
+ *   that way, against `∂P/∂v` summed over the vertex's triangles on the
+ *   tangent's UV channel; 1 where there is none. It comes out +1 on 82% of the
+ *   game's vertices.
  * - No vertex colour: `readMesh` does not return the stream Java writes as
  *   `COLOR_0`.
  */
@@ -126,6 +132,57 @@ function foldJoints(joints: Uint8Array, weights: Float32Array): { joints: Uint8A
   return { joints: j, weights: w };
 }
 
+/**
+ * The tangents as glTF's VEC4: xyz as `readMesh` gives them, w the handedness
+ * (header): `-sign((n × t) · ∂P/∂v)` over the vertex's triangles on UV 0.
+ */
+function tangentsWithHandedness(mesh: Mesh): Float32Array {
+  const n = mesh.vertexCount;
+  const out = new Float32Array(n * 4);
+  const dpdv = new Float64Array(n * 3);
+  const p = mesh.positions;
+  const uv = mesh.uvs[0];
+  if (uv !== undefined) {
+    for (const primitive of mesh.primitives) {
+      const t = primitive.triangles;
+      for (let i = 0; i + 2 < t.length; i += 3) {
+        const a = t[i];
+        const b = t[i + 1];
+        const c = t[i + 2];
+        if (a >= n || b >= n || c >= n) continue;
+        const du1 = uv[b * 2] - uv[a * 2];
+        const dv1 = uv[b * 2 + 1] - uv[a * 2 + 1];
+        const du2 = uv[c * 2] - uv[a * 2];
+        const dv2 = uv[c * 2 + 1] - uv[a * 2 + 1];
+        const det = du1 * dv2 - du2 * dv1;
+        if (!Number.isFinite(det) || det === 0) continue;
+        for (let k = 0; k < 3; k += 1) {
+          const e1 = p[b * 3 + k] - p[a * 3 + k];
+          const e2 = p[c * 3 + k] - p[a * 3 + k];
+          const d = (e2 * du1 - e1 * du2) / det;
+          dpdv[a * 3 + k] += d;
+          dpdv[b * 3 + k] += d;
+          dpdv[c * 3 + k] += d;
+        }
+      }
+    }
+  }
+  const nr = mesh.normals;
+  const tg = mesh.tangents;
+  for (let v = 0; v < n; v += 1) {
+    const i = v * 3;
+    const x = Number.isNaN(tg[i]) ? 0 : tg[i];
+    const y = Number.isNaN(tg[i + 1]) ? 0 : tg[i + 1];
+    const z = Number.isNaN(tg[i + 2]) ? 0 : tg[i + 2];
+    const cx = nr[i + 1] * z - nr[i + 2] * y;
+    const cy = nr[i + 2] * x - nr[i] * z;
+    const cz = nr[i] * y - nr[i + 1] * x;
+    const side = cx * dpdv[i] + cy * dpdv[i + 1] + cz * dpdv[i + 2];
+    out.set([x, y, z, side > 0 ? -1 : 1], v * 4);
+  }
+  return out;
+}
+
 /** Column-major `a × b`. */
 function multiply(a: Float32Array, b: Float32Array): number[] {
   const out = new Array<number>(16).fill(0);
@@ -184,6 +241,7 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
   if (hasVertices) {
     attributes.POSITION = vec3(mesh.positions, true);
     attributes.NORMAL = vec3(mesh.normals, false);
+    attributes.TANGENT = accessor(view(bytesOf(tangentsWithHandedness(mesh)), ARRAY_BUFFER), FLOAT, 'VEC4', mesh.vertexCount);
     mesh.uvs.forEach((uv, i) => {
       attributes[`TEXCOORD_${i}`] = accessor(view(bytesOf(finite(uv)), ARRAY_BUFFER), FLOAT, 'VEC2', mesh.vertexCount);
     });

@@ -67,6 +67,7 @@ test('a mesh comes back out of its .glb: vertices, triangles, regions, bones and
     vertexCount: 3,
     positions: Float32Array.of(0, 0, 0, 1, 0, 0, 0, 1, 0),
     normals: Float32Array.of(0, 0, 1, 0, 0, 1, 0, 0, 1),
+    tangents: Float32Array.of(1, 0, 0, 1, 0, 0, 1, 0, 0),
     uvs: [Float32Array.of(0, 0, 1, 0, 0, 1)],
     // The second vertex names joint 1 twice, as the game's remainder slot often does.
     joints: Uint8Array.of(0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0),
@@ -89,6 +90,8 @@ test('a mesh comes back out of its .glb: vertices, triangles, regions, bones and
   assert.equal(json.meshes[1].primitives.length, 1, 'the empty primitive is left out');
   const [first] = json.meshes[0].primitives;
   assert.deepEqual(values(first.attributes.POSITION), [...mesh.positions]);
+  // u runs along +x and v along +y: glTF's green points to v = 0, so the bitangent is -y and w -1.
+  assert.deepEqual(values(first.attributes.TANGENT), [1, 0, 0, -1, 1, 0, 0, -1, 1, 0, 0, -1]);
   assert.deepEqual(values(first.indices), [0, 1, 2]);
   assert.deepEqual(values(first.attributes.JOINTS_0), [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 'a joint named twice is named once');
   assert.deepEqual(values(first.attributes.WEIGHTS_0), [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);
@@ -151,6 +154,10 @@ test("sack_boy.mol comes back out of its .glb whole", async (t) => {
   assert.equal(primitives.length, mesh.primitives.filter((p) => p.triangles.length > 0).length);
   assert.deepEqual(values(primitives[0].attributes.POSITION).length, mesh.vertexCount * 3);
   assert.equal(json.skins![0].joints.length, mesh.bones.length);
+  // The tangent lies across the normal.
+  const across = Array.from({ length: mesh.vertexCount }, (_, v) => Math.abs(mesh.normals[v * 3] * mesh.tangents[v * 3] + mesh.normals[v * 3 + 1] * mesh.tangents[v * 3 + 1] + mesh.normals[v * 3 + 2] * mesh.tangents[v * 3 + 2]) < 0.1);
+  assert.ok(across.filter(Boolean).length > 0.95 * mesh.vertexCount, `${across.filter(Boolean).length} of ${mesh.vertexCount}`);
+  assert.ok(values(primitives[0].attributes.TANGENT).every((x, i) => i % 4 !== 3 || x === 1 || x === -1));
   assert.equal(primitives[0].targets!.length, 29);
   assert.ok(json.materials!.every((m) => m.name.endsWith('.gmat')), JSON.stringify(json.materials));
   for (const a of accesses) await a.close();

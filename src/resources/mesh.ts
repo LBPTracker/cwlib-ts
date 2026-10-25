@@ -87,6 +87,15 @@ export interface Mesh {
   readonly positions: Float32Array;
   /** `vertexCount * 3`, unit length. */
   readonly normals: Float32Array;
+  /**
+   * `vertexCount * 3`, unit length: the direction the first UV channel's `u`
+   * runs, the skin stream's pack at 12 -- cwlib's `getTangents` (ennuo/toolkit
+   * `d6a2ef8`). ✔ Perpendicular to the normal on 97.4% of the game's 4.9 M
+   * vertices, and within 0.9 of the tangent made from positions and UV 0 on
+   * 97.2% of those it can be made on: the same way on 4,441,900, the opposite
+   * on 198,418. No handedness is stored.
+   */
+  readonly tangents: Float32Array;
   /** One `vertexCount * 2` array per channel -- every channel the mesh has, 1 to 3. */
   readonly uvs: Float32Array[];
   /** `vertexCount * 4` bone indices; a slot whose weight is zero is usually 0. */
@@ -373,15 +382,16 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   // Stream 0, per vertex: f32 x, y, z, then four bytes cwlib reads as a softbody
   // cluster and weight (`0x000000ff` on 4,664,668 of 4,896,968 vertices). Stream 1: the
   // three weights in bytes 2, 1, 0, a joint in every fourth byte, and the
-  // normal as a 24-bit pack at 4.
+  // normal as a 24-bit pack at 4, the tangent as one at 12.
   //
-  // ⚠️ **The packs at 8 and 12 are not what cwlib calls them.** Unpacked the
-  // same way, its "tangent" is perpendicular to the normal on 2.4% of 4.9 M
-  // vertices -- it is nearly parallel to it on most -- and its "smooth normal"
-  // falls on the normal's side on 48%, which is chance. Neither is returned
-  // until something says what they are.
+  // ❗ **The tangent is the pack at 12, not at 8**, whatever cwlib's comment on
+  // the stream says (`u24 tangent` at 8, a "smooth normal" at 12); its
+  // `getTangents` at `d6a2ef8` reads 12, and the game agrees (`Mesh.tangents`).
+  // The pack at 8 is perpendicular to the normal on 2.4% of 4.9 M vertices and
+  // lines up with the UV tangent on as few; what it is, nothing says yet.
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
+  const tangents = new Float32Array(vertexCount * 3);
   const joints = new Uint8Array(vertexCount * 4);
   const weights = new Float32Array(vertexCount * 4);
   const pv = new DataView(position.buffer, position.byteOffset, position.byteLength);
@@ -391,6 +401,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
     positions[v * 3 + 1] = pv.getFloat32(at + 4, false);
     positions[v * 3 + 2] = pv.getFloat32(at + 8, false);
     unpackNormal(skin, at + 4, normals, v * 3);
+    unpackNormal(skin, at + 12, tangents, v * 3);
     // A single-bone vertex is `ff 00 00` and needs no case of its own: the
     // remainder is then zero. The three never sum past 0xff in the game's meshes.
     const w0 = skin[at + 2];
@@ -441,7 +452,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   });
 
   return {
-    revision, vertexCount, positions, normals, uvs, joints, weights,
+    revision, vertexCount, positions, normals, tangents, uvs, joints, weights,
     primitives, bones, primitiveType, morphNames, morphs, skeletonType,
   };
 }

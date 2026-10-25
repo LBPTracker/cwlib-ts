@@ -731,11 +731,15 @@ What each convention rests on, every one a count over the same 5,941:
 | UV channels interleaved per vertex | 74–90% of triangle edges are shorter than 0.1 in each channel, against 14% read channel-major. 12 meshes have one channel, 2,852 two, 3,077 three. ⚠️ `minUV`/`maxUV` are **not** a channel's bounds: values below `minUV` are common |
 | materials | 12,344 of 12,403 primitives name an `RGfxMaterial` by GUID, none by SHA-1, 59 none |
 
-- ❗ **The packs at stream 1 bytes 8 and 12 are not what cwlib calls them.** Unpacked like the
-  normal, its "tangent" is perpendicular to the normal on 2.4% of vertices — on 78% of a 400-mesh
-  sample of `base_001.farc` the two have `|cos| > 0.9` — and its "smooth normal" falls on the
-  normal's side on 48%, which is chance. `readMesh` returns neither until something says what they
-  are.
+- ❗ **The tangent is the pack at stream 1 byte 12** (`Mesh.tangents`, 0.4.42), not at 8 as
+  cwlib's comment on the stream has it; its `getTangents` at `d6a2ef8` reads 12. ✔ Unpacked like
+  the normal, it is perpendicular to the normal on 4,771,452 of the game's 4,896,968 vertices
+  (97.4%), and against the tangent made from positions and UV 0 — Gram-Schmidt against the normal,
+  on the 4,773,645 vertices it can be made on — it is within `|cos| > 0.9` on 4,640,318: the same
+  way on 4,441,900, the opposite on 198,418, these mostly where the UVs are mirrored (182,035) but
+  most mirrored vertices not among them (635,590 the same way). No handedness is stored. (Scratch
+  census, 2026-10-25.) The pack at 8 is perpendicular to the normal on 2.4% and lines up with the
+  UV tangent on as few; what it is, nothing says — it is not returned.
 - ⚠️ `minVert`/`maxVert` are not a bound: six meshes carry nonsense there (`newton_low_poly.mol`,
   `-2147412636..1480`) and 13,626 indices fall outside their primitive's range. The triangles never
   need them.
@@ -790,8 +794,13 @@ caller gives (`materialName`).
 - ✔ **With their materials and textures, all 5,941 still validate with no error** (scratch census,
   2026-10-25, 9.8 GB of `.glb` with every texture inlined per mesh): every material every mesh names
   resolves and reads; of 11,795 (counted per mesh), 10,666 carry a base-colour texture and 7,761 a
-  normal map. The one warning left, on 7,998 primitives, is that a normal-mapped material has no
-  tangents — `readMesh` does not return the stream (*java-parity.md*), so a viewer makes its own.
+  normal map. With the tangents (0.4.42) not even a warning is left: a sample of 300 meshes with
+  their textures, and all 5,941 without, validate with none. Before them, 7,998 primitives drew the
+  warning that a normal-mapped material had no tangent space.
+  - A tangent's w is made from the geometry, the stream holding none: the sign that turns
+    `normal × tangent` toward `v = 0`, where glTF's normal map has +Y, against `∂P/∂v` over the
+    vertex's triangles on UV 0. It is +1 on 82% of the game's vertices. glTF's convention, not a
+    measurement of the game's — like the normal map's x sign below.
   - The material is `materialSummary`'s reading: port 0's first texture sample upstream as the base
     colour, port 3's as the normal map, a colour box as `baseColorFactor`, `GFX_TWO_SIDED` as
     `doubleSided` and `GFX_ALPHA_CLIP` as `MASK` at `alphaTestLevel` (cwlib's names, not measured).
@@ -1105,8 +1114,8 @@ payload: the vertex stream, 0x20 a vertex  f32 x3 position, u32 normal, f16 x2 u
 | every primitive names a gfx material; every backdrop names its three maps | 37,184 of 37,184; 47 of 47 |
 | positions in the level's world | Needlepoint Peaks' settings Thing has an identity `PPos`, and its backdrop spans x −31,862 to 36,258 and z −28,768 to 249, around and behind the level's chunks; drawn in lbprender its textures read the right way round (a "SACKTOWN WELCOME" sign) |
 
-The tangent and "smooth normal" packs are not returned (the mesh's equivalents failed their
-measurement, *The game's meshes*), nor the `UnknownStruct`s; the three light maps are named but
+The tangent and "smooth normal" packs are not returned (not measured here; an `RMesh`'s tangent
+is its pack at 12, *The game's meshes*), nor the `UnknownStruct`s; the three light maps are named but
 what they hold is not measured.
 
 ## Bevels — `RBevel`

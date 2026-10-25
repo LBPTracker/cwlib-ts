@@ -185,6 +185,7 @@ never silently follow the toolkit against our own measurement.
 | 37 | a normal map's z in glTF | 1 | `sqrt(\|1 − x² − y²\|)` | what the game's shader rebuilds ([level-files.md](level-files.md), *Written as glTF*) |
 | 38 | a glTF material's faces and alpha | double-sided always, no alpha test | `doubleSided` from `GFX_TWO_SIDED`, `MASK` from `GFX_ALPHA_CLIP` | the material's own flags ([level-files.md](level-files.md), *Written as glTF*) |
 | 39 | the diffuse texture of a glTF material | each texture box in index order, the first whose wires reach port 0 | the first sample upstream of port 0, inputs in port order (`materialSummary`) | the reading the renderer already uses; neither is measured ([level-files.md](level-files.md), *Written as glTF*) |
+| 40 | a glTF tangent's w | 1 | the vertex's handedness from its UVs, glTF's +Y toward `v = 0` | the stream stores none; +1 on 82% of the game's vertices ([level-files.md](level-files.md), *Written as glTF*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the
