@@ -200,6 +200,7 @@ never silently follow the toolkit against our own measurement.
 | 52 | a dependency replaced in a payload | every run of bytes spelling the old descriptor (`SerializedResource.replaceDependency`) | the descriptors the resource's reader read; refused where its bytes lie in a run no reader read | a float or a count can spell a descriptor: one did, in a `PShape` ([level-files.md](level-files.md), *Dependencies rewritten*) |
 | 53 | `hashinate`'s walk | recursive with no memory, a dependency hashinated at each mention | each dependency once, a loop cut where it closes | the same output, without the repeats ([level-files.md](level-files.md), *Dependencies rewritten*) |
 | 54 | a material's texture animation in glTF | `FromMaterialAnimation`, a test: the first `parameterAnimation` on one triangle, its z and w onto the base texture's offset, the last key dropped | every animated sample of every material a mesh exports, offset and scale each where they move, every key | the same reading of params 0–3, applied to the export ([level-files.md](level-files.md), *The game's meshes*) |
+| 55 | a FARC's table after resources are added | the old rows, then the new ones appended (`FileArchive.save`, `Fart.generateFAT`) | every row sorted by SHA-1 | all four of the game's FARCs hold theirs sorted ([level-files.md](level-files.md), *Resources added to an install*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

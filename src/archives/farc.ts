@@ -38,6 +38,8 @@ export interface FarcEntry {
 export interface Farc {
   /** The table, by SHA-1, in the archive's own order. */
   readonly entries: ReadonlyMap<string, FarcEntry>;
+  /** Where the table begins: the end of the resources, where `appendToFarc` (`install.ts`) writes. */
+  readonly tableOffset: number;
   /** An entry's bytes, read now; `undefined` when the archive does not hold it. */
   get(sha1: string): Promise<Uint8Array | undefined>;
 }
@@ -78,6 +80,7 @@ export async function openFarc(source: RandomAccess): Promise<Farc> {
 
   return {
     entries,
+    tableOffset: fatOffset,
     async get(sha1) {
       const entry = entries.get(sha1.toLowerCase());
       return entry && source.read(entry.offset, entry.size);

@@ -28,6 +28,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`archives/`** | |
 | `game.ts` | one install opened: a GUID or SHA-1 to bytes, through the FileDB, the remap, the FARCs and the loose files; several stacked, an update over the game |
 | `gather.ts` | everything a resource needs: its dependency tables walked through a resolver the caller injects |
+| `install.ts` | resources added to an install: a FARC appended to, a FileDB's rows added, patched and removed — cwlib's `ResourceSystem` saving |
 | `hashinate.ts` | a resource's dependencies rewritten where its reader read them, and cwlib's `hashinate`: GUIDs turned to the SHA-1s of what they name |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily, and written), its FileDB (GUID → path, SHA-1; read and written) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |

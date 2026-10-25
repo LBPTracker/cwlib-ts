@@ -702,6 +702,18 @@ Measured 2026-10-25:
   the first `MUSt`s, interactive music settings (`readMusicSettings`, `src/resources/music-settings.ts`),
   which cwlib has no reader for.
 
+### Resources added to an install — `installResources` in `src/archives/install.ts`
+
+cwlib's `ResourceSystem` saving, without its GUI state: `appendToFarc` is `FileArchive.save` —
+the new resources written where the table began (`Farc.tableOffset`), then the whole table and
+the footer — and `addFileDBRow`, `patchFileDB`, `removeFileDBRow`, `nextGuid` and `buildFileDB`
+are `FileDB`'s own, `planList` its `toRLST`. Each returns bytes and an offset; nothing writes a
+file. ✔ On the install (`test/install.test.ts`, 2026-10-25): **`orbisguids.map` built again is its
+own bytes**, so its 126,779… rows are already in the ascending GUID order `build` sorts to;
+`intro_001.farc` appended nothing gives back its table as the game wrote it, and appended one
+resource keeps every row where it was and reads the new one back. A row's GUID already in the
+database is refused, as cwlib refuses it; a resource the archive holds is not added twice.
+
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`
