@@ -283,6 +283,12 @@ function fillThing(
   // 0x3b7 is far above 0x27f -- so it is latent correctness for a range that is
   // still refused, and the measurement only exists because the bound can be
   // lowered by hand. See question 28.
+  // ❗ Below 0x1fd a Thing names its world first (cwlib's `Thing.world`); without it
+  // the game's plans at 0x1a7..0x1f8 read their first part 40 bytes late.
+  if (version < 0x1fd) {
+    s.label('world');
+    readThingRef(s, readers);
+  }
   if (version >= 0x27f) {
     thing.uid = s.i32();
     s.label('parent');
@@ -295,6 +301,14 @@ function fillThing(
   s.label('groupHead');
   thing.groupHead = readThingRef(s, readers);
   if (version >= 0x1c7) readThingRef(s, readers); // oldEmitter
+  // Between 0x1a6 and 0x1bb, joints listed on the Thing: references to `PJoint`s.
+  if (version >= 0x1a6 && version < 0x1bc) {
+    const joint = readers.get('JOINT');
+    s.references((self) => {
+      if (!joint) throw new UnimplementedPartError('JOINT');
+      return joint(self, thing);
+    });
+  }
 
   // `isToolkit()` is false for anything the game wrote.
   if (version >= 0x214) {
@@ -324,7 +338,8 @@ function fillThing(
   // one that is not. The first uncompressed resource -- a streaming island's
   // plan -- read three bytes short and produced a plausible, wrong part list.
   // `PartHistory.STREAMING_HINT` is 0x3f, `CONTROLINATOR` 0x2f.
-  const partsRevision = s.s32();
+  // cwlib: "I have no idea why they did this" -- at 0x13c the stored revision is 7 short.
+  const partsRevision = s.s32() + (version === 0x13c ? 7 : 0);
   // The part mask. `u64` here is a varint when the stream is compressed, and a
   // part index can be as high as 0x35, so this really does need 64 bits.
   //

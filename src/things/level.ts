@@ -217,10 +217,26 @@ function readStreamingManager(s: Serializer): void {
 /** `EggLink`, inline in `PWorld`'s reward lists: a plan, a bool, and an optional painting. */
 function readEggLink(s: Serializer): void {
   const { version } = s.revision;
-  s.resource(); // plan
+  if (version < 0x160) {
+    s.resource(true); // item: a GlobalThingDescriptor's level
+    s.i32(); // and the Thing's UID in it
+  } else s.resource(); // plan
+  if (version > 0x15f && version < 0x197) readInventoryItemDetails(s); // details
+  if (version > 0x207 && version < 0x22a) s.bool();
   if (version > 0x23b) s.bool(); // shareable
   if (version > 0x3e0 && s.bool()) s.resource(true); // painting, behind hasPainting
 }
+
+/** `KeyLink`: a slot, and below version 0x16f an `i32` cwlib does not name. */
+function readKeyLink(s: Serializer): void {
+  readSlotId(s);
+  if (s.revision.version < 0x16f) s.i32();
+}
+
+/** LEERDAMMER's revisions for the water: `LD_WATER_WAVE` and `LD_WATER_BITS` in cwlib's `Revisions`. */
+const LEERDAMMER = 0x4c44;
+const LD_WATER_WAVE = 0x4;
+const LD_WATER_BITS = 0x7;
 
 /** `GlobalSettings`: five factors, and on the Vita from its revision 0x78 `nonLinearFog`. */
 function readGlobalSettings(s: Serializer): void {
@@ -263,9 +279,11 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 }
 
 /**
- * `PWorld` after `things`: cwlib's `PWorld.serialize`, with the branches LBP3's
- * range (0x3b7..0x3ff) never takes left out. The Vita's branch (`vitaRevision`)
- * is cwlib's, gate for gate.
+ * `PWorld` after `things`: cwlib's `PWorld.serialize` (`d6a2ef8`) gate for gate,
+ * the older revisions' too and the Vita's branch (`vitaRevision`). ❗ It used to
+ * leave out every gate below LBP3, and read 38 bytes too many in an LBP2
+ * tutorial at 0x39e (`tutorial_21.bin`: `WORLD` to 0xb16b where cwlib ends it at
+ * 0xb145) -- steering/level-files.md, *Revisions below LBP3*.
  *
  * ❗ **A world Thing inside a plan has parts after its `WORLD`**, and they are
  * read right only if this is. Three of LBP3 PS4's story chunks hold an island
@@ -278,6 +296,7 @@ function readMoveCursor(s: Serializer, readers: ReadonlyMap<string, PartReader>)
 function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
   const { version, subVersion } = s.revision;
   const vita = vitaRevision(s.revision);
+  const leerdammer = s.revision.branchId === LEERDAMMER;
   const things = (): void => {
     const count = s.count();
     for (let i = 0; i < count; i += 1) readThingRef(s, readers);
@@ -285,9 +304,16 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   s.f32(); // maxVel
   s.f32(); // maxAVel
   s.s32(); // frame
-  s.s32(); // simFrame
-  s.i32(); // frameLevelStarted
+  if (version >= 0x2e2) s.s32(); // simFrame
+  if (version >= 0x377) s.i32(); // frameLevelStarted
   s.i32(); // thingUIDCounter
+  if (version < 0x32d) s.i32(); // randy
+  if (version < 0x1a4) {
+    for (let i = 0; i < 6; i += 1) s.f32();
+    s.i32();
+    if (version < 0x14b) s.array((self) => readThingRef(self, readers));
+  }
+  // cwlib skips the next four on its own toolkit branch from its scene graph on; no game file is that.
   s.references((self) => {
     self.str(); // EditorSelection.name
     things(); // EditorSelection.things
@@ -295,16 +321,26 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   readThingRef(s, readers); // backdrop
   readThingRef(s, readers); // backdropNew
   s.f32(); // backdropTimer
-  s.s32(); // lbp2NightDaySwapped
-  s.bool(); // isPaused
-  for (let i = 0; i < 5; i += 1) s.f32(); // lighting, colour correction, fog, fog tint, darkness factors
-  if (vita >= 0x78) s.bool(); // nonLinearFog
-  s.array(readEggLink); // completeRewards
-  s.array(readEggLink); // collectRewards
-  s.array(readEggLink); // aceRewards
-  s.bool(); // areRewardsShareable
-  readSlotId(s); // scoreboardLevelLinkSlot
-  for (let i = 0; i < 3; i += 1) s.array(readSlotId); // complete, collect and ace unlocks: `KeyLink`s
+  if (version >= 0x3a3) s.s32(); // lbp2NightDaySwapped
+  if (version >= 0x14a) s.bool(); // isPaused
+  if (version >= 0x152) {
+    s.f32(); // lightingFactor
+    s.f32(); // colorCorrectionFactor
+    if (version >= 0x196) {
+      s.f32(); // fogFactor
+      s.f32(); // fogTintFactor
+      s.f32(); // darknessFactor
+      if (vita >= 0x78) s.bool(); // nonLinearFog
+    }
+  }
+  if (version >= 0x16f) {
+    s.array(readEggLink); // completeRewards
+    s.array(readEggLink); // collectRewards
+    s.array(readEggLink); // aceRewards
+    if (version >= 0x208) s.bool(); // areRewardsShareable
+    if (version >= 0x35e) readSlotId(s); // scoreboardLevelLinkSlot
+    for (let i = 0; i < 3; i += 1) s.array(readKeyLink); // complete, collect and ace unlocks
+  }
   if (vita >= 0x22 && vita < 0x25) {
     s.array(readEggLink); // unlocks
     s.array(readEggLink); // rewards
@@ -313,7 +349,7 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   if (vita >= 0x25) {
     for (let i = 0; i < 3; i += 1) {
       s.array(readEggLink); // gold, silver, bronze rewards
-      s.array(readSlotId); // and unlocks
+      s.array(readKeyLink); // and unlocks
     }
     for (let i = 0; i < 3; i += 1) s.i8(); // gold, silver, bronze trophy condition types
     for (let i = 0; i < 3; i += 1) {
@@ -324,33 +360,56 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
   }
   if (vita >= 0x3d) for (let i = 0; i < 4; i += 1) s.bool(); // enableAcing, gold, silver, bronze trophy
   if (vita >= 0x4c) s.bool(); // enforceMinMaxPlayers
-  s.s32(); // maxNumPlayers
-  things(); // dissolvingThings
-  things(); // oldDissolvingThings
-  s.bool(); // everSpawned
-  s.s32(); // spawnFailureCount
-  readGlobalSettings(s); // targetGlobalSettings
-  readGlobalSettings(s); // fromGlobalSettings
-  s.f32(); // globalSettingsBlendFactor
-  s.bool(); // hasLevelLightingBeenSetup
-  s.s32(); // globalSettingsThingUID
+  if (version > 0x16e && version < 0x1bf) for (let i = 0; i < 3; i += 1) s.i32();
+  // ❗ cwlib stops here, "CGameCamera serialization unsupported", and so does this.
+  if (version > 0x1a3 && version < 0x1d1) return;
+  if (version > 0x1bd && version < 0x213) s.i32(); // SpawnsPerPlayer
+  if (version >= 0x1c2 && version < 0x36e) s.i32(); // deathCount
+  if (version >= 0x1c4) s.s32(); // maxNumPlayers
+  if (version >= 0x1db) {
+    things(); // dissolvingThings
+    things(); // oldDissolvingThings
+  }
+  if (version >= 0x1de && version < 0x345) s.bool(); // isTutorialLevel
+  if (version >= 0x22e) {
+    s.bool(); // everSpawned
+    s.s32(); // spawnFailureCount
+  }
+  if (version >= 0x25a) {
+    readGlobalSettings(s); // targetGlobalSettings
+    readGlobalSettings(s); // fromGlobalSettings
+    s.f32(); // globalSettingsBlendFactor
+    s.bool(); // hasLevelLightingBeenSetup
+    s.s32(); // globalSettingsThingUID
+  }
   // `CameraSettings`: four multipliers, and two pitch ones above subVersion 0x36.
-  for (let i = 0; i < (subVersion > 0x36 ? 6 : 4); i += 1) s.f32();
-  for (let i = 0; i < 9; i += 1) s.f32(); // water level, wave magnitude, gravity: each current, from, target
-  s.array((self) => self.f32()); // currGlobalSettingsBlendFactors
-  s.array((self) => self.i32()); // globalSettingsThingUIDs
-  s.array((self) => self.i32()); // globalSettingsThingPriority
+  if (version >= 0x370) for (let i = 0; i < (subVersion > 0x36 ? 6 : 4); i += 1) s.f32();
+  if (version >= 0x26f) {
+    s.f32(); // waterLevel
+    if (version >= 0x278 || onLeerdammer(s.revision, LD_WATER_WAVE)) s.f32(); // fromWaterLevel
+    s.f32(); // targetWaterLevel
+  }
+  if (version >= 0x270) for (let i = 0; i < 3; i += 1) s.f32(); // waterWaveMagnitude: current, from, target
+  if (version >= 0x26f) {
+    for (let i = 0; i < 3; i += 1) s.f32(); // gravity: current, from, target
+    s.array((self) => self.f32()); // currGlobalSettingsBlendFactors
+    s.array((self) => self.i32()); // globalSettingsThingUIDs
+    if (version >= 0x270) s.array((self) => self.i32()); // globalSettingsThingPriority
+  }
   if (vita >= 0x2d) {
     s.s32(); // waterColor
     s.f32(); // waterBrightness
-  } else {
+  } else if (version >= 0x289 || leerdammer) {
     s.f32(); // waterTint
     s.skipVector4(); // fromWaterTintColor
     s.f32(); // targetWaterTint
   }
-  for (let i = 0; i < 6; i += 1) s.f32(); // water murkiness and bits: each current, from, target
-  s.bool(); // waterDrainSoundsEnabled
-  s.bool(); // currWaterDrainSoundsEnabled
+  if (version >= 0x289 || leerdammer) for (let i = 0; i < 3; i += 1) s.f32(); // waterMurkiness: current, from, target
+  if (version >= 0x2b4 || onLeerdammer(s.revision, LD_WATER_BITS)) for (let i = 0; i < 3; i += 1) s.f32(); // waterBits
+  if (version >= 0x34e) {
+    s.bool(); // waterDrainSoundsEnabled
+    s.bool(); // currWaterDrainSoundsEnabled
+  }
   if (subVersion >= 0xe8) {
     s.bool(); // waterCausticsEnabled
     s.bool(); // currWaterCausticsEnabled
@@ -361,29 +420,55 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
     s.bool(); // backdropEnabled
     s.bool(); // currBackdropEnabled
   }
-  s.f32(); // currWavePos
-  s.i32(); // gameMode
+  if (version >= 0x29c || onLeerdammer(s.revision, LD_WATER_WAVE)) s.f32(); // currWavePos
+  if ((version > 0x288 && version < 0x29c) || (leerdammer && !onLeerdammer(s.revision, LD_WATER_WAVE))) {
+    s.f32();
+    s.bool();
+  }
+  // `CBreadLoaf`, which cwlib refuses when present.
+  if (version > 0x281 && version < 0x287 && s.i32() !== 0) throw new SerializerError('PWorld carries a CBreadLoaf, which cwlib does not read either');
+  if (version >= 0x2a3) s.i32(); // gameMode
   if (subVersion >= 0x218) s.i32(); // gameModeRequested
-  s.s32(); // nextSackbotPlayerNumber
-  // `CutsceneCameraManager`.
-  s.i32(); // state
-  readThingRef(s, readers); // currentCutSceneCamera
-  s.s32(); // timeInCurrentCamera
-  s.s32(); // endCountdown
-  s.f32(); // transitionStage
-  s.bool(); // currentCameraTweaking
-  // `GlobalAudioSettings`.
-  s.s32(); // reverb
-  for (let i = 0; i < 4; i += 1) s.f32(); // music, sfx, background, dialogue volumes
-  for (let i = 0; i < 6; i += 1) s.f32(); // reverb sends and low-pass filters
-  if (subVersion >= 0xd8) for (let i = 0; i < 3; i += 1) s.f32(); // high-pass filters
-  if (subVersion >= 0xe2) s.str(); // ambianceTrack
-  s.resource(true); // backdropPlan
-  s.resource(true); // backdropNewPlan
-  s.bool(); // subLevel
-  s.bool(); // scoreLocked
-  s.s32(); // debugTimeInLevel
-  s.bool(); // useEvenNewerCheckpointCode
+  if (version >= 0x2b0) s.s32(); // nextSackbotPlayerNumber
+  if (version > 0x2d3 && version < 0x2f3) throw new SerializerError(`PWorld at 0x${version.toString(16)} holds a structure cwlib does not read either`);
+  if (version >= 0x2ee) {
+    // `CutsceneCameraManager`.
+    s.i32(); // state
+    readThingRef(s, readers); // currentCutSceneCamera
+    s.s32(); // timeInCurrentCamera
+    s.s32(); // endCountdown
+    s.f32(); // transitionStage
+    if (version > 0x2ef && version < 0x36e) {
+      for (let i = 0; i < 2; i += 1) {
+        s.bool();
+        s.skipVector3();
+        s.f32();
+        s.skipVector3();
+      }
+    }
+    if (version >= 0x3a0) s.bool(); // currentCameraTweaking
+  }
+  if (version >= 0x30c) {
+    // `GlobalAudioSettings`.
+    s.s32(); // reverb
+    if (version < 0x347) s.f32();
+    for (let i = 0; i < 4; i += 1) s.f32(); // music, sfx, background, dialogue volumes
+    if (version >= 0x342) {
+      s.f32(); // sfxReverbSend
+      s.f32(); // dialogueReverbSend
+    }
+    if (version >= 0x347) for (let i = 0; i < 4; i += 1) s.f32(); // musicReverbSend and the three low-pass filters
+    if (subVersion >= 0xd8) for (let i = 0; i < 3; i += 1) s.f32(); // high-pass filters
+    if (subVersion >= 0xe2) s.str(); // ambianceTrack
+  }
+  if (version >= 0x321) {
+    s.resource(true); // backdropPlan
+    s.resource(true); // backdropNewPlan
+  }
+  if (version >= 0x352) s.bool(); // subLevel
+  if (version >= 0x38a) s.bool(); // scoreLocked
+  if (version >= 0x38b) s.s32(); // debugTimeInLevel
+  if (version >= 0x3ac) s.bool(); // useEvenNewerCheckpointCode
   if (version >= 0x3bd && subVersion <= 0x117) s.array((self) => readMoveCursor(self, readers)); // moveCursors
   if (vita >= 0x8) s.i32(); // globalTouchCursor
   if (vita >= 0xa && vita < 0x28) s.bool(); // sharedScreen
@@ -435,14 +520,20 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
  * world passes `tail` false and reads the tail itself, once it holds the Things.
  */
 function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): Thing[] {
-  const { subVersion } = s.revision;
+  const { version, subVersion } = s.revision;
   if (subVersion >= 0x6d) {
     s.f32(); // backdropOffsetX
     s.f32(); // backdropOffsetY
     s.f32(); // backdropOffsetZ
   }
+  if (subVersion >= 0x72 && subVersion <= 0x73) {
+    for (let i = 0; i < 3; i += 1) s.f32();
+    s.u8();
+    s.u8();
+  }
   if (subVersion >= 0x70) s.bool(); // backdropOffsetZAuto
   if (subVersion >= 0xe2) s.str(); // overrideBackdropAmbience
+  if (version < 0x14b) s.array((self) => self.resource()); // materials
   if (subVersion >= 0x3f) s.reference(readStreamingManager);
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather

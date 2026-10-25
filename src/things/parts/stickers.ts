@@ -46,7 +46,14 @@ function readDecal(s: Serializer): Decal {
   const xvecv = s.f32();
   const yvecu = s.f32();
   const yvecv = s.f32();
-  const color = version >= 0x260 ? s.i16() : -1;
+  let color = -1;
+  // ❗ Between 0x14e and 0x25b the colour is an ARGB `i32`, which cwlib packs into
+  // the 16-bit form that came after; without it the LBP1 levels' stickers ran short.
+  if (version >= 0x14e && version < 0x25c) {
+    const argb = s.i32();
+    color = (((((argb >>> 10) & 0x3f) << 5) | (((argb >>> 0x13) & 0x1f) << 0xb) | ((argb >>> 3) & 0x1f)) << 16) >> 16;
+  }
+  if (version >= 0x260) color = s.i16();
   let type = -1;
   let metadataIndex = -1;
   let numMetadata: number | undefined;
