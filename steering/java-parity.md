@@ -44,8 +44,6 @@ and `b0`, the Vita's `PSwitch.cursorScreenArea` and `PGeneratedMesh.textureScale
 
 - **Read, but less than Java**:
   - `RGfxMaterial`: the compiled shaders are kept as blobs (Java builds them, *Tools*).
-  - `InventoryItemDetails` (inside `RPlan`, `RLevel`, the poppet power-up): the two layouts at and
-    below version `0x37c` refuse — below the revision bound, *Revisions*.
   - `RAdventureCreateProfile` at subVersions `0xee`–`0xf0` refuses, as Java does ("legacy
     adventure data not supported").
 

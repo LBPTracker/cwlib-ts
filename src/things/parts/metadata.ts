@@ -1,20 +1,16 @@
 /** `METADATA`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
+import { readPhotoMetadata, type PhotoMetadata } from '../../structs/inventory.ts';
+import { readSlotId, type SlotId } from '../../structs/slot.ts';
 
 /**
  * `PMetadata`: what an inventory item calls itself.
  *
- * ❗ **Only reachable below LBP3**: the walk refuses at `LBP3_MIN_VERSION`
- * long before a file carrying one is opened. It has a reader because it is
- * what nine of the archive's LBP1 levels stop on once the Thing header is read
- * correctly -- see question 28.
- *
- * ⚠️ **The LAMS branch is the only one implemented.** cwlib takes translation
- * *tags* -- four strings -- when the file predates `LD_LAMS_KEYS` (LEERDAMMER
- * revision 8) and 0x2ba; every LBP1 level in the sample is LEERDAMMER 0x17, so
- * the four `u32` keys are what they carry and the tag branch has never been run
- * against a file. It refuses rather than guessing.
+ * Below version 0x297 (LEERDAMMER's revision 2) it starts with the deprecated
+ * `CValue` and has an `i32` after its fluff cost; below 0x2bb (LEERDAMMER's 8)
+ * it names itself by translation *tags*, four strings, where the four LAMS keys
+ * came later. cwlib's `PMetadata.java` and `components/Value.java` at `d6a2ef8`.
  */
 /** `PMetadata`, kept: what a Thing is called and shown as in the popit, as `InventoryItemDetails` is for a plan. */
 export interface MetadataPart {
@@ -37,6 +33,47 @@ export interface MetadataPart {
   readonly primaryIndex?: number;
   readonly referencable?: boolean;
   readonly allowEmit?: boolean;
+  /** The deprecated `CValue`, below version 0x297. */
+  readonly value?: MetadataValue;
+  readonly photoMetadata?: PhotoMetadata;
+}
+
+/** cwlib's `components/Value`: the deprecated `CValue`, an item's old inventory record. */
+export interface MetadataValue {
+  readonly fluff: number;
+  readonly icon?: ResourceRef;
+  readonly type: number;
+  readonly subType: number;
+  /** `GlobalThingDescriptor`: a level, and a Thing's UID in it. */
+  readonly linkTo: { readonly level?: ResourceRef; readonly uid: number };
+  readonly linkSlot: SlotId;
+  readonly linkType: number;
+  readonly lastUsed: number;
+  readonly numUses: number;
+  readonly name: string;
+  readonly location: string;
+  readonly category: string;
+  readonly color: number;
+  readonly size: number;
+}
+
+function readValue(s: Serializer): MetadataValue {
+  return {
+    fluff: s.i32(),
+    icon: s.resource(),
+    type: s.i32(),
+    subType: s.i32(),
+    linkTo: { level: s.resource(true), uid: s.i32() },
+    linkSlot: readSlotId(s),
+    linkType: s.i32(),
+    lastUsed: s.i32(),
+    numUses: s.i32(),
+    name: s.str(),
+    location: s.str(),
+    category: s.str(),
+    color: s.i8(),
+    size: s.i8(),
+  };
 }
 
 export function readMetadata(s: Serializer): MetadataPart {
@@ -53,9 +90,7 @@ export function readMetadata(s: Serializer): MetadataPart {
   const deprecatedValue = leerdammer
     ? branchRevision < 0x2
     : version < 0x297;
-  if (deprecatedValue) {
-    throw new SerializerError('PMetadata with the deprecated CValue has no reader');
-  }
+  const value = deprecatedValue ? readValue(s) : undefined;
   let titleKey = 0;
   let descriptionKey = 0;
   let location = 0;
@@ -77,21 +112,17 @@ export function readMetadata(s: Serializer): MetadataPart {
   }
   if (version >= 0x195) primaryIndex = s.i32();
   const fluffCost = s.i32();
+  if (deprecatedValue) s.i32(); // cwlib writes 0
   const type = s.i32(); // a flags word
   const subType = s.i32();
   const creationDate = s.u32();
   const icon = s.resource();
-  // ⚠️ Never seen non-null on a level: a `PhotoMetadata` belongs to a photo, and
-  // the reference costs one byte when it is null. It refuses if one turns up
-  // rather than reading a struct nothing here has checked.
-  s.reference(() => {
-    throw new SerializerError('PMetadata carries a PhotoMetadata, which has no reader');
-  });
+  const photoMetadata = s.reference(readPhotoMetadata);
   if (version >= 0x15f) referencable = s.bool();
   if (version >= 0x205) allowEmit = s.bool();
   return {
     titleKey, descriptionKey, location, category, nameTag, fluffCost, type, subType, icon,
     locationTag, categoryTag, creationDate, descTranslationTag, primaryIndex, referencable,
-    allowEmit,
+    allowEmit, value, photoMetadata,
   };
 }

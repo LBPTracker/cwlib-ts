@@ -27,7 +27,8 @@
 import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
 import { Serializer, SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
-import { readThingRef, type PartReader, type Thing } from './thing.ts';
+import { onLeerdammer, readThingRef, type PartReader, type Thing } from './thing.ts';
+import { lamsKeyId } from '../resources/translation.ts';
 import { Tape } from '../io/tape.ts';
 import { toHex } from '../io/hex.ts';
 import { readSlotId, type SlotId } from '../structs/slot.ts';
@@ -491,9 +492,12 @@ export interface LevelParse {
 /** `RPlan`'s `inventoryData` and the two keys after it. */
 export interface PlanInventory {
   readonly details: InventoryItemDetails;
-  /** LAMS keys of the popit's location and category, from version 0x2bb. */
+  /** LAMS keys of the popit's location and category; below version 0x2bb made from the tags, as cwlib does. */
   readonly location: number;
   readonly category: number;
+  /** Below version 0x2bb (LEERDAMMER's revision 8), the translation tags the file stores instead. */
+  readonly locationTag?: string;
+  readonly categoryTag?: string;
 }
 
 /** Inflate a resource and start a serialiser on it, with the revision checked. */
@@ -508,6 +512,10 @@ async function open(
 
 /** The subVersion that put `isUsedForStreaming` at the head of `RPlan`. */
 const STREAMING_PLAN = 0xcc;
+
+/** `Revisions.LAMS_KEYS`, and LEERDAMMER's `LD_LAMS_KEYS`: LAMS keys in place of translation tags. */
+const LAMS_KEYS = 0x2bb;
+const LD_LAMS_KEYS = 0x8;
 
 /** `Revisions.PLAN_DETAILS`: `RPlan` carries its inventory details from this version. */
 const PLAN_DETAILS = 0x197;
@@ -594,9 +602,16 @@ export function readPlanStream(
   try {
     if (revision.version >= PLAN_DETAILS && !streaming) {
       const details = readInventoryItemDetails(s);
-      // Below LAMS keys these were two translation tags, `str`s; nothing the
-      // bound admits is that old.
-      inventory = { details, location: s.u32(), category: s.u32() };
+      // Below `LAMS_KEYS` these are two translation tags, `str`s, and cwlib
+      // makes the keys from them: `POPIT_PAGE_COMMUNITY_OBJECTS` closes 380 of
+      // the game's plans at 0x26e (`RPlan.java` at `d6a2ef8`).
+      if (onLeerdammer(revision, LD_LAMS_KEYS) || revision.version >= LAMS_KEYS) {
+        inventory = { details, location: s.u32(), category: s.u32() };
+      } else {
+        const locationTag = s.str();
+        const categoryTag = s.str();
+        inventory = { details, location: lamsKeyId(locationTag), category: lamsKeyId(categoryTag), locationTag, categoryTag };
+      }
     }
     if (s.remaining !== 0) unreadTail = `${s.remaining} bytes past RPlan's last field`;
   } catch (error) {
