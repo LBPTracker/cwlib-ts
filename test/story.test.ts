@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { readThings } from '../src/things/level.ts';
-import type { ShapePart } from '../src/things/parts.ts';
+import type { AtmosphericTweakPart, CostumePart, MaterialOverridePart, ShapePart } from '../src/things/parts.ts';
 import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { magicOf } from '../src/io/resource.ts';
@@ -26,6 +26,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   const counts: number[] = [];
   let things = 0;
   let shapes = 0;
+  const kept = { costumes: 0, costumeMeshes: 0, weather: 0, overrides: 0 };
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
     for (const { bytes } of chunks) {
@@ -35,6 +36,14 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
       assert.deepEqual(parse.problems ?? [], []);
       things += parse.things.length;
       for (const thing of parse.things) {
+        // The parts kept since 0.4.12: every costume names its mesh.
+        const costume = thing?.parts.get('COSTUME') as CostumePart | undefined;
+        if (costume) {
+          kept.costumes += 1;
+          if (costume.mesh) kept.costumeMeshes += 1;
+        }
+        if (thing?.parts.get('ATMOSPHERIC_TWEAK') as AtmosphericTweakPart | undefined) kept.weather += 1;
+        if (thing?.parts.get('MATERIAL_OVERRIDE') as MaterialOverridePart | undefined) kept.overrides += 1;
         const shape = thing?.parts.get('SHAPE') as ShapePart | undefined;
         if (shape === undefined) continue;
         shapes += 1;
@@ -47,6 +56,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   assert.deepEqual(counts, [880, 63]);
   assert.equal(things, 9214);
   assert.equal(shapes, 2521);
+  assert.deepEqual(kept, { costumes: 3, costumeMeshes: 3, weather: 19, overrides: 1 });
 });
 
 const ADVENTURES = path.join(GAME, 'gamedata', 'lbp3', 'official_adventure_levels');

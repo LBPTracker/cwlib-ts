@@ -818,6 +818,21 @@ bytes walked are unchanged. On Needlepoint Peaks, its chunks placed
 Things that both have a `PPos`**; between those, 831 units at the median and 7,805 at most. The
 two most common types, 36 and 37, are 658 each; no switch is hidden in play mode.
 
+## Costumes, material overrides, weather — kept for a renderer
+
+From 0.4.12 four parts return what they read (`src/things/parts/`); their walks are unchanged,
+so the censuses are the same files. Over the story chunks and the FARCs' levels (2026-10-25):
+
+- `PCostume` (`CostumePart`, 1,310 Things): its base mesh resolves to a `.mol` on all 1,310,
+  its material to a `.gmat` on 993 (306 null, 11 GUIDs not in the FileDB); every one lists
+  more than eight pieces, most null — 4,782 piece meshes are `.mol`, 61 not in the FileDB.
+- `PMaterialOverride` (`MaterialOverridePart`, 239): its mesh is a `.mol` on all 239; 33 of its
+  48 region overrides name a `.gmat`, 15 none.
+- `PAtmosphericTweak` (`AtmosphericTweakPart`, 824): `atmosType` is 0 on 709, 3 on 92, 5 on
+  11, 4 on 10, 2 on 2; which number is which weather is not measured.
+- `PAnimation` (`AnimationPart`, 783): ⚠️ **empty in every one** — a null reference and two
+  zero floats — so the game's own files do not say here what a Thing plays.
+
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the

@@ -1,50 +1,86 @@
 /** `COSTUME`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 
-/** `Primitive`: one draw call of a mesh. */
-function readPrimitive(s: Serializer): void {
-  s.resource(); // material
-  // `Revisions.MESH_TEXTURE_ALTERNATIVES` is 0x179, not something in the 0x3xx
-  // range -- a guess at that constant cost one debugging round.
-  if (s.revision.version >= 0x179) s.resource(); // textureAlternatives
-  s.i32(); // minVert
-  s.i32(); // maxVert
-  s.i32(); // firstIndex
-  s.i32(); // numIndices
-  s.i32(); // region
+/** `Primitive`: one draw call of a mesh, with the material it is drawn in. */
+export interface CostumePrimitive {
+  /** The `RGfxMaterial` (`GMTb`). */
+  readonly material?: ResourceRef;
+  /** version 0x179 on. */
+  readonly textureAlternatives?: ResourceRef;
+  readonly minVert: number;
+  readonly maxVert: number;
+  readonly firstIndex: number;
+  readonly numIndices: number;
+  readonly region: number;
 }
 
-/** `CostumePiece`: one wearable. */
-function readCostumePiece(s: Serializer): void {
+/** `CostumePiece`: one wearable, its mesh and the primitives drawn of it. */
+export interface CostumePiece {
+  /** The `RMesh` (`MSHb`). */
+  readonly mesh?: ResourceRef;
+  /** cwlib's `categoriesUsed`: bits of the costume slots the piece takes. */
+  readonly categoriesUsed: number;
+  readonly primitives: readonly CostumePrimitive[];
+  /** The piece's plan, a descriptor; version 0x19a on. */
+  readonly plan?: ResourceRef;
+}
+
+/** `PCostume`: what a creature is wearing -- its base mesh, its material, and the pieces on it. */
+export interface CostumePart {
+  readonly mesh?: ResourceRef;
+  readonly material?: ResourceRef;
+  /** version 0x19a on. */
+  readonly materialPlan?: ResourceRef;
+  /** The base mesh's parts the pieces hide. */
+  readonly meshPartsHidden: readonly number[];
+  readonly primitives: readonly CostumePrimitive[];
+  /** subVersion 0xdb on; 0 before. */
+  readonly creatureFilter: number;
+  readonly pieces: readonly CostumePiece[];
+  /** version 0x2c5 on: cwlib's `temporaryCostumePiece`s. */
+  readonly temporaryPieces: readonly CostumePiece[];
+}
+
+function readPrimitive(s: Serializer): CostumePrimitive {
+  const material = s.resource();
+  // `Revisions.MESH_TEXTURE_ALTERNATIVES` is 0x179, not something in the 0x3xx
+  // range -- a guess at that constant cost one debugging round.
+  const textureAlternatives = s.revision.version >= 0x179 ? s.resource() : undefined;
+  return {
+    material, textureAlternatives,
+    minVert: s.i32(), maxVert: s.i32(), firstIndex: s.i32(), numIndices: s.i32(), region: s.i32(),
+  };
+}
+
+function readCostumePiece(s: Serializer): CostumePiece {
   const { version, subVersion } = s.revision;
-  s.resource(); // mesh
-  s.i32(); // categoriesUsed
+  const mesh = s.resource();
+  const categoriesUsed = s.i32();
   if (subVersion < 0x105) {
     const n = s.count();
     for (let i = 0; i < n; i += 1) s.i32(); // morphParamRemap, an i32 each
   } else s.skip(s.i32());
-  const prims = s.count();
-  for (let i = 0; i < prims; i += 1) readPrimitive(s);
-  if (version >= 0x19a) s.resource(true); // plan
+  const primitives = s.array(readPrimitive);
+  const plan = version >= 0x19a ? s.resource(true) : undefined;
+  return { mesh, categoriesUsed, primitives, plan };
 }
 
-/** `PCostume`: what a creature is wearing. */
-export function readCostume(s: Serializer): void {
+export function readCostume(s: Serializer): CostumePart {
   const { version, subVersion } = s.revision;
-  s.resource(); // mesh
-  s.resource(); // material
-  if (version >= 0x19a) s.resource(true); // materialPlan
-  s.intVector(); // meshPartsHidden
-  const prims = s.count();
-  for (let i = 0; i < prims; i += 1) readPrimitive(s);
+  const mesh = s.resource();
+  const material = s.resource();
+  const materialPlan = version >= 0x19a ? s.resource(true) : undefined;
+  const meshPartsHidden = s.intVector();
+  const primitives = s.array(readPrimitive);
   // ⚠️ An `i32`, not a byte. It was a byte here and no compressed file could
   // tell: a varint under 128 is one byte either way. See `readFieldLayout`.
-  if (subVersion >= 0xdb) s.i32(); // creatureFilter
-  const pieces = s.count();
-  for (let i = 0; i < pieces; i += 1) readCostumePiece(s);
+  const creatureFilter = subVersion >= 0xdb ? s.i32() : 0;
+  const pieces = s.array(readCostumePiece);
+  const temporaryPieces: CostumePiece[] = [];
   if (version >= 0x2c5) {
     const temp = s.i32();
-    for (let i = 0; i < temp; i += 1) readCostumePiece(s);
+    for (let i = 0; i < temp; i += 1) temporaryPieces.push(readCostumePiece(s));
   }
+  return { mesh, material, materialPlan, meshPartsHidden, primitives, creatureFilter, pieces, temporaryPieces };
 }
