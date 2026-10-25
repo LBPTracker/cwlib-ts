@@ -33,7 +33,6 @@ value on a reader that already reads every field.
   install nor the saves on this machine hold one (a census of the FARCs and the saves by magic,
   2026-10-25), so a reader would have nothing to be proven on.
 - **Read, but less than Java**:
-  - `RScript`: the instructions are kept as 64-bit words, not decoded per instruction class.
   - `RGfxMaterial`: the compiled shaders are kept as blobs (Java's `CgAssembler`/`GfxAssembler`,
     below, build them).
   - `RTranslationTable`: the old text layout (a UTF-16 file of tags and lines) is refused; the game

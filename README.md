@@ -40,6 +40,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `joint-settings.ts`, `pins.ts`, `cached-costume-data.ts` | `RJoint` (`JNTb`), what a kind of joint does; `RPins` (`PINb`), the pin definitions; `RCachedCostumeData` (`CCDb`), the costume index |
 | `animation.ts` | `RAnimation` (`ANMb`): a skeletal animation — the bones, then per frame the rotations, positions, scales and morph weights of the bones that move, unpacked to floats |
 | `script.ts` | `RScript` (`FSHb`): a compiled Fish class — its type, field, property and function tables, the 64-bit instructions, the string and constant pools |
+| `script-instructions.ts` | an `RScript`'s instructions decoded: each word's opcode and its class's fields |
 | `bone-set.ts` | `RBoneSet` (`BSTb`): the toolkit's own format, the playable characters' skeletons as its model importer keeps them |
 | `quest.ts` | `RQuest` (`QSTb`): a story quest — its texts, prize, objectives, the slots that activate and complete it, its key; a reading of our own |
 | `font-face.ts` | `RFontFace` (`FNTb`, loose in `gamedata/fonts/`): a bitmap font — the glyph table, its lookup chains, each glyph's bitmap |

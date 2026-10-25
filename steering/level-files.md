@@ -1166,6 +1166,21 @@ modifiers: i16 from 0x3d9, i32 before
   constants. An instruction is kept as its 64 bits (`bytecode`, a `BigUint64Array`): its
   opcode is the low byte, and cwlib's per-class decoding of the rest is not ported.
 
+
+### The instructions — decoded from 0.4.33
+
+`decodeInstruction` in `src/resources/script-instructions.ts` turns a word of `Script.bytecode` into
+its opcode, its name and its class's fields: cwlib's `InstructionType` (203 opcodes, `NOP` 0x00 to
+`BIT_XORs64` 0xca) and the classes it builds them from, each packing a machine type in bits 8–15,
+a destination or source in 16–31 and one 32-bit field or two 16-bit ones above. ✔ **Every one of the
+game's 270,057 instructions decodes, and every index they hold is in range** (`test/script-instructions.test.ts`,
+2026-10-25): no opcode past the table; the functions' `bytecode` ranges tile each script's bytecode
+exactly; every branch lands inside its function (`i + offset`, 26,987); every call is a
+`functionReferences` row (39,859), every member access a `fieldReferences` row (22,232), every
+`NEW_OBJECT` and cast a `typeReferences` row, every `LCsw`/`LCsa`/`LCs64` a pool entry. ✔ **`LCv4`'s
+index is a float's in `constantsF32`**, a multiple of 4 on all 1,339 — read as a vector's index, 681
+run past the pool. Each of the 5,469 functions ends in `RETURN` (4,539) or a branch `B` (930). The
+commonest: `ARG` (82,674), `CALL`, `LCi`, `LCf`, `B`.
 ## Bone sets — `RBoneSet`, the toolkit's and not the game's
 
 `readBoneSet` in `src/resources/bone-set.ts`: magic `BSTb`. ❗ **The game has none**: no `BSTb`
