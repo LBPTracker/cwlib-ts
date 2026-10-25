@@ -22,7 +22,8 @@
  * `Mod.fromLegacyMod` still opens is not.
  */
 
-import { readFileDB } from './filedb.ts';
+import { toHex } from '../io/hex.ts';
+import { readFileDB, writeFileDB } from './filedb.ts';
 import { readFar, writeFar } from './savearchive.ts';
 import { writeZip, type ZipFile } from './zip.ts';
 
@@ -134,22 +135,13 @@ export async function writeMod(
   }
   rows.sort((l, r) => l.guid - r.guid);
 
-  const map = new Uint8Array(8 + rows.reduce((sum, r) => sum + 0x22 + r.path.length, 0));
-  const view = new DataView(map.buffer);
-  view.setUint32(0, MOD_DB_REVISION, false);
-  view.setUint32(4, rows.length, false);
-  let at = 8;
   const date = Math.floor(when.getTime() / 1000);
-  for (const row of rows) {
-    view.setUint16(at, row.path.length, false);
-    map.set(row.path, at + 2);
-    at += 2 + row.path.length;
-    view.setUint32(at, date, false);
-    view.setUint32(at + 4, row.bytes.length, false);
-    map.set(row.sha1, at + 8);
-    view.setUint32(at + 28, row.guid, false);
-    at += 32;
-  }
+  const map = writeFileDB({
+    revision: MOD_DB_REVISION,
+    rows: rows.map((row) => ({
+      path: new TextDecoder().decode(row.path), date, size: row.bytes.length, sha1: toHex(row.sha1), guid: row.guid,
+    })),
+  });
 
   const config = JSON.stringify({ ...DEFAULT_MOD_INFO, ...info }, null, 2);
   return writeZip([

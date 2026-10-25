@@ -441,6 +441,11 @@ this disk**; the LBP2 row is cwlib's and pinned only by a synthetic test.
   archive that has it will do; the bytes are the hash.
 - cwlib rewrites a path starting with `.` (some Vita databases store only the extension) to a
   hash-named one. Not ported: no such database was on this disk.
+- ✔ **Written too** (`writeFileDB`, 0.4.34, cwlib's `FileDB.build` with the rows in the order
+  given): `orbisguids.map` read and written back with its own revision is the same 11,088,903
+  bytes (`test/filedb.test.ts`); `writeMod`'s `data.map` is written by it. ⚠️ `output/orbischunkids.map`
+  beside it is **not** a FileDB — it opens `00 01 00 01 00 01 a4 99`, no revision and count — and is
+  not read here.
 
 ### FARC — `openFarc` in `src/archives/farc.ts`
 

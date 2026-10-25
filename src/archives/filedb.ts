@@ -72,6 +72,63 @@ export function readFileDB(bytes: Uint8Array): Map<number, FileDBEntry> {
   return rows;
 }
 
+/** Rows in the order given; each of `FileDBEntry`, with `sha1` as hex. */
+export interface FileDBRows {
+  /** The head word: `(revision >> 16) >= 0x148` writes the LBP3 row. */
+  readonly revision: number;
+  readonly rows: readonly FileDBEntry[];
+}
+
+/**
+ * Write a FileDB: the layout `readFileDB` reads, cwlib's `FileDB.build`. Rows go
+ * out in the order given -- sort them first for the GUID order `build` uses.
+ *
+ * ✔ **The game's own `output/orbisguids.map` comes back byte for byte**, read
+ * with `readFileDB` and written with its own revision (`test/filedb.test.ts`).
+ */
+export function writeFileDB({ revision, rows }: FileDBRows): Uint8Array {
+  const lbp3 = (revision >>> 16) >= LBP3_HEAD;
+  const encoder = new TextEncoder();
+  const paths = rows.map((row) => encoder.encode(row.path));
+  const rowSize = (lbp3 ? 2 + 4 : 4 + 8) + 28;
+  const out = new Uint8Array(8 + paths.reduce((sum, p) => sum + rowSize + p.length, 0));
+  const view = new DataView(out.buffer);
+  view.setUint32(0, revision >>> 0, false);
+  view.setUint32(4, rows.length, false);
+  let at = 8;
+  rows.forEach((row, i) => {
+    const path = paths[i];
+    if (lbp3) {
+      if (path.length > 0xffff) throw new Error(`a FileDB path of ${path.length} bytes`);
+      view.setUint16(at, path.length, false);
+      at += 2;
+    } else {
+      view.setUint32(at, path.length, false);
+      at += 4;
+    }
+    out.set(path, at);
+    at += path.length;
+    if (lbp3) {
+      view.setUint32(at, row.date >>> 0, false);
+      at += 4;
+    } else {
+      view.setBigInt64(at, BigInt(row.date), false);
+      at += 8;
+    }
+    view.setUint32(at, row.size >>> 0, false);
+    if (!/^[0-9a-f]{40}$/.test(row.sha1)) throw new Error(`a FileDB row's SHA-1 is not 40 hex digits: ${row.sha1}`);
+    for (let k = 0; k < 20; k += 1) out[at + 4 + k] = parseInt(row.sha1.slice(k * 2, k * 2 + 2), 16);
+    view.setUint32(at + 24, row.guid >>> 0, false);
+    at += 28;
+  });
+  return out;
+}
+
+/** The head word of a FileDB, which `readFileDB` reads and does not return. */
+export function fileDBRevision(bytes: Uint8Array): number {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, false);
+}
+
 /** One row of `orbisguids.remap`: where an old GUID went. */
 export interface GuidRemap {
   /** The GUID the PS4 build gives the asset; a FileDB row for 36,326 of 56,271. */

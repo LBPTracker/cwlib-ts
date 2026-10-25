@@ -23,7 +23,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`, `MUSt`, `SSPt`, … 19 magics): tab-indented fields, arrays of `[i]`, read typed or as a tree |
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
 | **`archives/`** | |
-| `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily), its FileDB (GUID → path, SHA-1) and its GUID remap |
+| `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily), its FileDB (GUID → path, SHA-1; read and written) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
 | `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages, a stored/deflated ZIP reader and writer, `PARAM.SFO` |
 | **`things/`** | |
