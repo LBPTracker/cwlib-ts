@@ -31,6 +31,7 @@ import { readThingRef, type PartReader, type Thing } from './thing.ts';
 import { toHex } from '../io/hex.ts';
 import { readSlotId } from '../structs/slot.ts';
 import { readNetworkPlayerId } from '../structs/network.ts';
+import { readInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
 import { readInventoryItem } from './parts/poppet-powerup.ts';
 
 /**
@@ -473,11 +474,22 @@ export interface LevelParse {
    */
   readonly chunks?: readonly ChunkPlacement[];
   /**
-   * A level only: why the file after the outermost world's Things did not read
-   * to the payload's last byte; absent when it did. ❗ **Only a level without
-   * one is evidence that its parts were read right** -- see the file's header.
+   * A level or a plan: why the file after the outermost world's Things, or after
+   * a plan's Thing array, did not read to the payload's last byte; absent when
+   * it did. ❗ **Only a level without one is evidence that its parts were read
+   * right** -- see the file's header. A plan's Thing array is checked on its own.
    */
   readonly unreadTail?: string;
+  /** A plan only: what the popit shows of it, absent on a streaming island's plan. */
+  readonly inventory?: PlanInventory;
+}
+
+/** `RPlan`'s `inventoryData` and the two keys after it. */
+export interface PlanInventory {
+  readonly details: InventoryItemDetails;
+  /** LAMS keys of the popit's location and category, from version 0x2bb. */
+  readonly location: number;
+  readonly category: number;
 }
 
 /** Inflate a resource and start a serialiser on it, with the revision checked. */
@@ -492,6 +504,9 @@ async function open(
 
 /** The subVersion that put `isUsedForStreaming` at the head of `RPlan`. */
 const STREAMING_PLAN = 0xcc;
+
+/** `Revisions.PLAN_DETAILS`: `RPlan` carries its inventory details from this version. */
+const PLAN_DETAILS = 0x197;
 
 /**
  * Read a **plan** (`PLNb`) and return the Things inside it.
@@ -515,7 +530,8 @@ const STREAMING_PLAN = 0xcc;
  * i32   revision             the plan's own, ignored -- the resource's wins
  * i32   length               \  thingData: Thing[], as a reference array
  * byte  data[length]         /
- * ...   inventoryData        head >= 0x197 and not streaming -- never read here
+ * ...   inventoryData        version >= 0x197 and not streaming
+ * u32   location, category   the same, and version >= 0x2bb (LAMS keys)
  * ```
  *
  * ⚠️ **`readers` is written to**: a `WORLD` reader is installed on it, because
@@ -529,7 +545,7 @@ export async function readPlan(
   readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, flags, s } = await open(bytes, inflate);
-  if (revision.subVersion >= STREAMING_PLAN) s.bool();
+  const streaming = revision.subVersion >= STREAMING_PLAN ? s.bool() : false;
   s.i32();
   const inner = new Serializer(s.bytes(s.i32()), revision, flags);
   // A plan can hold a world Thing -- 3 islands of the game's story chunks do --
@@ -550,7 +566,26 @@ export async function readPlan(
         'unread — a part reader consumed the wrong number of bytes',
     );
   }
-  return { revision, things };
+  // What follows the Things is read to the payload's last byte, as `readLevel`
+  // reads a level's; where it does not, the Things still come back.
+  let inventory: PlanInventory | undefined;
+  let unreadTail: string | undefined;
+  try {
+    if (revision.version >= PLAN_DETAILS && !streaming) {
+      const details = readInventoryItemDetails(s);
+      // Below LAMS keys these were two translation tags, `str`s; nothing the
+      // bound admits is that old.
+      inventory = { details, location: s.u32(), category: s.u32() };
+    }
+    if (s.remaining !== 0) unreadTail = `${s.remaining} bytes past RPlan's last field`;
+  } catch (error) {
+    unreadTail = (error as Error).message;
+  }
+  return {
+    revision, things,
+    ...(inventory === undefined ? {} : { inventory }),
+    ...(unreadTail === undefined ? {} : { unreadTail }),
+  };
 }
 
 /** A streaming island's bounds, as its chunk stores them. */
@@ -656,7 +691,9 @@ export async function readChunk(
     try {
       // A loop, not `push(...things)`: an island's Things as arguments can run
       // past what a call may take.
-      for (const thing of (await readPlan(plans[island], inflate, readers)).things) things.push(thing);
+      const plan = await readPlan(plans[island], inflate, readers);
+      for (const thing of plan.things) things.push(thing);
+      if (plan.unreadTail !== undefined) problems.push(`island ${island} of ${plans.length}: ${plan.unreadTail}`);
     } catch (error) {
       // ⚠️ **The island's own index, not the count of problems so far.** This
       // said `problems.length + 1`, so the first failure in a chunk of 167

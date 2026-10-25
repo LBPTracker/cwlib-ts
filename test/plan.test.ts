@@ -127,8 +127,10 @@ test('every plan in the corpus parses, and holds the music the levels do not', a
       if (magicOf(bytes) !== 'PLNb') continue;
       plans += 1;
       try {
-        const { things } = await readPlan(bytes, nodeInflate, readers);
+        const { things, unreadTail } = await readPlan(bytes, nodeInflate, readers);
         parsed += 1;
+        // The inventory details after the Things, read to the payload's last byte.
+        if (unreadTail !== undefined) unexplained.push(`${resource.sha1.slice(0, 8)}: ${unreadTail}`);
         sequencers += musicSequencers(things).length;
       } catch (error) {
         const why = error instanceof Error ? error.message : String(error);

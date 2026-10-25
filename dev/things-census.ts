@@ -3,8 +3,9 @@
  *
  *   node dev/things-census.ts [list-file]     LBP_GAME required
  *
- * Prints how many parse -- and of the levels, how many read to the payload's last
- * byte (`whole`), the only count that proves their parts were read right -- how many the version bound (or the oldest header
+ * Prints how many parse -- and of those, how many read to the payload's last
+ * byte (`whole`), for a level the only count that proves its parts were read
+ * right; a plan's Thing array is checked on its own -- how many the version bound (or the oldest header
  * layout) refuses, and the rest grouped by their error with digits folded, one
  * example each -- the numbers in steering/level-files.md, *What of the game's
  * own Things opens*. With a file, every failing resource is listed there by
@@ -41,9 +42,14 @@ for (const file of FARCS) {
       try {
         const parse = await readThings((await farc.get(entry.sha1))!, nodeInflate);
         counts[`${magic} parse`] = (counts[`${magic} parse`] ?? 0) + 1;
-        if (magic === 'LVLb') {
-          const key = parse.unreadTail === undefined ? 'LVLb whole' : `LVLb tail: ${parse.unreadTail.replace(/d+/g, 'N').slice(0, 60)}`;
-          counts[key] = (counts[key] ?? 0) + 1;
+        const key = parse.unreadTail === undefined
+          ? `${magic} whole`
+          : `${magic} tail: ${parse.unreadTail.replace(/d+/g, 'N').slice(0, 60)}`;
+        counts[key] = (counts[key] ?? 0) + 1;
+        if (parse.unreadTail !== undefined) {
+          const list = groups.get(key) ?? [];
+          list.push(`0x${revision} ${entry.sha1} ${pathOf.get(entry.sha1) ?? '?'}`);
+          groups.set(key, list);
         }
       } catch (error) {
         const message = (error as Error).message;

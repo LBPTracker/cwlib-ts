@@ -37,7 +37,7 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 `resources/` holds 28 classes and `resources/custom/` one, and `BigSave` is in `types/save/`.
 
-- **A reader here, on Java's walk** (20): `RLevel` and `RPlan` (`readThings`, `things/level.ts`),
+- **A reader here, on Java's walk** (20): `RLevel` and `RPlan` (`readThings`, `things/level.ts`; the plan's inventory details from 0.4.15),
   `RStreamingChunk` (`readChunk`, `readChunkIslands`), `RMesh`, `RTexture`, `RGfxMaterial`,
   `RBevel`, `RStaticMesh`, `RInstrument`, and from 2026-10-24 `RMaterial`
   (`readPhysicsMaterial`), `RPalette`, `ROutfitList`, `RJoint` (`readJointSettings`), `RPins`,

@@ -200,7 +200,8 @@ bool  isUsedForStreaming   subVersion >= 0xcc          (Revisions.STREAMING_PLAN
 i32   revision             the plan's own, IGNORED -- the resource's revision wins
 i32   length               \  thingData
 byte  data[length]         /  a Thing[] as a reference array: i32 count, then each
-...   inventoryData        head >= 0x197 and not streaming -- never read here
+...   inventoryData        version >= 0x197 and not streaming: InventoryItemDetails
+u32   location, category   the same, LAMS keys from version 0x2bb
 ```
 
 ⚠️ **The Things are in a nested stream with a fresh reference table.** Reference ids inside
@@ -208,6 +209,23 @@ byte  data[length]         /  a Thing[] as a reference array: i32 count, then ea
 and compression flags. Reading it in place works by accident on a plan holding one Thing. Two
 proofs the wrapper offsets are right: the Thing array **fills `thingData` exactly** — 0 bytes left
 on 220 of 220, asserted — and every one of 83,188 Things carries the `0xAA` marker.
+
+✔ **`readPlan` reads the inventory block too, to the payload's last byte** (0.4.15,
+2026-10-25): `inventory` is `InventoryItemDetails` (`src/structs/inventory.ts`, cwlib's layout
+above version `0x37c`) and the two keys, and `unreadTail` says why when a plan does not end there.
+All 10,556 game plans that open end there (`dev/things-census.ts`, Vita ones included), as do the
+212 in the PS3 saves (`test/plan.test.ts`) and the plan the writer makes (`test/write.test.ts`);
+a streaming island's plan has no block, and every island of the story chunks still reads clean.
+What the game's 10,556 hold (scratch census, 2026-10-25):
+
+- ✔ **`type` is cwlib's `InventoryObjectType` flag and names what the folder does**: `stick_` is
+  `STICKER` (`1 << 3`, 3,342), `cos_` `COSTUME`, `mat_` `PRIMITIVE_MATERIAL`, `obj_`
+  `READYMADE`, `decor_` `DECORATION`, `instr_` `INSTRUMENT` (`1 << 29`), `music_` `MUSIC`,
+  `gad_` `GADGET` (one plan of each type, read by eye); 956 are 0, the story's own pieces such as `game_outro_a_base_virtual_6.plan`.
+- `creator`: `MM_Studio` on 6,570, `Sumo_Digital` 2,687, `The_Station` 387, `Tarsier_Studios`
+  348, empty on 392, none on 77.
+- `titleKey` set on 7,834 (a LAMS key), a creator's own `name` on 118, an `icon` on 8,672;
+  `dateAdded` is 0 on all of them.
 
 ❗ **Nine tenths of the music in a creator's backup is in plans, not levels.** Six real PS3 saves,
 663 resources: **224 plans**, all but one parsing — the exception is at revision `0x272`, refused by
@@ -815,7 +833,7 @@ bubbles (`resource_sponge.mol`, type 3, fluff 1, no prize) and 81 prize bubbles
 (`collectible_sphere.mol`) whose prize plan is in the game. ✔ **Each prize plan's dependency table
 holds exactly one texture, its inventory icon**: the sticker itself for a sticker plan, a
 `…_icon.tex` for a decoration, costume or material — so the icon is found without reading the
-plan's inventory block, which `readPlan` never reads.
+plan's inventory block (`readPlan`'s `inventory`, *Plans* above).
 
 ## Wires — `PSwitch` outputs
 

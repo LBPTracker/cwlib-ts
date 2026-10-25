@@ -197,6 +197,15 @@ test('the gadget sits at the scale the game gives one, which is not 1', async ()
   assert.deepEqual([m[12], m[13], m[14]], [0, 0, 0]);
 });
 
+test('the inventory details written read back to the last byte', async () => {
+  const bytes = await writeSequencerPlan(sequencer(), nodeDeflate, { name: 'Pocket tune', description: 'four bars' });
+  const { inventory, unreadTail } = await readPlan(bytes, nodeInflate, partReaders());
+  assert.equal(unreadTail, undefined);
+  const details = inventory!.details;
+  assert.deepEqual([details.name, details.description, details.type], ['Pocket tune', 'four bars', 1 << 7]);
+  assert.ok(details.icon, 'never a null icon: the game will not import the plan');
+});
+
 test('a sequencer survives the round trip, records byte for byte', async () => {
   const original = sequencer({
     name: "'Wayward'",

@@ -104,7 +104,7 @@ the 17 gallery plans, `fixtures/levels`, the archive sample):
 |---|---|
 | the sequencer Thing's own `PGroup.creator` | `MM_Studio` on 207, empty on 3 — the gadget's marker, never a person |
 | the GROUP-only Things up its `groupHead` chain | a PSN handle on **149**; 61 sequencers have no chain at all, nobody ever grouped them |
-| `InventoryItemDetails` at the end of a plan | the same handle twice on all 15 gallery plans that name somebody — `creator` and the creation history — found by a byte search, since `readPlan` does not parse that block |
+| `InventoryItemDetails` at the end of a plan | the same handle twice on all 15 gallery plans that name somebody — `creator` and the creation history — found by a byte search, before `readPlan` parsed that block |
 
 ⚠️ **Nearest, not outermost.** Seven chains name more than one person, and in every one the uids
 grow outward — `sethe99#7320 → RyanSpiker#7322 → montyferah#7395` — so the nearest group is the
@@ -189,9 +189,10 @@ the placement's own colour, which for a chip this tracker made is the instrument
 
 ## `RPlan` and the inventory block
 
-`readPlan` reads three of `RPlan`'s four fields and has never read the fourth. The game always
-writes it, so `write-plan.ts` does too: `InventoryItemDetails` at `version > 0x37c`, transcribed
-from cwlib and then checked against the 218 bytes a real plan carries.
+The game always writes `RPlan`'s fourth field, so `write-plan.ts` does too: `InventoryItemDetails`
+at `version > 0x37c`, transcribed from cwlib and then checked against the 218 bytes a real plan
+carries. Since 0.4.15 `readPlan` reads it back (`inventory`, *Plans* in
+[level-files.md](level-files.md)), and the writer's plan ends on its last byte (`test/write.test.ts`).
 
 ✔ **The alignment check is `type`**: the field decodes to `1 << 7`, `USER_OBJECT`, on all 17 — a
 reading one field out could not land on a flag word that says what the item is. The name goes in

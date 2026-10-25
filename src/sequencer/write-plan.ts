@@ -739,12 +739,13 @@ export interface PlanDetails {
 /**
  * `InventoryItemDetails`, the block `RPlan` writes after its Thing data.
  *
- * ❗ **`readPlan` has never read this and the game always writes it**, so it is
+ * ❗ **The game always writes this**, so it is
  * transcribed here from cwlib's `InventoryItemDetails.serialize` at
  * `version > 0x37c` and then checked against the 218 bytes a real plan carries:
  * the field before `type` decodes to `USER_OBJECT` (1 << 7) on all 17, which is
  * the alignment check -- a reading one field out could not land on a flag word
- * that means what the item is.
+ * that means what the item is. `readInventoryItemDetails` in
+ * `structs/inventory.ts` reads it back, and `test/write.test.ts` holds that.
  *
  * The name goes in `userCreatedDetails`, where the game puts a creator's own
  * title; `titleKey` is for Mm's own items and stays 0.

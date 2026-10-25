@@ -48,7 +48,44 @@ test('the plans the eboot settled read to their Thing array\'s last byte', async
     const bytes = found.get(plan);
     assert.ok(bytes, `${plan} is in no FARC`);
     // readPlan throws unless the walk ends on the Thing array's last byte.
-    const { things } = await readPlan(bytes, nodeInflate);
+    const { things, unreadTail } = await readPlan(bytes, nodeInflate);
     assert.equal(things.length, 1, plan);
+    assert.equal(unreadTail, undefined, plan);
+  }
+});
+
+/**
+ * `RPlan`'s inventory details, read to the payload's last byte: the type flag
+ * names what the plan's folder says it is. steering/level-files.md, *Plans*.
+ */
+test("a plan's inventory details say what it is and who made it", async (t) => {
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
+  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const sha1 = new Map([...db.values()].map((r) => [r.path, r.sha1]));
+  const want = {
+    'gamedata/lbp3/__prologue/palettes/obj_jam_jar.plan': { type: 1 << 1, titleKey: 30362273, icon: 694677 },
+    'gamedata/lbp3/unthemed/sequencer_instruments/instr_instrument_plucked_ukelele.plan': { type: 1 << 29, titleKey: 4034156590, icon: 843385 },
+  };
+  const found = new Map<string, Uint8Array>();
+  for (const file of FARCS) {
+    const access = await openFileAccess(path.join(GAME, file));
+    const farc = await openFarc(access);
+    for (const plan of Object.keys(want)) {
+      const bytes = found.has(plan) ? undefined : await farc.get(sha1.get(plan)!);
+      if (bytes) found.set(plan, bytes);
+    }
+    await access.close();
+  }
+  for (const [plan, expected] of Object.entries(want)) {
+    const { inventory, unreadTail } = await readPlan(found.get(plan)!, nodeInflate);
+    assert.equal(unreadTail, undefined, plan);
+    const details = inventory!.details;
+    assert.deepEqual(
+      { type: details.type, titleKey: details.titleKey, icon: details.icon?.guid },
+      expected,
+      plan,
+    );
+    assert.equal(details.creator, 'Sumo_Digital', plan);
+    assert.equal(details.name, undefined, plan);
   }
 });
