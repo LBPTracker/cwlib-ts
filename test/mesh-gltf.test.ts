@@ -68,6 +68,7 @@ test('a mesh comes back out of its .glb: vertices, triangles, regions, bones and
     positions: Float32Array.of(0, 0, 0, 1, 0, 0, 0, 1, 0),
     normals: Float32Array.of(0, 0, 1, 0, 0, 1, 0, 0, 1),
     tangents: Float32Array.of(1, 0, 0, 1, 0, 0, 1, 0, 0),
+    softbodyWeights: Float32Array.of(1, 0.5, 1),
     uvs: [Float32Array.of(0, 0, 1, 0, 0, 1)],
     // The second vertex names joint 1 twice, as the game's remainder slot often does.
     joints: Uint8Array.of(0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0),
@@ -92,6 +93,7 @@ test('a mesh comes back out of its .glb: vertices, triangles, regions, bones and
   assert.deepEqual(values(first.attributes.POSITION), [...mesh.positions]);
   // u runs along +x and v along +y: glTF's green points to v = 0, so the bitangent is -y and w -1.
   assert.deepEqual(values(first.attributes.TANGENT), [1, 0, 0, -1, 1, 0, 0, -1, 1, 0, 0, -1]);
+  assert.deepEqual(values(first.attributes._SOFTBODY_WEIGHT), [1, 0.5, 1]);
   assert.deepEqual(values(first.indices), [0, 1, 2]);
   assert.deepEqual(values(first.attributes.JOINTS_0), [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0], 'a joint named twice is named once');
   assert.deepEqual(values(first.attributes.WEIGHTS_0), [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);

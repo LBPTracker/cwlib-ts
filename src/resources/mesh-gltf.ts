@@ -37,8 +37,9 @@
  *   that way, against `∂P/∂v` summed over the vertex's triangles on the
  *   tangent's UV channel; 1 where there is none. It comes out +1 on 82% of the
  *   game's vertices.
- * - No vertex colour: `readMesh` does not return the stream Java writes as
- *   `COLOR_0`.
+ * - **The softbody weight is `_SOFTBODY_WEIGHT`, a float per vertex, and only
+ *   where some vertex is below 1** (1,063 of the game's meshes). Java writes it
+ *   on every mesh as `_VERTEX_MASS`, the weight in a grey unsigned-short VEC4.
  */
 
 import type { ResourceRef } from '../io/serializer.ts';
@@ -209,6 +210,9 @@ export function meshToGlb(mesh: Mesh, options: GltfOptions = {}): Uint8Array {
     attributes.POSITION = vec3(mesh.positions, true);
     attributes.NORMAL = vec3(mesh.normals, false);
     attributes.TANGENT = accessor(view(bytesOf(tangentsWithHandedness(mesh)), ARRAY_BUFFER), FLOAT, 'VEC4', mesh.vertexCount);
+    if (mesh.softbodyWeights.some((w) => w < 1)) {
+      attributes._SOFTBODY_WEIGHT = accessor(view(bytesOf(mesh.softbodyWeights), ARRAY_BUFFER), FLOAT, 'SCALAR', mesh.vertexCount);
+    }
     mesh.uvs.forEach((uv, i) => {
       attributes[`TEXCOORD_${i}`] = accessor(view(bytesOf(finite(uv)), ARRAY_BUFFER), FLOAT, 'VEC2', mesh.vertexCount);
     });

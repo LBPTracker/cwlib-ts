@@ -96,6 +96,15 @@ export interface Mesh {
    * on 198,418. No handedness is stored.
    */
   readonly tangents: Float32Array;
+  /**
+   * `vertexCount`, 0 to 1: stream 0's byte 15 over 255, cwlib's
+   * `getSoftbodyWeights` (ennuo/toolkit `d6a2ef8`). ✔ It goes with the
+   * softbody: 1 on every vertex of 4,875 of the game's meshes, none of which
+   * has a spring, and below 1 somewhere on 1,063, of which 1,055 have springs
+   * (8 exceptions either way, scratch census 2026-10-25). 4,666,393 of the 4.9 M
+   * vertices are 1. What the game does with it is not measured.
+   */
+  readonly softbodyWeights: Float32Array;
   /** One `vertexCount * 2` array per channel -- every channel the mesh has, 1 to 3. */
   readonly uvs: Float32Array[];
   /** `vertexCount * 4` bone indices; a slot whose weight is zero is usually 0. */
@@ -428,7 +437,9 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   }
 
   // Stream 0, per vertex: f32 x, y, z, then four bytes cwlib reads as a softbody
-  // cluster and weight (`0x000000ff` on 4,664,668 of 4,896,968 vertices). Stream 1: the
+  // cluster and weight (`0x000000ff` on 4,664,668 of 4,896,968 vertices): the
+  // weight in byte 15 (`Mesh.softbodyWeights`); bytes 12-14 are non-zero only on
+  // meshes with softbody clusters (112 of 116) and are not returned. Stream 1: the
   // three weights in bytes 2, 1, 0, a joint in every fourth byte, and the
   // normal as a 24-bit pack at 4, the tangent as one at 12.
   //
@@ -440,6 +451,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const tangents = new Float32Array(vertexCount * 3);
+  const softbodyWeights = new Float32Array(vertexCount);
   const joints = new Uint8Array(vertexCount * 4);
   const weights = new Float32Array(vertexCount * 4);
   const pv = new DataView(position.buffer, position.byteOffset, position.byteLength);
@@ -450,6 +462,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
     positions[v * 3 + 2] = pv.getFloat32(at + 8, false);
     unpackNormal(skin, at + 4, normals, v * 3);
     unpackNormal(skin, at + 12, tangents, v * 3);
+    softbodyWeights[v] = position[at + 15] / 0xff;
     // A single-bone vertex is `ff 00 00` and needs no case of its own: the
     // remainder is then zero. The three never sum past 0xff in the game's meshes.
     const w0 = skin[at + 2];
@@ -500,7 +513,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   });
 
   return {
-    revision, vertexCount, positions, normals, tangents, uvs, joints, weights,
+    revision, vertexCount, positions, normals, tangents, softbodyWeights, uvs, joints, weights,
     primitives, bones, primitiveType, morphNames, morphs, skeletonType,
   };
 }

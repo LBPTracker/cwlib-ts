@@ -740,6 +740,13 @@ What each convention rests on, every one a count over the same 5,941:
   most mirrored vertices not among them (635,590 the same way). No handedness is stored. (Scratch
   census, 2026-10-25.) The pack at 8 is perpendicular to the normal on 2.4% and lines up with the
   UV tangent on as few; what it is, nothing says — it is not returned.
+- ✔ **Stream 0's byte 15 is the softbody weight** (`Mesh.softbodyWeights`, 0.4.44), over 255 as
+  cwlib's `getSoftbodyWeights` reads it: 1 on 4,666,393 of the 4.9 M vertices, and it goes with the
+  softbody — 1 everywhere on 4,875 meshes, none of which has a `softbodySprings` row, below 1
+  somewhere on 1,063, of which 1,055 have springs (scratch census, 2026-10-25). Bytes 12–14 are
+  non-zero only on meshes with softbody clusters (112 of the 116), and are not returned. What the
+  game does with the weight is not measured. `test/mesh.test.ts` pins `intro_001.farc`'s 14
+  weighted meshes.
 - ⚠️ `minVert`/`maxVert` are not a bound: six meshes carry nonsense there (`newton_low_poly.mol`,
   `-2147412636..1480`) and 13,626 indices fall outside their primitive's range. The triangles never
   need them.

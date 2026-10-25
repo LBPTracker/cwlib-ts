@@ -91,6 +91,9 @@ test("every mesh in intro_001.farc reads to its last byte, and draws the right w
     let count = 0;
     let ccw = 0;
     let cw = 0;
+    let soft = 0;
+    let across = 0;
+    let vertices = 0;
     for (const entry of open.farc.entries.values()) {
       const bytes = (await open.farc.get(entry.sha1))!;
       if (new TextDecoder().decode(bytes.subarray(0, 4)) !== 'MSHb') continue;
@@ -108,10 +111,21 @@ test("every mesh in intro_001.farc reads to its last byte, and draws the right w
         }
         assert.ok(Math.abs(sum - 1) < 1e-5);
       }
+      // The tangent lies across the normal (Mesh.tangents); the softbody weight is 0 to 1.
+      for (let v = 0; v < m.vertexCount; v += 1) {
+        const i = v * 3;
+        if (Math.abs(m.normals[i] * m.tangents[i] + m.normals[i + 1] * m.tangents[i + 1] + m.normals[i + 2] * m.tangents[i + 2]) < 0.1) across += 1;
+      }
+      vertices += m.vertexCount;
+      assert.ok(m.softbodyWeights.every((w) => w >= 0 && w <= 1));
+      if (m.softbodyWeights.some((w) => w < 1)) soft += 1;
       for (const p of m.primitives) assert.ok(p.triangles.every((i) => i < m.vertexCount));
       for (const [i, bone] of m.bones.entries()) assert.ok(bone.parent < i);
     }
     assert.equal(count, 54);
+    t.diagnostic(`${soft} meshes softbody-weighted; tangent across the normal on ${across} of ${vertices}`);
+    // 97.4% over the whole game; this archive's meshes fewer.
+    assert.deepEqual([soft, across, vertices], [14, 82319, 88584]);
     // The strip parity and the normal unpacking, checked against each other.
     assert.ok(ccw / (ccw + cw) > 0.99, `${ccw} counter-clockwise, ${cw} clockwise`);
   } finally {
