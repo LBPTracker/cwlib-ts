@@ -20,6 +20,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`io/`** | |
 | `resource.ts` | the `LVLb` / `PLNb` / … container: revision, branch, the zlib chunk table, the dependency table |
 | `stream.ts`, `serializer.ts` | the big-endian readers: the fixed-width header one, and the payload's with its revision gates and compressed integers |
+| `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`): tab-indented fields, arrays of `[i]` |
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
 | **`archives/`** | |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily), its FileDB (GUID → path, SHA-1) and its GUID remap |
@@ -42,6 +43,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `bone-set.ts` | `RBoneSet` (`BSTb`): the toolkit's own format, the playable characters' skeletons as its model importer keeps them |
 | `quest.ts` | `RQuest` (`QSTb`): a story quest — its texts, prize, objectives, the slots that activate and complete it, its key; a reading of our own |
 | `font-face.ts` | `RFontFace` (`FNTb`, loose in `gamedata/fonts/`): a bitmap font — the glyph table, its lookup chains, each glyph's bitmap |
+| `guid-subst.ts`, `dlc.ts` | `RGuidSubst` (`GSBt`) and `RDLC` (`DLCt`) in the game's text form: GUID swaps (a language's dialogue, a character's animations) and the DLC packs' GUIDs and files |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |

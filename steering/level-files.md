@@ -1253,6 +1253,32 @@ offset, 0 — and then plain big-endian fields, no container.
 - ⚠️ An uncompressed font's two bytes per pixel are cwlib's "green and blue"; what they are to the
   game is not measured, nor what unit `advance` is in (`A` in `tall` is 17 px wide, advance 564).
 
+## Text resources — `GSBt` and `DLCt`
+
+`RGuidSubst` and `RDLC` exist in the game only in the engine's text serialisation: the magic alone
+on the first line, then one field per line, tab-indented to its depth, name and value apart; an
+array is `Name<tab>count` and then its elements `[i]` a level deeper. `TextResource` in
+`src/io/text-resource.ts` walks that, and `readGuidSubst` (`resources/guid-subst.ts`) and
+`readDlc` (`resources/dlc.ts`) read the two layouts, each requiring every line.
+
+- ❗ **A reading of our own**: cwlib's `RGuidSubst` parses a different text layout and its `RDLC`
+  the binary one (ennuo/toolkit `d6a2ef8`); `readDlc`'s field names are cwlib's `DLCFile` and
+  `DLCGUID`, which the text names one for one.
+- ✔ **All 85 `.gsub` and `.dlc` paths of the FileDB are in the FARCs and read to their last
+  line** (`test/text-resources.test.ts`, 2026-10-25) — 82 distinct files: `subtitles.gsub` has
+  the bytes of `button_swap.gsub` and `languages/subtitles.gsub`, `lbp2_wip.dlc` those of
+  `lbp2_dad.dlc`. 74 `GSBt` hold 34,985 substitutions; 8 `DLCt` list 526 files.
+- ⚠️ **Edited by hand**: `downloadables.dlc` names a GUID's flags `Flags` and, on some, `flags `;
+  separators are a tab, a space or both; lines end in stray tabs; and `inventory_auto_pickup.gsub`
+  ends its lines with `# comments`. Names are matched without case, any whitespace separates,
+  and a `#` outside quotes ends a line.
+- What they hold: each `audio/dialogue_<language>.gsub` swaps the dialogue's `.mp3`s for that
+  language's (Italian: 1,903, `dialogue/davinci/…` → `dialogue/italian/davinci/…`); the sackbots'
+  (`avalon.gsub`…) give a character its own animations for Sackboy's; `inventory_auto_pickup`
+  swaps four tool plans. Of the 34,985, 33,663 `From` and 33,691 `To` GUIDs are FileDB rows;
+  `gmat.gsub`'s 575 pairs are none, and all 575 resolve through the PS4 GUID remap — it names
+  the PS3 GUIDs. The DLC lists' 6,321 `GUIDS` are all FileDB rows, and 8,118 of their files' 8,119.
+
 ## Quests — `RQuest`
 
 `readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths

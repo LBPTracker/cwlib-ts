@@ -1,0 +1,67 @@
+/**
+ * `RDLC` as the game ships it: magic `DLCt`, text, FileDB paths
+ * `gamedata/data/*.dlc` -- which GUIDs belong to which downloadable pack, and
+ * the `.edat` each pack comes in. Read by `TextResource`; the fields are
+ * cwlib's `RDLC`, `DLCGUID` and `DLCFile` (ennuo/toolkit `d6a2ef8`), whose
+ * binary reading this is not. What the files prove is steering/level-files.md,
+ * *Text resources*.
+ *
+ * ```
+ * DLCt
+ * GUIDS	<count>
+ * 	[i]
+ * 		GUID.guid	<guid>
+ * 		Flags	<int>
+ * Files	<count>
+ * 	[i]
+ * 		Directory	"<dir>"         File	"<name>.edat"
+ * 		ContentID	"<id>"          InGameCommerceID	"<id>"
+ * 		CategoryID	"<id>"          Flags	<int>
+ * 		GUIDs	<count>, then each [j]	<guid>
+ * 		TypeMask	<int>
+ * ```
+ */
+
+import { SerializerError } from '../io/serializer.ts';
+import { TextResource } from '../io/text-resource.ts';
+
+export interface DlcGuid {
+  readonly guid: number;
+  readonly flags: number;
+}
+
+export interface DlcFile {
+  readonly directory: string;
+  readonly file: string;
+  readonly contentId: string;
+  readonly inGameCommerceId: string;
+  readonly categoryId: string;
+  readonly flags: number;
+  /** The GUIDs the pack unlocks. */
+  readonly guids: readonly number[];
+  readonly typeMask: number;
+}
+
+export interface Dlc {
+  readonly guids: readonly DlcGuid[];
+  readonly files: readonly DlcFile[];
+}
+
+/** Read a `DLCt`. Throws on anything else, and unless every line is read. */
+export function readDlc(bytes: Uint8Array): Dlc {
+  const t = new TextResource(bytes);
+  if (t.magic !== 'DLCt') throw new SerializerError(`not a text DLC list: "${t.magic}"`);
+  const guids = t.array(0, 'GUIDS', () => ({ guid: t.int(2, 'GUID.guid'), flags: t.int(2, 'Flags') }));
+  const files = t.array(0, 'Files', () => ({
+    directory: t.string(2, 'Directory'),
+    file: t.string(2, 'File'),
+    contentId: t.string(2, 'ContentID'),
+    inGameCommerceId: t.string(2, 'InGameCommerceID'),
+    categoryId: t.string(2, 'CategoryID'),
+    flags: t.int(2, 'Flags'),
+    guids: t.intArray(2, 'GUIDs'),
+    typeMask: t.int(2, 'TypeMask'),
+  }));
+  t.end();
+  return { guids, files };
+}

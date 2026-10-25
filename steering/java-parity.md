@@ -49,9 +49,12 @@ So any file in range walks to its end. What differs is what a reader returns:
 - **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
   `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
   the levels' `PQuest`s name ([level-files.md](level-files.md), *Quests*).
-- **No reader here** (6, and `BigSave`): `RGuidSubst`, `RDLC`, `RBigProfile`,
-  `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`. Of these the game's four FARCs
-  hold `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`, 2026-10-24). ⚠️ That census went by magic, and
+- **A reader of another form than Java's** (2, from 0.4.18): `RGuidSubst` and `RDLC`, which the
+  game holds only in the engine's text serialisation (`GSBt`, `DLCt`): `readGuidSubst` and
+  `readDlc`, read to every file's last line ([level-files.md](level-files.md), *Text resources*);
+  Java reads `RDLC`'s binary form and another text layout for `RGuidSubst`.
+- **No reader here** (4, and `BigSave`): `RBigProfile`, `RLocalProfile`, `RSyncedProfile`,
+  `RAdventureCreateProfile`. ⚠️ The resource census of 2026-10-24 went by magic, and
   `RTranslationTable` has none: it was in the FARCs all along (*Translation tables* in
   [level-files.md](level-files.md)). The profiles and `BigSave` are save data, so a reader would
   be proven on a save, not on the install.
