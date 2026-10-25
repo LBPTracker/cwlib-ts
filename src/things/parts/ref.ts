@@ -1,14 +1,22 @@
 /** `REF`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer } from '../../io/serializer.ts';
+import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 
 /** `PRef`: a Thing standing in for a plan that has not been instanced. */
-export function readRef(s: Serializer): void {
+/** `PRef`, kept: the plan this Thing is a placed copy of. */
+export interface RefPart {
+  readonly plan?: ResourceRef;
+  readonly oldLifetime: number;
+  readonly oldAliveFrames: number;
+}
+
+export function readRef(s: Serializer): RefPart {
   const { version } = s.revision;
-  s.resource(true); // plan, a GlobalThingDescriptor below 0x160
-  s.i32(); // oldLifetime
-  if (version >= 0x1c9) s.i32(); // oldAliveFrames
+  const plan = s.resource(true); // a GlobalThingDescriptor below 0x160
+  const oldLifetime = s.i32();
+  const oldAliveFrames = version >= 0x1c9 ? s.i32() : 0;
   // Both of these went away at 0x321, which is why LBP3 never sees them.
   if (version < 0x321) s.bool(); // childrenSelectable
   if (version >= 0x13d && version < 0x321) s.bool(); // stripChildren
+  return { plan, oldLifetime, oldAliveFrames };
 }

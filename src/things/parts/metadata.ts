@@ -1,6 +1,6 @@
 /** `METADATA`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError } from '../../io/serializer.ts';
+import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
 
 /**
  * `PMetadata`: what an inventory item calls itself.
@@ -16,7 +16,23 @@ import { Serializer, SerializerError } from '../../io/serializer.ts';
  * the four `u32` keys are what they carry and the tag branch has never been run
  * against a file. It refuses rather than guessing.
  */
-export function readMetadata(s: Serializer): void {
+/** `PMetadata`, kept: what a Thing is called and shown as in the popit, as `InventoryItemDetails` is for a plan. */
+export interface MetadataPart {
+  /** LAMS keys from version 0x2bb; `translate` them with an `RTranslationTable`. */
+  readonly titleKey: number;
+  readonly descriptionKey: number;
+  readonly location: number;
+  readonly category: number;
+  /** Below 0x2bb, the tags the keys hash from. */
+  readonly nameTag?: string;
+  readonly fluffCost: number;
+  /** cwlib's `InventoryObjectType` flags, as on a plan. */
+  readonly type: number;
+  readonly subType: number;
+  readonly icon?: ResourceRef;
+}
+
+export function readMetadata(s: Serializer): MetadataPart {
   const { version, branchId, branchRevision } = s.revision;
   const leerdammer = branchId === 0x4c44;
   // cwlib `hasDepreciatedValue`: a `CValue` struct that LEERDAMMER dropped at
@@ -27,26 +43,31 @@ export function readMetadata(s: Serializer): void {
   if (deprecatedValue) {
     throw new SerializerError('PMetadata with the deprecated CValue has no reader');
   }
+  let titleKey = 0;
+  let descriptionKey = 0;
+  let location = 0;
+  let category = 0;
+  let nameTag: string | undefined;
   if ((leerdammer && branchRevision >= 0x8) || version > 0x2ba) {
-    s.u32(); // titleKey
-    s.u32(); // descriptionKey
-    s.u32(); // location
-    s.u32(); // category
+    titleKey = s.u32();
+    descriptionKey = s.u32();
+    location = s.u32();
+    category = s.u32();
   } else {
     // ❗ The older files carry LAMS **tags** — strings — rather than the four
     // hashed keys. `descTranslationTag` is only stored below 0x159; above it
     // cwlib derives it as `name + "_DESC"` and reads nothing.
-    s.str(); // nameTranslationTag
+    nameTag = s.str();
     if (version < 0x159) s.str(); // descTranslationTag
     s.str(); // locationTag
     s.str(); // categoryTag
   }
   if (version >= 0x195) s.i32(); // primaryIndex
-  s.i32(); // fluffCost
-  s.i32(); // type, a flags word
-  s.i32(); // subType
+  const fluffCost = s.i32();
+  const type = s.i32(); // a flags word
+  const subType = s.i32();
   s.u32(); // creationDate
-  s.resource(); // icon
+  const icon = s.resource();
   // ⚠️ Never seen non-null on a level: a `PhotoMetadata` belongs to a photo, and
   // the reference costs one byte when it is null. It refuses if one turns up
   // rather than reading a struct nothing here has checked.
@@ -55,4 +76,5 @@ export function readMetadata(s: Serializer): void {
   });
   if (version >= 0x15f) s.bool(); // referencable
   if (version >= 0x205) s.bool(); // allowEmit
+  return { titleKey, descriptionKey, location, category, nameTag, fluffCost, type, subType, icon };
 }

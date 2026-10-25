@@ -887,6 +887,16 @@ Things in it, radius, z range), `WormholePart` and `EffectorPart` (viscosity, de
 whether it is water). On Needlepoint Peaks (`test/story.test.ts`): 7 emitters, each plan a
 FileDB row (`needlepoint_peaks_base_virtual_488.plan`…); 29 creature parts, 24 eyes and 5
 rockets; 9 checkpoints; 468 triggers, 255 radius and 213 switch.
+
+From 0.4.29 nine more, the walk again unchanged: `BodyPart` (velocity, frozen, the player editing
+it), `RefPart` (the plan a Thing is a placed copy of), `MetadataPart` (title and description
+keys, type flags, icon — what `InventoryItemDetails` is to a plan), `FaderPart`,
+`TransitionPart` (a door's colour and label), `StreamingHintPart` (a box the streamer loads ahead
+of), `StreamingDataPart`, `PowerUpPart`, and `SCRIPT_NAME` as its string. Needlepoint Peaks: 1,838
+bodies, 246 faders — `fadeAmount` 1 on 244 and 0.5 on 2, which end is opaque not measured — 40
+hint boxes (2048 × 1024 × 800 the first), 4,431 streaming data and one script name, `handle`.
+Over the FARCs' 18,146 levels and plans, each Thing once: no `REF` at all, and 13 `METADATA`,
+every key 0 and no icon, 12 of type 0 and one `BACKGROUND` (`0x100`).
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the

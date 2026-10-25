@@ -3,7 +3,13 @@
 import { Serializer } from '../../io/serializer.ts';
 
 /** `PStreamingData`: whether a streamed Thing is currently hidden. */
-export function readStreamingData(s: Serializer): void {
-  s.i8(); // hidden
-  s.i16(); // originator, subVersion > 0xdd
+export interface StreamingDataPart {
+  readonly hidden: number;
+  readonly originator: number;
+}
+
+export function readStreamingData(s: Serializer): StreamingDataPart {
+  const hidden = s.i8();
+  const originator = s.i16(); // subVersion > 0xdd
+  return { hidden, originator };
 }
