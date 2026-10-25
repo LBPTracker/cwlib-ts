@@ -6,7 +6,7 @@
  * The containers were cwlib's reading first (`resources/RTexture.java`,
  * `structs/texture/CellGcmTexture.java`, `types/SerializedResource.java`,
  * toolkit `fee22399`) and are measured on **every `GTF ` and `TEX ` in LBP3 PS4
- * 1.28's four FARCs, 29,970 and 2,944** (`dev/texture-census.ts`) --
+ * 01.00's four FARCs, 29,970 and 2,944** (`dev/texture-census.ts`) --
  * steering/level-files.md, *The game's textures*:
  *
  * - `GTF ` is a 24-byte big-endian `CellGcmTexture` and then a chunk table;

@@ -150,7 +150,7 @@ export interface GuidRemap {
  * pair `(to, from)`, the way its toolkit uses it -- to turn a PS4 FileDB back
  * into the old GUIDs. ⚠️ Its comment that the path row's GUID is "the same as
  * row.to" is wrong: it is the pair's second word, the new GUID. Measured on
- * LBP3 PS4 1.28's own file (steering/level-files.md, *The GUID remap*):
+ * LBP3 PS4 01.00's own file (steering/level-files.md, *The GUID remap*):
  *
  * ```
  * u32  0x00ea03e7          not understood; kept as `revision`

@@ -8,7 +8,7 @@
  * the sizes of its buffers -- serialised plainly, and the chunk table follows
  * it with no compressed flag. cwlib's `SerializedResource` and
  * `structs/staticmesh/` (toolkit `fee22399`); measured on every `SMHb` in LBP3
- * PS4 1.28's four FARCs (`dev/staticmesh-census.ts`) -- steering/level-files.md,
+ * PS4 01.00's four FARCs (`dev/staticmesh-census.ts`) -- steering/level-files.md,
  * *Backdrops*.
  *
  * The payload is the vertex stream, 32 bytes a vertex, then the index buffer

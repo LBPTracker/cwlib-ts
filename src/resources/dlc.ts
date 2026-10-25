@@ -18,6 +18,7 @@
  * 		ContentID	"<id>"          InGameCommerceID	"<id>"
  * 		CategoryID	"<id>"          Flags	<int>
  * 		GUIDs	<count>, then each [j]	<guid>
+ * 		NonPlanGuids	<count>, then each [j]	<guid>     the 01.28 update's files only
  * 		TypeMask	<int>
  * ```
  */
@@ -39,6 +40,12 @@ export interface DlcFile {
   readonly flags: number;
   /** The GUIDs the pack unlocks. */
   readonly guids: readonly number[];
+  /**
+   * cwlib's `nonPlanGuids`, which its binary reading gates on a revision: the
+   * text form has none, so the line is read where it is. ✔ All 6 of the 01.28
+   * update's `DLCt`s have it, none of the 01.00 install's (2026-10-25).
+   */
+  readonly nonPlanGuids?: readonly number[];
   readonly typeMask: number;
 }
 
@@ -60,6 +67,7 @@ export function readDlc(bytes: Uint8Array): Dlc {
     categoryId: t.string(2, 'CategoryID'),
     flags: t.int(2, 'Flags'),
     guids: t.intArray(2, 'GUIDs'),
+    ...(t.has(2, 'NonPlanGuids') ? { nonPlanGuids: t.intArray(2, 'NonPlanGuids') } : {}),
     typeMask: t.int(2, 'TypeMask'),
   }));
   t.end();

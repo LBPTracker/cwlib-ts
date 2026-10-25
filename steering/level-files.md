@@ -101,7 +101,7 @@ read off an enum:
 | 62 | `ADSb` | an adventure's shared data, 35–270 bytes |
 
 The GUID side, measured 2026-10-19 on `ascetic.lvl`'s GUID dependencies resolved through LBP3 PS4
-1.28's `orbisguids.map` and FARCs (lbprender's `test/game.test.ts`); "what it is" is the FileDB
+01.00's `orbisguids.map` and FARCs (lbprender's `test/game.test.ts`); "what it is" is the FileDB
 path's extension and folder, not a reading of the resource:
 
 | type | magic | FileDB path |
@@ -415,7 +415,7 @@ to a path and a SHA-1, and a **FARC** holds the bytes under that SHA-1. Where an
 is in [lbptracker's game-assets.md](../../lbptracker/steering/game-assets.md); the layouts are
 here. Both were cwlib's reading first (`types/databases/FileDB.java` and
 `types/archives/FileArchive.java`, toolkit checkout at `fee22399`) and are measured on LBP3 PS4
-1.28's own `output/orbisguids.map` and its four FARCs, 2026-10-19.
+01.00's own `output/orbisguids.map` and its four FARCs, 2026-10-19.
 
 ### The FileDB — `readFileDB` in `src/archives/filedb.ts`
 
@@ -502,7 +502,7 @@ u32  n again
 n x  u32 length, path, u32 new        the old path: gamedata/gmat/… where the row says gamedata_orbis/gmat/…
 ```
 
-✔ On LBP3 PS4 1.28's own file: the walk ends on byte 4,330,948 of 4,330,948; **row i's GUID is
+✔ On LBP3 PS4 01.00's own file: the walk ends on byte 4,330,948 of 4,330,948; **row i's GUID is
 pair i's new GUID on 56,271 of 56,271**; no old GUID is a FileDB row (0 of 56,271) and 36,326 new
 ones are; no GUID appears twice on either side. Behind it: `.tex` 37,517, `.gmat` 18,087, `.mol`
 446, and a few shader programs, movies and lists. Resolve a GUID through the FileDB first and
@@ -551,6 +551,38 @@ through an injected `loose` (`looseFiles(root)` in `platform/node.ts`), Java's `
   it is, as Java does, so a caller that must have the row's bytes checks the hash.
 - ⚠️ `looseFiles` reads a whole file, so a row naming a FARC (over 2 GiB for `chunk1_001.farc`)
   throws there; open a FARC with `openFileAccess` instead.
+
+### The 01.28 update over the install — `stackGames` in `src/archives/game.ts`
+
+❗ **The install is 01.00 and the update is a second folder.** `CUSA00063/sce_sys/param.sfo` says
+`APP_VER` 01.00 (category `gd`, `TARGET_APP_VER` 01.27); `CUSA00063-patch/sce_sys/param.sfo` says
+01.28 (category `gp`), and the update carries its own `eboot.bin` (the `eboot-v128.bin` of
+lbptracker's eboot-re.md), `output/orbisguids.map`, `output/orbisguids.remap`, `patch_001.farc`
+and 43 `FAR4` level archives under `gamedata/`. Every count this file gives for "the game's
+FARCs" is the install's — 01.00's — unless it names the update. (Read with `readPsf`, 2026-10-25.)
+
+`stackGames([update, install])` is the two as one, as cwlib's `ResourceSystem` asks its databases
+in turn: a GUID is the first layer's row that has it, a SHA-1 is in any layer's FARCs, a loose file
+is read from its row's own layer first. `test/patch.test.ts` (`LBP_PATCH` the update's folder).
+Measured 2026-10-25:
+
+- **The update's FileDB**: 126,779 rows against the install's 107,673; 104,566 the same, 2,600
+  naming new bytes, 19,613 new GUIDs, 507 of the install's not in it (3 rows moved path); its remap
+  65,866 pairs against 56,271. Of its rows 18,676 are in `patch_001.farc`, 71,706 in the install's
+  FARCs, 31,287 loose in either folder, 3,429 nowhere.
+- **`patch_001.farc`**, 18,484 entries, through the readers by magic: every one with a reader reads
+  — 8,860 `GTF `, 2,544 `GMTb`, 1,585 `MSHb`, 319 `FSHb`, 94 `TEX `, 88 `LVLb`, 56 `QSTb`, 44
+  `GSBt`, 35 `BEVb`, 24 `ANMb`, 20 `OUTb`, 20 `MUSt`, 18 `INSb`, 11 `SMHb`, 10 `PALb`, 6 `DLCt`
+  and the rest — but 4 of its 4,520 `PLNb`, at revisions `0x1b4` and `0x1c3`, below the bound.
+- **Its 43 `FAR4`s** read whole: 9,546 `CHKb`, every one whole, 285,293 Things; 21 of them stand
+  where the install has an archive of the same path (story levels, Needlepoint Peaks among them),
+  22 are new — the DLC levels (Adventure Time, Back to the Future, SpongeBob, Seaside, Tiki, a
+  weekly challenge).
+- ❗ **Two text formats changed.** Every `DLCt` of the update has a `NonPlanGuids` list before
+  `TypeMask` (`DlcFile.nonPlanGuids`), none of the install's; and two of them disagree with their
+  own counts (`TextResource.array` reads every `[n]` line that follows). The update also brings
+  the first `MUSt`s, interactive music settings (`readMusicSettings`, `src/resources/music-settings.ts`),
+  which cwlib has no reader for.
 
 ### What of the game's own Things opens
 
@@ -691,7 +723,7 @@ it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (1
 
 `readMesh` in `src/resources/mesh.ts`: magic `MSHb`, dependency type 2, FileDB paths ending `.mol`. The field
 list is cwlib's `resources/RMesh.java` and `structs/mesh/` (toolkit `fee22399`) and was a hypothesis
-until measured on **every `MSHb` in LBP3 PS4 1.28's four FARCs, 5,941 of them**, revisions `0x237`
+until measured on **every `MSHb` in LBP3 PS4 01.00's four FARCs, 5,941 of them**, revisions `0x237`
 to `0x3f9` and subVersions up to `0x16b`, 4,896,968 vertices — `dev/mesh-census.ts`, 2026-10-19.
 ✔ **5,941 of 5,941 read to exactly the last byte of their payload**; no revision fails. `readMesh`
 throws when one does not, as `readPlan` does.
@@ -1730,7 +1762,7 @@ What is measured and what is only a width:
 resource: no revision, no header flags, no dependency table — the magic, then for `GTF ` a 24-byte
 big-endian `CellGcmTexture`, then the same chunk table a resource has. The layouts were cwlib's
 (`resources/RTexture.java`, `structs/texture/CellGcmTexture.java`, `types/SerializedResource.java`,
-toolkit `fee22399`) and are measured on **every texture in LBP3 PS4 1.28's four FARCs: 32,914 of
+toolkit `fee22399`) and are measured on **every texture in LBP3 PS4 01.00's four FARCs: 32,914 of
 32,914 read**, each one's levels accounting for its payload to the byte (`dev/texture-census.ts`,
 2026-10-19).
 

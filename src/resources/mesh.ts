@@ -4,7 +4,7 @@
  *
  * The walk is cwlib's `resources/RMesh.java` and its `structs/mesh/` (toolkit
  * checkout at `fee22399`), and every convention a renderer depends on is
- * measured on **all 5,941 `MSHb` resources in LBP3 PS4 1.28's four FARCs**
+ * measured on **all 5,941 `MSHb` resources in LBP3 PS4 01.00's four FARCs**
  * (`dev/mesh-census.ts`) -- steering/level-files.md, *The game's meshes*:
  *
  * - ❗ **The read ends on the payload's last byte in 5,941 of 5,941**, revisions

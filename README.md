@@ -24,7 +24,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
 | `png.ts` | RGBA8 pixels as a PNG, for an export that carries images |
 | **`archives/`** | |
-| `game.ts` | one install opened: a GUID or SHA-1 to bytes, through the FileDB, the remap, the FARCs and the loose files |
+| `game.ts` | one install opened: a GUID or SHA-1 to bytes, through the FileDB, the remap, the FARCs and the loose files; several stacked, an update over the game |
 | `gather.ts` | everything a resource needs: its dependency tables walked through a resolver the caller injects |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily, and written), its FileDB (GUID → path, SHA-1; read and written) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
@@ -56,6 +56,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `adventure-create-profile.ts` | `RAdventureCreateProfile` (`ADCb`): an adventure's level slots, its planet and areas as world Things, the links between levels |
 | `adventure-shared-data.ts` | the adventure shared data (`ADSb`): one `AdventureData` — the adventure's items, quests and start points |
 | `animated-texture.ts`, `guid-list.ts`, `voip-recording.ts` | `ATXb` (a flipbook: its atlas and frame size), `GLTb` (a list of GUIDs), `VOPb` (a recorded voice, as bytes) |
+| `music-settings.ts` | `MUSt`: interactive music settings, a track's stems and how they fade (the 01.28 update's) |
 | `tutorials.ts` | `RTutorials` (`TUTb`): the tutorial videos by group, each with its title, description and thumbnail |
 | `thing-recording.ts` | `RThingRecording` (`RECb`): a Thing's recorded path, per frame a position, an angle and a flag, as the game's loader reads it — the newest packed into a bit stream, decoded |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash; read and written |
@@ -105,5 +106,5 @@ import specifiers are the same either way.
 
 The corpus tests read lbptracker's `fixtures/`: `LBP_FIXTURES` points at it, and the default is an
 lbptracker checkout next to this one; `LBP_PLANS` overrides its gallery plans. `LBP_LEVELS` (a
-toolkit checkout's `tools/sequencerdump`) and `LBP_GAME` (an installed LBP3 PS4 build) have no
+toolkit checkout's `tools/sequencerdump`) and `LBP_GAME` (an installed LBP3 PS4 build), `LBP_PATCH` (its update's folder) have no
 default: the tests that need them skip without them. `steering/tools.md` has every variable.

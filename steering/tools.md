@@ -81,6 +81,7 @@ files.
 | `LBP_PLANS` | `test/write.test.ts` | the gallery plans, overriding `$LBP_FIXTURES/plans` |
 | `LBP_RINST` | `test/instrument.test.ts` | the game's 68 `.rinst` files, overriding `$LBP_FIXTURES/rinst` (lbptracker's `tools/ExtractGuid.java` writes them) |
 | `LBP_GAME` | `test/archive.test.ts`, `test/physics-material.test.ts`, `test/animation.test.ts`, `test/script.test.ts`, `test/vita.test.ts`, `test/resources.test.ts`, `test/mesh.test.ts`, `test/texture.test.ts`, `test/material.test.ts`, `test/staticmesh.test.ts`, `test/story.test.ts`, and every census of the game through `dev/game.ts` | an installed LBP3 PS4 build, the folder holding `base_001.farc` and `output/`. **No default**: the FileDB and FARC tests skip without it, and every census of the game stops (`dev/game.ts`) |
+| `LBP_PATCH` | `test/patch.test.ts` | the folder of `LBP_GAME`'s update, the one holding `patch_001.farc` and its own `output/` (`CUSA00063-patch`, 01.28, over the 01.00 install; *The 01.28 update* in level-files.md). **No default**: the test skips without it |
 | `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, required; and the interpreter that queries it, `python` on the PATH unless this names another |
 | `DRY_DB` | `dev/dry-search.ts` | the same index, required |
 

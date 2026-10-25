@@ -43,6 +43,8 @@ export interface Game {
   bySha1(sha1: string): Promise<Uint8Array | undefined>;
   /** A dependency's bytes, from a FARC or loose; undefined when the install holds neither. */
   resolve(dependency: Dependency): Promise<Uint8Array | undefined>;
+  /** A FileDB path's file read loose, where the source can. */
+  readonly loose?: (path: string) => Promise<Uint8Array | undefined>;
 }
 
 const NO_BYTES = '0'.repeat(40);
@@ -81,5 +83,62 @@ export async function openGame(source: GameSource): Promise<Game> {
       if (found === undefined) return undefined;
       return (await bySha1(found.sha1)) ?? source.loose?.(found.path);
     },
+    ...(source.loose ? { loose: source.loose } : {}),
+  };
+}
+
+/**
+ * Several installs as one, the first over the rest: an update over the game it
+ * patches (`CUSA00063-patch`, 01.28, over `CUSA00063`, 01.00), as cwlib's
+ * `ResourceSystem` holds several databases and asks them in turn.
+ *
+ * A GUID is the first layer's row that has it -- its FileDB, then its remap --
+ * so a row the update changed or added wins; a SHA-1 is in any layer's FARCs,
+ * the same SHA-1 being the same bytes; a row's loose file is read from its own
+ * layer, then from the ones under it. `db` and `remap` are the layers merged,
+ * the upper one's rows over the lower's.
+ */
+export function stackGames(layers: readonly Game[]): Game {
+  if (layers.length === 0) throw new Error('no game to stack');
+  const db = new Map<number, FileDBEntry>();
+  const remap = new Map<number, GuidRemap>();
+  for (const layer of [...layers].reverse()) {
+    for (const [guid, entry] of layer.db) db.set(guid, entry);
+    for (const [guid, moved] of layer.remap) remap.set(guid, moved);
+  }
+  const owner = (guid: number): { layer: number; entry: FileDBEntry } | undefined => {
+    for (let i = 0; i < layers.length; i += 1) {
+      const entry = layers[i].row(guid);
+      if (entry !== undefined) return { layer: i, entry };
+    }
+    return undefined;
+  };
+  const bySha1 = async (sha1: string): Promise<Uint8Array | undefined> => {
+    for (const layer of layers) {
+      const bytes = await layer.bySha1(sha1);
+      if (bytes !== undefined) return bytes;
+    }
+    return undefined;
+  };
+  const loose = async (path: string, from = 0): Promise<Uint8Array | undefined> => {
+    for (const layer of layers.slice(from)) {
+      const bytes = await layer.loose?.(path);
+      if (bytes !== undefined) return bytes;
+    }
+    return undefined;
+  };
+  return {
+    db,
+    remap,
+    farcs: layers.flatMap((layer) => layer.farcs),
+    row: (guid) => owner(guid)?.entry,
+    bySha1,
+    async resolve(dependency) {
+      if (dependency.kind === 'sha1') return bySha1(dependency.sha1);
+      const found = owner(dependency.guid);
+      if (found === undefined) return undefined;
+      return (await bySha1(found.entry.sha1)) ?? loose(found.entry.path, found.layer);
+    },
+    loose: (path) => loose(path),
   };
 }

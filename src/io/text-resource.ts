@@ -101,6 +101,12 @@ export class TextResource {
     return line;
   }
 
+  /** Whether the next line is this field: for one a later build added, the text form having no revision. */
+  has(depth: number, name: string): boolean {
+    const line = this.lines[this.at];
+    return line !== undefined && line.depth === depth && line.name.toLowerCase() === name.toLowerCase();
+  }
+
   /** A field's value as written: a quoted string keeps its quotes. */
   raw(depth: number, name: string): string {
     return this.next(depth, name).value;
@@ -112,6 +118,20 @@ export class TextResource {
     return Number(value);
   }
 
+  /** A decimal number, integer or not: `1`, `2.18`. */
+  number(depth: number, name: string): number {
+    const { value, number } = this.next(depth, name);
+    if (!/^-?\d+(\.\d+)?$/.test(value)) throw new SerializerError(`${this.magic} line ${number}: "${value}" is no number`);
+    return Number(value);
+  }
+
+  /** `true` or `false`. */
+  bool(depth: number, name: string): boolean {
+    const { value, number } = this.next(depth, name);
+    if (value !== 'true' && value !== 'false') throw new SerializerError(`${this.magic} line ${number}: "${value}" is no bool`);
+    return value === 'true';
+  }
+
   /** A quoted string, unquoted; nothing in the game's files escapes a quote. */
   string(depth: number, name: string): string {
     const { value, number } = this.next(depth, name);
@@ -119,11 +139,23 @@ export class TextResource {
     return value.slice(1, -1);
   }
 
-  /** An array: its count line, then each `[i]` read by `element` at `depth + 1`. */
+  /**
+   * An array: its count line, then each `[i]` read by `element` at `depth + 1`.
+   *
+   * ❗ **Every `[n]` line that follows is an element, whatever the count says.**
+   * Two of the 01.28 update's `DLCt`s disagree with themselves: `c8f4e0ad`'s
+   * `GUIDS` says 2,377 and 2,378 follow, `[2368]` twice; `cf8dc422`'s `GUIDs`
+   * says 308 and 310 follow. Read to the count, the line after is not the next
+   * field; read by the lines, every one of the game's text resources ends on
+   * its last line. The index in the brackets is not checked.
+   */
   array<T>(depth: number, name: string, element: (index: number, value: string) => T): T[] {
-    const count = this.int(depth, name);
+    this.int(depth, name);
     const out: T[] = [];
-    for (let i = 0; i < count; i += 1) out.push(element(i, this.raw(depth + 1, `[${i}]`)));
+    for (let line = this.lines[this.at]; line?.depth === depth + 1 && /^\[\d+\]$/.test(line.name); line = this.lines[this.at]) {
+      this.at += 1;
+      out.push(element(out.length, line.value));
+    }
     return out;
   }
 

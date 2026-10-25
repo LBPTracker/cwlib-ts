@@ -4,7 +4,7 @@
  *
  * The field list is cwlib's `resources/RGfxMaterial.java` and `structs/gmat/`
  * (toolkit `fee22399`), a hypothesis until measured on **every `GMTb` in LBP3
- * PS4 1.28's four FARCs, 11,011 of them** (`dev/material-census.ts`) --
+ * PS4 01.00's four FARCs, 11,011 of them** (`dev/material-census.ts`) --
  * steering/level-files.md, *The game's materials*. ❗ The walk ends on the
  * payload's last byte in all of them, which is the proof; `readMaterial` throws
  * when it does not.

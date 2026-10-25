@@ -5,7 +5,7 @@
  *
  * The field list is cwlib's `resources/RBevel.java` and `structs/bevel/
  * BevelVertex.java` (toolkit `fee22399`), which carry no revision gates; it is
- * measured on every `BEVb` in LBP3 PS4 1.28's four FARCs
+ * measured on every `BEVb` in LBP3 PS4 01.00's four FARCs
  * (`dev/bevel-census.ts`) -- steering/level-files.md, *Bevels*. `readBevel`
  * throws when the walk does not end on the payload's last byte.
  */
