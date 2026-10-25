@@ -1211,7 +1211,7 @@ Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the
 (scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
 tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
 `PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
-`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, `ATXb`, `GLTb`, `VOPb`, the
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, `ATXb`, `GLTb`, `VOPb`, `RECb`, the
 `.trans`, and every
 text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 
@@ -1220,7 +1220,6 @@ text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 | none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | 812 of the FileDB's `.raw` are `gamedata/subtitles/<line>.raw`, 12 to 44 bytes of big-endian `u32`s, the first 0 or 3 and the rest rising (`create_thermometer.raw`: 3, 135, 318, 399, 516, 603): a dialogue line's subtitle timings, unit and meaning not measured. Two are `data/colcorrectpresets*.raw`, 904 bytes of mostly floats. Each `languages/<lang>_export.subt` is a `u32` count (587 in English) and then data of no fixed record size that looks compressed or ciphered |
 | none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
 | `RIFF` | 216 | `.smp`, the instruments' samples — read by lbptracker (`packages/lbp-tracker-lib/src/wav.ts`), whose `steering/game-assets.md` has them |
-| `RECb` | 91 | `.rec`, cwlib's `THING_RECORDING` with no class: the Move DLC cutscenes' recordings, versions `0x3c5`–`0x3d8`, a layout that changes between them (floats with zero low halves at `0x3c5`, a packed bit stream at `0x3d5`); the eboot names `RThingRecording` only in its type table |
 | `TUTb` | 2 | `.tut` (*Small resources*) |
 
 Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
@@ -1241,6 +1240,31 @@ on the payload's last byte in every one of the game's (`test/small-resources.tes
   length-prefixed block of audio, kept as bytes; its codec is not read.
 - ⚠️ **`TUTb`, `TUTORIALS`** (2 files) is not read: `tutorials_beta.tut` is `01 00`, and the other's
   215 bytes hold nine records of varints whose fields the bytes alone do not name.
+
+## Thing recordings — `RECb`
+
+`readThingRecording` in `src/resources/thing-recording.ts` reads a `RECb`, cwlib's `THING_RECORDING`
+with no class: a Thing's recorded path, in the LBP2 Move DLC's cutscenes and levels (91 files,
+`move_cutscene_intro_recording_01.rec`…, versions `0x3bd`–`0x3d9`).
+
+- ❗ **Read as the game's loader reads it, `v0xc79610` in `eboot-v128.bin`** (2026-10-25), found by
+  its version compares — `0x3c3`, `0x3c4` three times, `0x3ce`, `0x3d3`, `0x3d6`, every one inside
+  the recordings' range; `RThingRecording` is named only in the type table, and resources have
+  no RTTI. Three layouts by version:
+  - **up to `0x3c3`** an array of matrices (`v0xc924a0`), which the loader turns into frames
+    relative to the first;
+  - **`0x3c4`–`0x3d3`** three arrays: positions as three raw `f32` each (`v0xc92340` and its
+    element `v0xcdbab0`, fixed width though the stream compresses vectors), bytes (`v0xc921c0`)
+    and raw `f32`s (`v0xc91ff0`);
+  - **from `0x3d4`** one byte array (`v0xb03b50`), decoded afterwards by `v0x921b40`.
+  Past `0x3ce` and past `0x3d6` the loader only sets a flag on the recording.
+- ✔ **All 91 end on their payload's last byte** (`test/thing-recording.test.ts`): 1 of matrices,
+  54 of arrays, 36 packed. In all 54 the three arrays are equally long — a value of each per
+  frame — the positions are world units whose z is a layer's depth (-100, -200, -300, a mean
+  step of 87 units a frame), the `f32`s lie in [-π, π], an angle, and the bytes are 0 or 16.
+- ⚠️ The packed frames are kept as bytes: their decoder is `v0x921b40`, not ported. They open
+  with a `u32` and three `f32`s that read as a frame count and a starting position like the
+  arrays'. What the flag byte means is not known.
 
 ## Translation tables — `RTranslationTable`
 

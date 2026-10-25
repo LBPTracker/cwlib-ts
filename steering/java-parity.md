@@ -51,10 +51,11 @@ So any file in range walks to its end. What differs is what a reader returns:
 - **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
   `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
   the levels' `PQuest`s name ([level-files.md](level-files.md), *Quests*).
-- **A reader of a type Java has no class for** (4): from 0.4.21 `ADVENTURE_SHARED_DATA` (`ADSb`),
+- **A reader of a type Java has no class for** (5): from 0.4.21 `ADVENTURE_SHARED_DATA` (`ADSb`),
   whose payload is one `AdventureData` — `readAdventureSharedData`, proven on the game's three
   ([level-files.md](level-files.md), *Profiles*); from 0.4.23 `ANIMATED_TEXTURE`, `GUID_LIST` and
-  `VOIP_RECORDING` (*Small resources* there). `TUTORIALS` and `THING_RECORDING` have none.
+  `VOIP_RECORDING` (*Small resources* there). and from 0.4.24 `THING_RECORDING`
+  (`RECb`), by the game's loader (*Thing recordings* there). `TUTORIALS` has none.
 - **A reader of another form than Java's** (2, from 0.4.18): `RGuidSubst` and `RDLC`, which the
   game holds only in the engine's text serialisation (`GSBt`, `DLCt`): `readGuidSubst` and
   `readDlc`, read to every file's last line ([level-files.md](level-files.md), *Text resources*);
