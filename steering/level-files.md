@@ -512,6 +512,25 @@ through the remap when that misses.
 its toolkit uses it in — rewriting a PS4 FileDB back to the old GUIDs. Its comment that the path
 row's GUID is "the same as row.to" is wrong: it is the pair's second word.
 
+### Gathering what a resource needs — `gatherDependencies` in `src/archives/gather.ts`
+
+cwlib's `Resources.collect` (ennuo/toolkit `fee2239`), which a mod is built from: each resource with
+a binary header (`b` or `e` fourth byte) has its dependency table walked, every row fetched
+through a `resolve` the caller injects, dependencies before what needs them and the root last.
+
+- ✔ **On the game** (`test/gather.test.ts`, 2026-10-25): `obj_jam_jar.plan` gathers 11 resources
+  with nothing missing; `goty_levels/x-nobody-x.bin`, the biggest level in the FileDB, 1,256 —
+  by row type 532 textures (1), 325 scripts (11), 176 gfx materials (7), 98 meshes (2) and 50
+  plans (38) among them — in about half a second.
+- ❗ **What a FARC does not hold, a gather through the FARCs misses.** That level's 18 missing rows
+  all have FileDB rows: 8 `gamedata/audio/*.fsb` banks (type 0), and 10 rows of type 10 — 8 GUIDs
+  for one `empty_video.bik`, a `.fsb` and a `.bik` under `gamedata_orbis/`. Every one of those
+  11 paths lies loose in the install, so a resolver that is to miss nothing reads loose files by
+  FileDB path as well.
+- ❗ **527 of the game's 534 scripts name themselves** in their own dependency table — the loop
+  Java's comment fears, and why it skips every `SCRIPT` row. Here a row already seen, by GUID or
+  by SHA-1, is not fetched again, so the walk cannot loop and scripts are gathered too.
+
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`

@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library reads is in [level-files.md](level-files.md) beside each reader, and the
 places where it reads the same thing differently are *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 26 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 29 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -57,8 +57,9 @@ one-file `MODb`/`MODe` (`Mod.fromLegacyMod`) is not read.
 Java exports `RMesh` to glTF (`MeshExporter`), imports models and animations (`ModelImporter`,
 `AnimationImporter`, `BlendPacketImporter`), builds an `RStaticMesh` (`StaticMeshBuilder`),
 assembles material shaders (`CgAssembler`, `GfxAssembler`), converts resources to JSON (`gson/`),
-gathers a resource's dependencies (`GatherData`) and resolves resources across archives
-(`ResourceSystem`). This library has none of these.
+replaces a resource's dependencies with hashes (`Resources.hashinate`, which needs a writer for
+every resource) and resolves resources across archives (`ResourceSystem`). This library has none
+of these; its dependency gather, `Resources.collect`, is `gatherDependencies`.
 
 ## Revisions
 
