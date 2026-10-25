@@ -531,6 +531,27 @@ through a `resolve` the caller injects, dependencies before what needs them and 
   Java's comment fears, and why it skips every `SCRIPT` row. Here a row already seen, by GUID or
   by SHA-1, is not fetched again, so the walk cannot loop and scripts are gathered too.
 
+### One install opened — `openGame` in `src/archives/game.ts`
+
+cwlib's `ResourceSystem.extract` over one install: a GUID is its FileDB row, or the remap's when
+the FileDB misses (Java's `get` does not look there; only the toolkit's window loads a
+`RemapDB`); a row's SHA-1 is looked for in the FARCs, and failing that its path is read loose
+through an injected `loose` (`looseFiles(root)` in `platform/node.ts`), Java's `extractFromDisk`.
+
+- ✔ **With the loose files, `x-nobody-x.bin` gathers whole** (`test/game.test.ts`): 1,267
+  resources and none missing — the 1,256 above and the 11 loose files, the 8 GUIDs of
+  `empty_video.bik` landing on one.
+- ❗ **Where the FileDB's 107,673 rows lie** (scratch census, 2026-10-25): 74,854 in a FARC, 28,365
+  loose and none both; 4,454 in neither. Loose: 27,254 `.mp3`, 638 `.fsb`, 358 `.bik`, 92
+  `.farc`, 11 `.fnt`, 7 `.fev`, 5 `.prx` — and 28,359 of them hash to their row's SHA-1. In
+  neither: 1,480 rows with an empty path and a zero SHA-1, 2,960 `.mp3`, 8 `.fnt`, 6 `.fsb`.
+- ⚠️ **A loose file is not always its row's bytes.** The 5 `gamedata_orbis/spu/*.prx` are a tenth
+  of their rows' size or less, and `chunk1_001.farc` is a row of its own whose size matches and
+  whose SHA-1 does not; `base_001.farc`'s row hashes true. `resolve` hands a loose file over as
+  it is, as Java does, so a caller that must have the row's bytes checks the hash.
+- ⚠️ `looseFiles` reads a whole file, so a row naming a FARC (over 2 GiB for `chunk1_001.farc`)
+  throws there; open a FARC with `openFileAccess` instead.
+
 ### What of the game's own Things opens
 
 Every `PLNb` and `LVLb` in the four archives through `readThings`, `dev/things-census.ts`

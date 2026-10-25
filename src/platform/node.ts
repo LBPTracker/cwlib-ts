@@ -6,6 +6,7 @@
 
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
 import { open, readFile } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 
 import type { RandomAccess } from '../archives/farc.ts';
 import type { Inflate, Resource } from '../io/resource.ts';
@@ -56,5 +57,23 @@ export async function openFileAccess(path: string): Promise<RandomAccess & { clo
       return out;
     },
     close: () => handle.close(),
+  };
+}
+
+/**
+ * A folder's loose files by FileDB path, for `openGame`'s `loose`: undefined
+ * where there is no such file. A path that climbs out of the folder is refused.
+ */
+export function looseFiles(root: string): (path: string) => Promise<Uint8Array | undefined> {
+  const base = resolve(root);
+  return async (path) => {
+    const file = resolve(base, path);
+    if (file !== base && !file.startsWith(base + sep)) throw new Error(`${path} is outside ${root}`);
+    try {
+      return new Uint8Array(await readFile(file));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    }
   };
 }

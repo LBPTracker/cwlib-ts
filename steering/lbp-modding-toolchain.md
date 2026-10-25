@@ -175,6 +175,7 @@ never silently follow the toolkit against our own measurement.
 | 27 | a FARC's table, written | `FileArchive.save` appends the new rows after the old ones, unsorted | the whole table sorted by SHA-1 (`writeFarcTable`) | all four of the game's archives hold it sorted, and each table is written back as it is ([level-files.md](level-files.md), *FARC*) |
 | 28 | a resource reached twice in a gather | `Resources.collect` walks every table afresh and adds a shared resource once per row that names it | each row and each resource once (`gatherDependencies`) | the same bytes are the same resource; a mod needs one copy ([level-files.md](level-files.md), *Gathering what a resource needs*) |
 | 29 | a script's dependencies in a gather | skipped, every `SCRIPT` row | walked like any other | 527 of the game's 534 scripts name themselves, the loop Java skips them for; a walk that does not revisit cannot loop ([level-files.md](level-files.md), *Gathering what a resource needs*) |
+| 30 | a GUID the FileDB does not list | `ResourceSystem.get` misses | followed through `orbisguids.remap` (`openGame`) | 11,667 of the game's 12,346 material GUIDs on its meshes resolve only through the remap ([level-files.md](level-files.md), *The GUID remap*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the
