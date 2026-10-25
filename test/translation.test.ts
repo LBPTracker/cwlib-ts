@@ -7,7 +7,7 @@ import test from 'node:test';
 import { openFarc } from '../src/archives/farc.ts';
 import { readFileDB } from '../src/archives/filedb.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import { readTranslationTable, translate, lamsKeyId } from '../src/resources/translation.ts';
+import { lamsKeyId, patchTranslationTable, readTranslationTable, translate, writeTranslationTable } from '../src/resources/translation.ts';
 import { readPlan } from '../src/things/level.ts';
 
 /**
@@ -32,6 +32,16 @@ test('a translation table with no keys is empty', () => {
   assert.throws(() => readTranslationTable(new Uint8Array([0xfe, 0xff, 0, 0x41])), /text translation table/);
 });
 
+test('a table is written back with its texts shared, and a patch adds only what is missing', () => {
+  const table = new Map([[0xffffffff, 'Jam'], [2, 'Jar'], [1, 'Jam']]);
+  const bytes = writeTranslationTable(table);
+  // Three keys, two texts: BOM + 3 characters each.
+  assert.equal(bytes.length, 4 + 3 * 8 + 2 * 8);
+  assert.deepEqual(readTranslationTable(bytes), new Map([[1, 'Jam'], [2, 'Jar'], [0xffffffff, 'Jam']]));
+  const patched = patchTranslationTable(table, new Map([[2, 'Pot'], [3, 'Lid']]));
+  assert.deepEqual([patched.get(2), patched.get(3)], ['Jar', 'Lid']);
+});
+
 test('every one of the game\'s tables reads, and English names a plan, a quest and a bubble', async (t) => {
   if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
@@ -49,6 +59,7 @@ test('every one of the game\'s tables reads, and English names a plan, a quest a
   let full = 0;
   for (const row of rows) {
     const table = readTranslationTable(bytes.get(row.sha1)!);
+    assert.deepEqual(writeTranslationTable(table), bytes.get(row.sha1), `${row.path} is written back as it is`);
     if (table.size > 0) full += 1;
     else assert.match(row.path, /\/patch\//, `${row.path} is empty`);
   }

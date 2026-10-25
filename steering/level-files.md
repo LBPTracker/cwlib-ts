@@ -390,7 +390,8 @@ the Import/Export view writes one around the `.plan` ([export-to-game.md](export
 | `config.json` | `ModInfo`: `ID`, `type` ("pack"), `title`, `version`, `author`, `description` |
 | `data.map` | a FileDB, revision `0x01480100` — LBP3 rows: `i16` path length, path, `u32` date, `u32` size, SHA-1, `u32` GUID; ascending GUID |
 | `data.farc` | the rows' bytes as a `FAR4`: sorted by SHA-1 hex, padded to 4, a 0x84-byte save key holding only the revision (head `0x021803f9`, branch `0x4d5a`/`0xc` — the toolkit's own "Mizuki"), the table, a **zeroed** hashinate |
-| `icon.png`, `patches.json` | optional; neither read nor written here |
+| `icon.png` | optional; read and written as the bytes it is (Java re-encodes its `ImageIcon`) |
+| `patches.json` | optional, and only when there are patches: Gson's `ModPatch[]`, of which cwlib has one kind — `{"type": "TRANSLATION", "name", "languages": [...], "keys": [{"tag", "string"}]}`, `languages` `["*"]` from a legacy mod. `type` is matched without case, any other dropped (`PatchSerializer`). ⚠️ Nothing in the toolkit at `fee2239` applies one; `translationPatchTable` makes its keys a table for `patchTranslationTable` |
 
 A new row's GUID is the first free one from `0x00180000`, cwlib's "not used by any game".
 
@@ -1386,6 +1387,11 @@ such as `NP_TU01B_130_NEWTON`, and `translate` takes either. FileDB paths
   `3423480070` is "My Objects"; every quest title, description and objective that is a tag (59;
   the other 26 are plain text); and 63 of the 70 tags in the FARC levels' and plans' script
   fields. The rest are in no table here.
+- ✔ **Written too** (`writeTranslationTable`, 0.4.36, cwlib's `build`): keys sorted, each distinct
+  text once at the offset of the first key that uses it. **All 46 come back byte for byte**
+  (`test/translation.test.ts`) — no table holds a text twice, and the texts lie in the order of
+  their first key. `patchTranslationTable` is cwlib's `patch`: ⚠️ it adds only the keys the table
+  lacks, so a key it already holds keeps its text; no patch in the game has text to test that on.
 
 ## Fonts — `RFontFace`
 

@@ -92,3 +92,55 @@ export function readTranslationTable(bytes: Uint8Array): TranslationTable {
 export function translate(table: TranslationTable, key: string | number): string | undefined {
   return table.get(typeof key === 'string' ? lamsKeyId(key) : key >>> 0);
 }
+
+/**
+ * Write a `.trans`: cwlib's `RTranslationTable.build`. The keys go out sorted,
+ * each distinct text once, at the offset of the first key that uses it.
+ *
+ * ✔ **Every one of the game's 46 tables comes back byte for byte**
+ * (`test/translation.test.ts`): their keys are sorted, no text is held twice,
+ * and the texts lie in the order of their first key -- the order this writes.
+ */
+export function writeTranslationTable(table: TranslationTable): Uint8Array {
+  const keys = [...table.keys()].map((k) => k >>> 0).sort((a, b) => a - b);
+  const offsets = new Map<string, number>();
+  const texts: string[] = [];
+  let size = 0;
+  const at = keys.map((key) => {
+    const value = table.get(key)!;
+    let offset = offsets.get(value);
+    if (offset === undefined) {
+      offset = size;
+      offsets.set(value, offset);
+      texts.push(value);
+      size += 2 + value.length * 2;
+    }
+    return offset;
+  });
+  const strings = 4 + keys.length * 8;
+  const out = new Uint8Array(strings + size);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, keys.length);
+  keys.forEach((key, i) => {
+    view.setUint32(4 + i * 8, key);
+    view.setUint32(8 + i * 8, at[i]);
+  });
+  let to = strings;
+  for (const text of texts) {
+    view.setUint16(to, BOM);
+    for (let i = 0; i < text.length; i += 1) view.setUint16(to + 2 + i * 2, text.charCodeAt(i));
+    to += 2 + text.length * 2;
+  }
+  return out;
+}
+
+/**
+ * cwlib's `RTranslationTable.patch`: `patch`'s keys added where `table` has no
+ * text. ⚠️ **A key the table already holds keeps its text** -- Java's rule, and
+ * the only definition there is; the game holds no patch with text to test it on.
+ */
+export function patchTranslationTable(table: TranslationTable, patch: TranslationTable): TranslationTable {
+  const out = new Map(table);
+  for (const [key, value] of patch) if (!out.has(key >>> 0)) out.set(key >>> 0, value);
+  return out;
+}

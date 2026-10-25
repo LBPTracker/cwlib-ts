@@ -25,7 +25,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`archives/`** | |
 | `farc.ts`, `filedb.ts` | the game's FARC archives (SHA-1 → bytes, read lazily, and written), its FileDB (GUID → path, SHA-1; read and written) and its GUID remap |
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
-| `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages, a stored/deflated ZIP reader and writer, `PARAM.SFO` |
+| `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages (with their icon and translation patches), a stored/deflated ZIP reader and writer, `PARAM.SFO` |
 | **`things/`** | |
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
 | `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
@@ -51,7 +51,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `animated-texture.ts`, `guid-list.ts`, `voip-recording.ts` | `ATXb` (a flipbook: its atlas and frame size), `GLTb` (a list of GUIDs), `VOPb` (a recorded voice, as bytes) |
 | `tutorials.ts` | `RTutorials` (`TUTb`): the tutorial videos by group, each with its title, description and thumbnail |
 | `thing-recording.ts` | `RThingRecording` (`RECb`): a Thing's recorded path, per frame a position, an angle and a flag, as the game's loader reads it — the newest packed into a bit stream, decoded |
-| `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
+| `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash; read and written |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |
 | `slot.ts`, `network.ts`, `inventory.ts` | the structs more than one resource or part reads: a slot, a PSN identity, an item's inventory details |

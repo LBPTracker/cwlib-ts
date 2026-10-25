@@ -3,7 +3,8 @@ import test from 'node:test';
 
 import { readBackup, readBackupZip } from '../src/sequencer/backup.ts';
 import { DEFAULT_CHIP_COLOUR } from '../src/sequencer/chips.ts';
-import { MIN_SAFE_GUID, looksLikeMod, readMod, writeMod } from '../src/archives/mod.ts';
+import { MIN_SAFE_GUID, looksLikeMod, readMod, translationPatchTable, writeMod } from '../src/archives/mod.ts';
+import { lamsKeyId, patchTranslationTable } from '../src/resources/translation.ts';
 import { nodeDeflate, nodeInflate, nodeInflateRaw } from '../src/platform/node.ts';
 import type { Sequencer } from '../src/sequencer/project.ts';
 import { readFar, saveArchiveRevision, writeFar } from '../src/archives/savearchive.ts';
@@ -74,6 +75,8 @@ test('a mod holds its config and its rows, and hands out GUIDs from the safe ran
     back.entries.map((e) => [e.path, e.guid, e.bytes[0]]),
     [['plans/a.plan', MIN_SAFE_GUID, 1], ['plans/b.plan', MIN_SAFE_GUID + 1, 2]],
   );
+  assert.deepEqual(back.patches, []);
+  assert.equal(back.icon, undefined);
   await assert.rejects(writeMod({}, [
     { path: 'x', bytes: Uint8Array.of(1), guid: 5 },
     { path: 'y', bytes: Uint8Array.of(2), guid: 5 },
@@ -109,4 +112,20 @@ test('the trap the mod route exists for: its farc, read as a pile, is taken for 
   assert.equal(result.projects.length, 0);
   assert.equal((await readBackupZip(mod, nodeInflate, nodeInflateRaw)).projects.length, 1);
   assert.ok(result.saves[0]?.why, 'XXTEA over plain bytes fails every SHA-1');
+});
+
+test("a mod's icon and translation patch come back, and the patch fills a table's gaps", async () => {
+  const icon = Uint8Array.of(0x89, 0x50, 0x4e, 0x47);
+  const patch = { type: 'TRANSLATION' as const, name: 'Translations', languages: ['*'], keys: [{ tag: 'MY_TITLE', string: 'My Song' }] };
+  const files = await readZip(await writeMod({}, [{ path: 'p.plan', bytes: Uint8Array.of(1) }], new Date(0), { patches: [patch], icon }), nodeInflateRaw);
+  assert.deepEqual(files.map((f) => f.name), ['config.json', 'icon.png', 'patches.json', 'data.map', 'data.farc']);
+  const back = await readMod(files);
+  assert.deepEqual(back.patches, [patch]);
+  assert.deepEqual(back.icon, icon);
+  const table = patchTranslationTable(new Map([[1, 'Jam']]), translationPatchTable(back.patches[0]));
+  assert.equal(table.get(lamsKeyId('MY_TITLE')), 'My Song');
+  // PatchSerializer matches the type without case and drops what it does not know.
+  const json = new TextEncoder().encode(JSON.stringify([{ type: 'translation', languages: [], keys: [] }, { type: 'MESH' }]));
+  const loose = await readMod([...files.filter((f) => f.name !== 'patches.json'), { name: 'patches.json', bytes: json }]);
+  assert.deepEqual(loose.patches, [{ type: 'TRANSLATION', languages: [], keys: [] }]);
 });

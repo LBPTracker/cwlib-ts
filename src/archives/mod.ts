@@ -11,7 +11,8 @@
  * | `config.json` | `ModInfo`: ID, type, title, version, author, description |
  * | `data.map` | a FileDB, read by `readFileDB` in `filedb.ts`: path, date, size, SHA-1, GUID per row |
  * | `data.farc` | a `FAR4` save archive **in the clear**, the rows' bytes by SHA-1 |
- * | `icon.png`, `patches.json` | optional; neither is read or written here |
+ * | `icon.png` | optional; its bytes, kept as they are |
+ * | `patches.json` | optional; `ModPatch[]` by Gson, of which cwlib has one kind, `TranslationPatch` |
  *
  * ⚠️ **`data.farc` ends in the same `FAR4` magic a PS3 save does and is NOT
  * encrypted.** `backup.ts` finds a save by that magic and XXTEA-decrypts it, so
@@ -23,6 +24,7 @@
  */
 
 import { toHex } from '../io/hex.ts';
+import { lamsKeyId, type TranslationTable } from '../resources/translation.ts';
 import { readFileDB, writeFileDB } from './filedb.ts';
 import { readFar, writeFar } from './savearchive.ts';
 import { writeZip, type ZipFile } from './zip.ts';
@@ -45,6 +47,48 @@ export const DEFAULT_MOD_INFO: ModInfo = {
   author: 'Sackthing',
   description: 'No description was provided.',
 };
+
+/**
+ * cwlib's `TranslationPatch`, as Gson writes it into `patches.json`
+ * (`io/gson/PatchSerializer.java`): text by tag, for the languages named.
+ *
+ * ⚠️ **Nothing in the toolkit applies one.** cwlib reads, keeps and writes it
+ * (`Mod.java`; `fromLegacyMod` makes one of a legacy mod's LAMS rows) and no
+ * class at `fee2239` reads it back; `translationPatchTable` and
+ * `patchTranslationTable` in `translation.ts` are how this library would.
+ */
+export interface TranslationPatch {
+  readonly type: 'TRANSLATION';
+  readonly name?: string;
+  /** Language names; `fromLegacyMod` writes `*` for every language. */
+  readonly languages: readonly string[];
+  readonly keys: readonly { readonly tag: string; readonly string: string }[];
+}
+
+/** A patch's text by LAMS key, to hand `patchTranslationTable`. */
+export function translationPatchTable(patch: TranslationPatch): TranslationTable {
+  return new Map(patch.keys.map(({ tag, string }) => [lamsKeyId(tag), string]));
+}
+
+/**
+ * `patches.json`: what `PatchSerializer` reads. Its `type` is matched without
+ * case, and a patch of any other type is dropped, as Java's `null` is.
+ */
+function readPatches(bytes: Uint8Array): TranslationPatch[] {
+  const json = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  if (!Array.isArray(json)) throw new Error('patches.json is not an array');
+  return json.flatMap((patch: Record<string, unknown> | null) => {
+    if (typeof patch?.type !== 'string' || patch.type.toLowerCase() !== 'translation') return [];
+    return [{
+      type: 'TRANSLATION' as const,
+      ...(typeof patch.name === 'string' ? { name: patch.name } : {}),
+      languages: Array.isArray(patch.languages) ? patch.languages.map(String) : [],
+      keys: Array.isArray(patch.keys)
+        ? patch.keys.map((k: { tag?: unknown; string?: unknown }) => ({ tag: String(k.tag ?? ''), string: String(k.string ?? '') }))
+        : [],
+    }];
+  });
+}
 
 /** One row of `data.map` with the bytes it names. */
 export interface ModEntry {
@@ -79,7 +123,7 @@ export function looksLikeMod(files: readonly ZipFile[]): boolean {
  */
 export async function readMod(
   files: readonly ZipFile[],
-): Promise<{ config: ModInfo; entries: ModEntry[] }> {
+): Promise<{ config: ModInfo; entries: ModEntry[]; patches: TranslationPatch[]; icon?: Uint8Array }> {
   const configFile = leaf(files, 'config.json');
   const map = leaf(files, 'data.map');
   if (!configFile) throw new Error('mod is missing config.json');
@@ -98,11 +142,15 @@ export async function readMod(
     const bytes = bySha1.get(sha1) ?? leaf(files, path)?.bytes;
     if (bytes) entries.push({ path, guid, bytes });
   }
-  return { config, entries };
+  const patches = leaf(files, 'patches.json');
+  const icon = leaf(files, 'icon.png')?.bytes;
+  return { config, entries, patches: patches ? readPatches(patches.bytes) : [], ...(icon ? { icon } : {}) };
 }
 
 /**
- * Write a `.mod`: `Mod.save`, without the icon and the patches.
+ * Write a `.mod`: `Mod.save`. The icon goes in as the PNG it is given --
+ * Java re-encodes its `ImageIcon` -- and `patches.json` only when there are
+ * patches, as `save` writes it.
  *
  * An entry with no GUID takes the next free one from `MIN_SAFE_GUID`, which is
  * `FileDB.getNextGUID`. Rows go out in ascending GUID order, as `FileDB.build`
@@ -112,6 +160,7 @@ export async function writeMod(
   info: Partial<ModInfo>,
   items: readonly { path: string; bytes: Uint8Array; guid?: number }[],
   when = new Date(),
+  { patches = [], icon }: { patches?: readonly TranslationPatch[]; icon?: Uint8Array } = {},
 ): Promise<Uint8Array> {
   const used = new Set(items.flatMap((i) => (i.guid === undefined ? [] : [i.guid])));
   if (used.size !== items.filter((i) => i.guid !== undefined).length) {
@@ -146,6 +195,8 @@ export async function writeMod(
   const config = JSON.stringify({ ...DEFAULT_MOD_INFO, ...info }, null, 2);
   return writeZip([
     { name: 'config.json', bytes: new TextEncoder().encode(config) },
+    ...(icon ? [{ name: 'icon.png', bytes: icon }] : []),
+    ...(patches.length > 0 ? [{ name: 'patches.json', bytes: new TextEncoder().encode(JSON.stringify(patches, null, 2)) }] : []),
     { name: 'data.map', bytes: map },
     { name: 'data.farc', bytes: await writeFar(rows.map((r) => r.bytes), MIZUKI) },
   ], when);
