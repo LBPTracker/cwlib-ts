@@ -4,8 +4,8 @@
  *
  * Each resource with a binary header carries a dependency table
  * (`readDependencies`); each row is fetched through `resolve` -- injected, as
- * the FARCs and the FileDB are the caller's (lbprender's `scene/game.ts` joins
- * them) -- and walked in turn, dependencies before what needs them, the root last.
+ * the FARCs and the FileDB are the caller's (`openGame`'s `resolve` in
+ * `game.ts` joins them) -- and walked in turn, dependencies before what needs them, the root last.
  *
  * Where this differs from Java (lbp-modding-toolchain.md, *Where we
  * deliberately differ*):
