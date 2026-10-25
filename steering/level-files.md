@@ -1211,7 +1211,7 @@ Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the
 (scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
 tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
 `PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
-`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `DLCt`, `SLTb`, `ADCb`, `CCDb`, and the `.trans`. Without:
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `DLCt`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, and the `.trans`. Without:
 
 | magic | count | what the FileDB calls them |
 |---|---|---|
@@ -1223,7 +1223,6 @@ tables, the `.raw` files — so it is a list, not proof of absence. With a reade
 | `SSPt` | 63 | `.sph`, text |
 | `ATXb` | 24 | `.atx` |
 | `VOPb` | 4 | inside crossplay `.cpv`s |
-| `ADSb` | 3 | `.ads`, the `ADCb`s' shared data |
 | `TUTb`, `GLTb` | 2 each | `.tut`, `.glst` |
 | text | 13 `ASTt`, 9 `CHAt`, 8 `PBRt`, 6 `SASt`, 5 `ABKt`, one each `SLTt`, `LMTt`, `AUMt`, `MIXt` | |
 
@@ -1328,6 +1327,12 @@ the play data it starts with, its `ADSb` and its photos. Both are cwlib's walks 
   *28* in [open-questions.md](open-questions.md). No profile off the branch exists here to show
   cwlib's walk without it.
 - `PlayedLevelData` on the Vita's branch is not ported and refuses; the three `ADCb` are off it.
+- ✔ **An `ADSb` — the shared data an `ADCb` names — is one `AdventureData`**, the struct
+  `RLevel` ends with: all three (`….ads` beside each `.adc`, subVersions `0x170`, `0x1a9`, `0x1ab`)
+  end on their last byte with it alone (`readAdventureSharedData`, `test/profiles.test.ts`).
+  cwlib has the type, `ADVENTURE_SHARED_DATA`, and no class. The story's holds 8 items, 24 quests —
+  every one a `.qst` — and 9 start points, each a level's slot and the streaming ids it starts at
+  (`Manglewood Blueprint`, `Zom Zom Exterior`, …).
 
 ## Quests — `RQuest`
 

@@ -9,6 +9,7 @@ import { readFileDB } from '../src/archives/filedb.ts';
 import { magicOf } from '../src/io/resource.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readAdventureCreateProfile } from '../src/resources/adventure-create-profile.ts';
+import { readAdventureSharedData } from '../src/resources/adventure-shared-data.ts';
 import { readSyncedProfile } from '../src/resources/synced-profile.ts';
 
 /**
@@ -66,4 +67,16 @@ test('the three adventure create profiles read to their last byte', async (t) =>
   assert.ok(story.planetWorld?.parts.has('WORLD'));
   assert.ok(story.areas[0].area?.parts.has('LEVEL_SETTINGS'), 'an area is a world with its own settings');
   for (const name of profiles.keys()) await readAdventureCreateProfile(profiles.get(name)!, nodeInflate);
+});
+
+test("each adventure's shared data is one AdventureData, to its last byte, and names its quests", async (t) => {
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
+  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const pathOfGuid = new Map([...db.values()].map((r) => [r.guid, r.path]));
+  const shared = await byMagic('ADSb');
+  assert.equal(shared.size, 3);
+  for (const bytes of shared.values()) await readAdventureSharedData(bytes, nodeInflate);
+  const story = await readAdventureSharedData(shared.get('gamedata/lbp3/marketing_demo1/adventure.ads')!, nodeInflate);
+  assert.deepEqual([story.items.length, story.quests.length, story.startPoints.length], [8, 24, 9]);
+  assert.ok(story.quests.every((q) => pathOfGuid.get(q!.guid)?.endsWith('.qst')), 'every quest is a .qst');
 });

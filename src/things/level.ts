@@ -25,11 +25,11 @@
  */
 
 import { magicOf, openSerializer, type Inflate } from '../io/resource.ts';
-import { Serializer, SerializerError, requireLbp3, vitaRevision, type RevisionInfo } from '../io/serializer.ts';
+import { Serializer, SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
 import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type SequencerPart } from './parts.ts';
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
 import { toHex } from '../io/hex.ts';
-import { readSlotId } from '../structs/slot.ts';
+import { readSlotId, type SlotId } from '../structs/slot.ts';
 import { readNetworkPlayerId } from '../structs/network.ts';
 import { readInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
 import { readInventoryItem } from './parts/poppet-powerup.ts';
@@ -769,39 +769,63 @@ export async function readLevel(
   return unreadTail === undefined ? parse : { ...parse, unreadTail };
 }
 
+/** `AdventureItem`: an item an adventure hands out, by its id in the adventure. */
+export interface AdventureItem {
+  readonly puid: number;
+  readonly plan?: ResourceRef;
+  readonly flags: number;
+  readonly iconPuid: number;
+}
+
+/**
+ * `AdventureData`: what an adventure shares across its levels -- its items, its
+ * quests, where each level can start. The payload of an `ADSb` and the tail of
+ * an `RLevel` from subVersion 0x169 (`resources/adventure-shared-data.ts`).
+ */
+export interface AdventureData {
+  readonly fixedId: number;
+  readonly itemPuidCounter: number;
+  readonly items: readonly AdventureItem[];
+  /** `RQuest`s (`QSTb`), by descriptor. */
+  readonly quests: readonly (ResourceRef | undefined)[];
+  /** Each start point: a level's slot and the streaming ids it starts at. */
+  readonly startPoints: readonly { readonly slot: SlotId; readonly ids: readonly { name: string; id: number }[] }[];
+}
+
 /** `AdventureItem`: cwlib's `structs/level/AdventureItem.java`. */
-function readAdventureItem(s: Serializer): void {
+function readAdventureItem(s: Serializer): AdventureItem {
   const { subVersion } = s.revision;
-  s.i32(); // PUID
-  s.resource(true); // a plan
+  const puid = s.i32();
+  const plan = s.resource(true);
   if (subVersion < 0xae) {
     s.u16();
     s.u8();
     s.f32();
     s.i32();
   }
-  if (subVersion > 0xbe) s.i32(); // flags
-  if (subVersion > 0xe0) s.i32(); // iconPUID
+  const flags = subVersion > 0xbe ? s.i32() : 0;
+  const iconPuid = subVersion > 0xe0 ? s.i32() : 0;
+  return { puid, plan, flags, iconPuid };
 }
 
 /** `AdventureData`: cwlib's `structs/level/AdventureData.java`. */
-function readAdventureData(s: Serializer): void {
+export function readAdventureData(s: Serializer): AdventureData {
   const { subVersion } = s.revision;
-  if (subVersion > 0xaf) s.i32(); // adventureFixedID
+  const fixedId = subVersion > 0xaf ? s.i32() : 0;
+  let itemPuidCounter = 0;
+  let items: AdventureItem[] = [];
   if (subVersion > 0x93) {
-    s.i32(); // adventureItemPUIDCounter
-    s.array(readAdventureItem);
+    itemPuidCounter = s.i32();
+    items = s.array(readAdventureItem);
   }
-  if (subVersion > 0xa6) {
-    const count = s.count();
-    for (let i = 0; i < count; i += 1) s.resource(true); // a quest
-  }
-  if (subVersion >= 0xd1) {
-    s.array((self) => {
-      readSlotId(self); // StartPoint.slot
-      self.array(readStreamingId); // StartPoint.ids
-    });
-  }
+  const quests = subVersion > 0xa6 ? s.array((self) => self.resource(true)) : [];
+  const startPoints = subVersion >= 0xd1
+    ? s.array((self) => ({
+      slot: readSlotId(self),
+      ids: self.array((x) => ({ name: x.wstr(), id: x.i32() })),
+    }))
+    : [];
+  return { fixedId, itemPuidCounter, items, quests, startPoints };
 }
 
 /**
