@@ -176,6 +176,11 @@ never silently follow the toolkit against our own measurement.
 | 28 | a resource reached twice in a gather | `Resources.collect` walks every table afresh and adds a shared resource once per row that names it | each row and each resource once (`gatherDependencies`) | the same bytes are the same resource; a mod needs one copy ([level-files.md](level-files.md), *Gathering what a resource needs*) |
 | 29 | a script's dependencies in a gather | skipped, every `SCRIPT` row | walked like any other | 527 of the game's 534 scripts name themselves, the loop Java skips them for; a walk that does not revisit cannot loop ([level-files.md](level-files.md), *Gathering what a resource needs*) |
 | 30 | a GUID the FileDB does not list | `ResourceSystem.get` misses | followed through `orbisguids.remap` (`openGame`) | 11,667 of the game's 12,346 material GUIDs on its meshes resolve only through the remap ([level-files.md](level-files.md), *The GUID remap*) |
+| 31 | an `RMesh` primitive's vertices in glTF | accessors cut at `minVert..maxVert` | the whole vertex set, shared, indexed by the triangles (`meshToGlb`) | six of the game's meshes have a range that is no bound ([level-files.md](level-files.md), *The game's meshes*) |
+| 32 | a joint named in two weighted slots | written as it is | folded into the first slot, weights added | 335,720 of the game's vertices; glTF refuses it, skinning makes it the same pose ([level-files.md](level-files.md), *Written as glTF*) |
+| 33 | an inverse bind matrix's last row | written as it is | written (0, 0, 0, 1) | off by up to 2.4e-7 on element 15; glTF wants it exact ([level-files.md](level-files.md), *Written as glTF*) |
+| 34 | NaN in a mesh's vertex streams | written as it is | written 0 | 41 values in two meshes; glTF refuses NaN ([level-files.md](level-files.md), *Written as glTF*) |
+| 35 | a skinned mesh's node | under the armature | at the scene's root | glTF's advice; with rows 31–34, all 5,941 game meshes validate clean ([level-files.md](level-files.md), *Written as glTF*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

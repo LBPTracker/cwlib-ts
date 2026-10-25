@@ -764,6 +764,28 @@ checkout and the archive sample — 13,033 render meshes, 2026-10-19:
   is not. `test/mesh.test.ts` pins `ascetic.lvl`'s 104.
 - `visibilityFlags`: 3 on 11,937, 2 on 1,073, 0 on 23 — cwlib's bit 0 play mode, bit 1 edit mode.
 
+### Written as glTF — `meshToGlb` in `src/resources/mesh-gltf.ts`
+
+cwlib's `MeshExporter.GLB.FromMesh` (ennuo/toolkit `fee2239`), without textures: one glTF mesh
+per primitive `region`, positions, normals, every UV channel, the bones as a skin, the morphs as
+targets named in `extras.targetNames`; a material is a name the caller gives (`materialName`).
+
+- ✔ **All 5,941 of the game's meshes validate with no error and no warning** under Khronos's
+  `gltf-validator` 2.0.0-dev.3.10 (scratch census, 2026-10-25; 537 MB of `.glb`); `test/mesh-gltf.test.ts`
+  reads one back and `sack_boy.mol` whole. Every one is skinned. Getting there measured four
+  things Java's export does not deal with, each a row of *Where we deliberately differ*:
+  - ❗ **335,720 vertices name one joint in two slots, both weighted**: the remainder weight goes
+    to the fourth joint byte (`readMesh`), often the first slot's joint again. glTF refuses the
+    repeat; the export folds it into the first slot, which skinning makes the same pose.
+  - **An inverse bind matrix's last row is (0, 0, 0, 1) only to 2.4e-7** on the element 15 —
+    elements 3, 7 and 11 are exactly 0 on every bone — and glTF wants it exact; it is written so.
+  - **NaN**: 21 morph offsets of `c7a1a3b0` and 20 values of `22e0a38f`'s second UV channel,
+    written 0.
+  - **Two meshes have no vertex at all**, `9cb6855f` and `d875feda`: skeletons of 43 bones, one
+    with 29 morph names. They are written as the skeleton alone.
+- A bone's node is its local pose, `parent.invSkinPose × skinPose`, as translation, rotation and
+  scale — Java's decomposition; a raw `matrix` fails glTF's TRS check on float noise.
+
 ## Shapes — `PShape` and `PGeneratedMesh`
 
 A level's material geometry — wood, cardboard, stone — is not a mesh: it is a Thing's `PShape`

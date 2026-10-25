@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library reads is in [level-files.md](level-files.md) beside each reader, and the
 places where it reads the same thing differently are *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 30 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 35 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -54,7 +54,8 @@ one-file `MODb`/`MODe` (`Mod.fromLegacyMod`) is not read.
 
 ## Tools
 
-Java exports `RMesh` to glTF (`MeshExporter`), imports models and animations (`ModelImporter`,
+Java exports an `RMesh`'s textures and vertex colours into its glTF, an `RStaticMesh` and an
+`RAnimation` to glTF too, and an `RMesh` to OBJ (`MeshExporter`; the mesh itself is `meshToGlb`), imports models and animations (`ModelImporter`,
 `AnimationImporter`, `BlendPacketImporter`), builds an `RStaticMesh` (`StaticMeshBuilder`),
 assembles material shaders (`CgAssembler`, `GfxAssembler`), converts resources to JSON (`gson/`),
 replaces a resource's dependencies with hashes (`Resources.hashinate`, which needs a writer for
