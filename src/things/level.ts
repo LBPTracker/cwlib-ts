@@ -1,18 +1,20 @@
 /**
  * Reading a level far enough to find its music.
  *
- * ## The parse is deliberately a prefix
+ * ## The parse runs to the payload's last byte, and says when it cannot
  *
  * A level's stream is `RLevel` → `worldThing` → that Thing's parts → `PWorld` →
- * `things`, and **everything this project needs is inside `things`**. Once that
- * array is read the walk stops: the rest of `PWorld` (rewards, lighting, trophy
- * conditions, Vita branches) and the rest of `RLevel` (player record, tutorial
- * inventory, adventure data) are hundreds of lines of serialiser that would only
- * be read to reach the end of a file nobody is going to write back yet.
+ * `things`, and **everything this project needs is inside `things`**. Once
+ * that array is read, `readLevel` goes on -- the rest of `PWorld`, the world
+ * Thing's other parts, the rest of `RLevel` (player record, tutorial
+ * inventory, adventure data) -- and requires the payload's last byte at the end.
+ * Where that does not hold the Things are still returned, and `unreadTail`
+ * says why.
  *
- * ⚠️ That is a real constraint on step 7, round-trip export: writing a level
- * back out needs all of it. Stopping early is safe **only** while the direction
- * is read-only, and `StopParse` below is where that assumption lives.
+ * ❗ **It used to stop at `things`, and a level that "read" proved little**:
+ * the array is references, so a part read too short left zero bytes that read
+ * as null references and the walk went on. Twelve Vita levels "opened" under
+ * part readers that were wrong (steering/level-files.md, *The Vita branch*).
  *
  * ## What cannot be skipped
  *
@@ -28,15 +30,8 @@ import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type 
 import { readThingRef, type PartReader, type Thing } from './thing.ts';
 import { toHex } from '../io/hex.ts';
 import { readSlotId } from '../structs/slot.ts';
-
-/** Thrown once `PWorld.things` is in hand, to stop reading the rest. */
-class StopParse extends Error {
-  readonly things: (Thing | undefined)[];
-  constructor(things: (Thing | undefined)[]) {
-    super('stop');
-    this.things = things;
-  }
-}
+import { readNetworkPlayerId } from '../structs/network.ts';
+import { readInventoryItem } from './parts/poppet-powerup.ts';
 
 /**
  * A struct the corpus never actually populates.
@@ -424,7 +419,7 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
  * The fields before `things` are few and all gated on subVersion. Each gate below
  * reads its field or nothing; whatever older layout cwlib has behind them is
  * omitted rather than left as dead code. `readLevel`'s outermost
- * world passes `tail` false: the parse stops at its Things and reads nothing after.
+ * world passes `tail` false and reads the tail itself, once it holds the Things.
  */
 function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail = true): Thing[] {
   const { subVersion } = s.revision;
@@ -443,8 +438,8 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(s, readers));
   if (tail) readWorldTail(s, readers);
-  // ⚠️ **It returns; only the OUTERMOST world stops the parse.** `readLevel`
-  // wraps this and throws `StopParse` the first time. A level can carry a second
+  // ⚠️ **Only the OUTERMOST world's Things are the level's.** `readLevel` keeps
+  // the first world's and reads the others as any part. A level can carry a second
   // world Thing deeper in the graph -- one turned up inside a `CREATURE` in
   // `5576f758` from the public archive, uid -1 with no parent, the same shape as
   // the level's own world -- and throwing there would have returned that inner
@@ -472,6 +467,12 @@ export interface LevelParse {
    * (0, 0, 0); this box's `min` is where that origin is in the level.
    */
   readonly chunks?: readonly ChunkPlacement[];
+  /**
+   * A level only: why the file after the outermost world's Things did not read
+   * to the payload's last byte; absent when it did. ❗ **Only a level without
+   * one is evidence that its parts were read right** -- see the file's header.
+   */
+  readonly unreadTail?: string;
 }
 
 /** Inflate a resource and start a serialiser on it, with the revision checked. */
@@ -695,21 +696,103 @@ export async function readLevel(
   // world Thing anywhere below the first one threw "no reader for part WORLD".
   // That is one of the 43 archive levels, `5576f758`, and it is why this line
   // does not say `new Map(readers)`.
-  let outermost = true;
+  let worldThings: Thing[] | undefined;
   readers.set('WORLD', (self) => {
-    if (!outermost) return readWorld(self, readers);
-    const things = readWorld(self, readers, false);
-    outermost = false;
-    throw new StopParse(things);
+    if (worldThings) return readWorld(self, readers);
+    worldThings = readWorld(self, readers, false);
+    readWorldTail(self, readers);
+    return worldThings;
   });
 
+  let unreadTail: string | undefined;
   try {
     readThingRef(s, readers);
+    if (!worldThings) throw new SerializerError('the world Thing carried no WORLD part');
+    readLevelTail(s);
+    if (s.remaining !== 0) unreadTail = `${s.remaining} bytes past RLevel's last field`;
   } catch (error) {
-    if (error instanceof StopParse) return { revision, things: error.things, chunks: chunkFiles.get(s) ?? [] };
-    throw error;
+    if (!worldThings) throw error;
+    unreadTail = (error as Error).message;
   }
-  throw new SerializerError('the world Thing carried no WORLD part');
+  const parse = { revision, things: worldThings, chunks: chunkFiles.get(s) ?? [] };
+  return unreadTail === undefined ? parse : { ...parse, unreadTail };
+}
+
+/** `AdventureItem`: cwlib's `structs/level/AdventureItem.java`. */
+function readAdventureItem(s: Serializer): void {
+  const { subVersion } = s.revision;
+  s.i32(); // PUID
+  s.resource(true); // a plan
+  if (subVersion < 0xae) {
+    s.u16();
+    s.u8();
+    s.f32();
+    s.i32();
+  }
+  if (subVersion > 0xbe) s.i32(); // flags
+  if (subVersion > 0xe0) s.i32(); // iconPUID
+}
+
+/** `AdventureData`: cwlib's `structs/level/AdventureData.java`. */
+function readAdventureData(s: Serializer): void {
+  const { subVersion } = s.revision;
+  if (subVersion > 0xaf) s.i32(); // adventureFixedID
+  if (subVersion > 0x93) {
+    s.i32(); // adventureItemPUIDCounter
+    s.array(readAdventureItem);
+  }
+  if (subVersion > 0xa6) {
+    const count = s.count();
+    for (let i = 0; i < count; i += 1) s.resource(true); // a quest
+  }
+  if (subVersion >= 0xd1) {
+    s.array((self) => {
+      readSlotId(self); // StartPoint.slot
+      self.array(readStreamingId); // StartPoint.ids
+    });
+  }
+}
+
+/**
+ * `RLevel` after its world Thing: cwlib's `resources/RLevel.java`
+ * (ennuo/toolkit `d6a2ef8`), gate for gate.
+ */
+function readLevelTail(s: Serializer): void {
+  const { version, subVersion } = s.revision;
+  if (version > 0x213) {
+    // `PlayerRecord`
+    s.array(readNetworkPlayerId); // playerIDs
+    s.array((self) => self.i32()); // playerNumbers
+    s.i32(); // offset
+  }
+  if (version > 0x347) s.array(readInventoryItem); // tutorialInventory
+  if (version > 0x35c) {
+    s.array((self) => {
+      // `CachedInventoryData`
+      self.u32(); // category
+      self.u32(); // location
+      if (version > 0x39d) {
+        self.i32(); // cachedToolType
+        for (let i = 0; i < 4; i += 1) self.u8(); // U0, U1, V0, V1
+      }
+    }); // tutorialInventoryData
+  }
+  if (version > 0x39b) s.bool(); // tutorialInventoryActive
+  if (version > 0x3b0) s.bool(); // copiedFromSomeoneElse
+  if (vitaRevision(s.revision) >= 0x70) {
+    s.guid(); // musicGUID
+    s.guid(); // musicSettingsGUID
+    s.array((self) => self.f32()); // musicStemVolumes
+  }
+  if (subVersion > 0x34 && subVersion < 0x91) s.bool();
+  if (subVersion > 0x34 && subVersion < 0xb3) s.bool();
+  if (subVersion > 0x94 && subVersion < 0x12a) s.bool(); // savedThroughPusher
+  if (subVersion >= 0xf1 && subVersion <= 0xf9) {
+    throw new SerializerError(`legacy adventure data at subVersion 0x${subVersion.toString(16)}: cwlib does not read it either`);
+  }
+  if (subVersion >= 0xfa) s.bytes(s.count()); // dceUuid
+  if (subVersion >= 0x161 && subVersion < 0x169) s.resource(); // the adventure's shared data
+  if (subVersion >= 0x169) s.reference(readAdventureData);
 }
 
 /** What `readThings` found the file to be. */

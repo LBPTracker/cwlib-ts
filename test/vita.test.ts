@@ -21,12 +21,13 @@ const inGame = (...parts: string[]): boolean => GAME !== '' && existsSync(path.j
 const NO_GAME = GAME ? `no game under ${GAME}` : 'LBP_GAME is not set';
 const FARCS = ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc'];
 
-test('all 148 Vita plans read, and 7 of the 25 Vita levels', async (t) => {
+test('all 148 Vita plans read, and 19 of the 25 Vita levels to their last byte', async (t) => {
   if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
   const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
   // Every Vita resource the game has is under these two folders.
   const wanted = new Set([...db.values()].filter((r) => /\/crossplay\/|\/e3demo2\//.test(r.path)).map((r) => r.sha1));
   const read = { LVLb: 0, PLNb: 0 };
+  let whole = 0;
   const failed = { LVLb: 0, PLNb: 0 };
   const seen = new Set<string>();
   for (const file of FARCS) {
@@ -40,14 +41,17 @@ test('all 148 Vita plans read, and 7 of the 25 Vita levels', async (t) => {
       const bytes = (await farc.get(entry.sha1))!;
       if (vitaRevision((await openSerializer(bytes, nodeInflate)).revision) < 0) continue;
       try {
-        await readThings(bytes, nodeInflate);
+        const parse = await readThings(bytes, nodeInflate);
         read[magic] += 1;
+        // A level proves its parts only when readLevel reached the payload's last byte.
+        if (magic === 'LVLb' && parse.unreadTail === undefined) whole += 1;
       } catch {
         failed[magic] += 1;
       }
     }
     await access.close();
   }
-  assert.deepEqual(read, { LVLb: 7, PLNb: 148 });
-  assert.deepEqual(failed, { LVLb: 18, PLNb: 0 });
+  assert.deepEqual(read, { LVLb: 19, PLNb: 148 });
+  assert.equal(whole, 19);
+  assert.deepEqual(failed, { LVLb: 6, PLNb: 0 });
 });

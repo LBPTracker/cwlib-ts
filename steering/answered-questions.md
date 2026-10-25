@@ -363,4 +363,6 @@ every gate as code, including the ones no corpus file exercises yet.
 
 ⚠️ **The trap to keep**: a reader that stops early because its caller stops there is a reader of a
 prefix. Once anything can embed the struct — a plan, a creature — what follows it is read from the
-middle of the struct's tail. `readLevel`'s outermost world is the one place the tail is skipped.
+middle of the struct's tail. `readLevel`'s outermost world was the last place the tail was
+skipped, and since 2026-10-25 it is read too (*`readLevel` reads to the end* in
+[level-files.md](level-files.md)).

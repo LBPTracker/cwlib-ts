@@ -95,12 +95,11 @@ branch, into one that stands between a reader and a song. What is left:
   plausible-nonsense failure the bound exists to prevent. The right change, if one is wanted, is an
   **allowed set** — `0x272` plus `0x3b7..0x3ff`, refusing the untested span between — and it is a
   design decision to take on purpose.
-- **Branch `0x4431`** — LBP Vita. ✔ cwlib's Vita gates are ported (2026-10-25): 155 of the game's
-  173 crossplay resources on the branch read, all 148 plans and 7 of 25 levels. ⚠️ The other 18
-  hold the Vita's own parts at parts revision `0x30`/`0x31`, bits `0x27`/`0x28` — LBP3's
-  `POPPET_POWERUP` and `POCKET_ITEM` slots — which cwlib has no table for and fails on too
-  (*The Vita branch* in [level-files.md](level-files.md), which has what their bytes show and why
-  a level count cannot prove a reader for them). Before that: one level in the saves,
+- **Branch `0x4431`** — LBP Vita. ✔ cwlib's Vita gates are ported, and the Vita's own parts at
+  bits `0x27`/`0x28` have a partial reading of our own (2026-10-25): all 148 of the game's Vita
+  plans and 19 of its 25 Vita levels read, the levels to their last byte. ⚠️ The other 6
+  contradict the reading, and their bytes cannot say where (*The Vita branch* in
+  [level-files.md](level-files.md)); what the two parts are and their fields mean is open. Before that: one level in the saves,
   `f331efa7`, version `0x3e2`, and nothing in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
@@ -111,7 +110,9 @@ branch, into one that stands between a reader and a song. What is left:
   and 18 levels, the 18 all Vita). Levels: 25 "the world Thing carried no WORLD
   part", all crossplay Vita (`.cpv`, `0x3e2`/`0x3eb`) and so the Vita branch above, 18 of them now; then
   `manglewood_hub_container.bin` (a short read), `fickle_mistress.bin` and the pre-alpha
-  `sack_town.bin`. In the story chunks, 9 islands (`dev/story-census.ts`): 3 of `titan_2` with a world nested in an island, 6 of `game_outro`. Plans: mostly the same crossplay Vita
+  `sack_town.bin`. Four levels that open stop in their tail since `readLevel` reads to the end:
+  `pod2.bin`, `sack_town.bin`, `stitchem_manor.bin`, `game_outro.bin` (*`readLevel` reads to the
+  end* in [level-files.md](level-files.md)). In the story chunks, 9 islands (`dev/story-census.ts`): 3 of `titan_2` with a world nested in an island, 6 of `game_outro`. Plans: mostly the same crossplay Vita
   resources, then missed test markers and leftover tails — the shape of one part reader taking the
   wrong count. Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
   decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws

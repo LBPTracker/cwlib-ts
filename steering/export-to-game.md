@@ -20,7 +20,8 @@ that has to travel beside the file ([level-files.md](level-files.md)), so a sequ
 produces: `readDependencies` on the output has never once returned a hashed entry.
 
 That is the whole argument for exporting a plan rather than a level. A level would need all of
-`RLevel`, and `readLevel` is deliberately a prefix (`level.ts` says so at the top).
+`RLevel` written, and `readLevel` only reads it (to the end since 2026-10-25, keeping nothing past
+the Things).
 
 **The same plan also goes out as a `.mod`**, the package ennuo's toolkit installs from: the plan's
 bytes unchanged, one FileDB row naming them `plans/lbptracker/<song>.plan`. The format and its check

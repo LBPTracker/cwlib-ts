@@ -63,6 +63,7 @@ import { readPoppetPowerup } from './parts/poppet-powerup.ts';
 import { readPos } from './parts/pos.ts';
 import { readPowerUp } from './parts/power-up.ts';
 import { readQuest } from './parts/quest.ts';
+import { readVita27, readVita28 } from './parts/vita.ts';
 import { readRef } from './parts/ref.ts';
 import { readRenderMesh } from './parts/render-mesh.ts';
 import { readScript } from './parts/script.ts';
@@ -181,5 +182,7 @@ export function partReaders(): Map<string, PartReader> {
   readers.set('POPPET_POWERUP', (s) => readPoppetPowerup(s));
   readers.set('TAG_SYNCHRONIZER', (s) => readTagSynchroniser(s));
   readers.set('HUD_ELEM', (s) => readHudElem(s));
+  bind('VITA_27', readVita27);
+  bind('VITA_28', readVita28);
   return readers;
 }

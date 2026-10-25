@@ -3,7 +3,8 @@
  *
  *   node dev/things-census.ts [list-file]     LBP_GAME required
  *
- * Prints how many parse, how many the version bound (or the oldest header
+ * Prints how many parse -- and of the levels, how many read to the payload's last
+ * byte (`whole`), the only count that proves their parts were read right -- how many the version bound (or the oldest header
  * layout) refuses, and the rest grouped by their error with digits folded, one
  * example each -- the numbers in steering/level-files.md, *What of the game's
  * own Things opens*. With a file, every failing resource is listed there by
@@ -38,8 +39,12 @@ for (const file of FARCS) {
       if (magic !== 'LVLb' && magic !== 'PLNb') continue;
       const revision = new DataView(head.buffer).getUint32(4, false).toString(16);
       try {
-        await readThings((await farc.get(entry.sha1))!, nodeInflate);
+        const parse = await readThings((await farc.get(entry.sha1))!, nodeInflate);
         counts[`${magic} parse`] = (counts[`${magic} parse`] ?? 0) + 1;
+        if (magic === 'LVLb') {
+          const key = parse.unreadTail === undefined ? 'LVLb whole' : `LVLb tail: ${parse.unreadTail.replace(/d+/g, 'N').slice(0, 60)}`;
+          counts[key] = (counts[key] ?? 0) + 1;
+        }
       } catch (error) {
         const message = (error as Error).message;
         if (/outside the LBP3 range|older than the header layout/.test(message)) {

@@ -163,7 +163,7 @@ Three traps that were each found on the first file of a new kind:
 - ⚠️ **`PStreamingHint.connected` is a double reference** — `s.references(builder)` reads an id
   and then the builder reads another. Empty in every corpus file, so the loop never ran.
 - ⚠️ **A level can carry a second world Thing** — one has a `WORLD` inside a `CREATURE` — so only
-  the outermost may throw `StopParse`; `WORLD` was once installed on a *copy* of the reader map.
+  only the outermost's Things are the level's; `WORLD` was once installed on a *copy* of the reader map.
 - ⚠️ **Nine of the fifteen LBP1 divergences were a version gate that existed in the reader's own
   comment and not in its code.** Parts were ported with their gates documented and then written
   for the LBP3 branch only; a grep for "at or below", "above 0x" and "regenerated" in `src/things/parts/`
@@ -499,6 +499,19 @@ pre-alpha `sack_town.bin`. The morning's count was 10,368 and 147; what moved it
 - a `LevelData` of type 2 has no chunk list (18 levels) — *Streaming levels* above;
 - cwlib's subVersion gates in the streaming structs, which also opened the story chunks (2). `maintainIslandsCount` is gated at `0x1a9` with them.
 
+### `readLevel` reads to the end
+
+Since 2026-10-25 `readLevel` reads the outermost world's tail, the world Thing's other parts
+and the rest of `RLevel` — `PlayerRecord`, the tutorial inventory and its cached data, the
+Vita's music GUIDs, `dceUuid`, `AdventureData` — cwlib's `RLevel.java` gate for gate, and
+requires the payload's last byte. Where that fails the Things are still returned and
+`LevelParse.unreadTail` says why. ✔ **It holds on 247 of the 251 `LVLb` in the FARCs that
+open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the toolkit's
+`sequencerdump/data` and the fixture**. The four that do not are `pod2.bin` and `sack_town.bin`
+(one byte past `RLevel`'s last field, subVersions `0xe2` and `0xc8`) and `stitchem_manor.bin`
+and `game_outro.bin` (a negative string length in the tail, `0x130` and `0x151`): gates not
+found yet, *28* in [open-questions.md](open-questions.md).
+
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first
 with anything in the span below the bound: *28* in [open-questions.md](open-questions.md).
@@ -517,39 +530,41 @@ it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (1
 `PControlinator`, `PCheckpoint`, the decal, the decoration, `NpcBehavior` and
 `InputRecording`.
 
-- ✔ With them **155 of the 173 read** (`dev/things-census.ts`, 2026-10-25): **all 148 plans
-  and 7 of the 25 levels**, where none did before. Nothing off the branch moved: the census's
-  other rows are the same files. The plans are the proof — `readPlan` requires the Thing array
-  to end on its last byte; a level's "reads" is weaker, by the trap below.
-- ❗ **The other 18 levels hold a part no reader knows**, and cwlib fails on them too (`CwlibTrace`:
-  a `ClassCastException` at the same byte). Their Things have **parts revision `0x31`** and mask
-  bit `0x27` (14 levels) or `0x28` (3); the last one fails in a `PTrigger`'s decorations
-  instead. On LBP3 those bits are `POPPET_POWERUP` and `POCKET_ITEM`, from parts revisions
-  `0x30` and `0x31`; **on the Vita the same two revisions and bits are parts of its own**,
-  which cwlib's `Part` table does not have. One of them, in
-  `level_2b_crossplayvita_33.cpv`, is 31 bytes: `00 00`, the wide string `raise`, `45 03 40`,
-  five zero bytes, two `f32` 1.0 and `00 00`. What the parts are is open: *28* in
-  [open-questions.md](open-questions.md).
+- ✔ With them **all 148 plans read**, where none did (`dev/things-census.ts`, 2026-10-25),
+  and 7 of the 25 levels, to their payload's last byte (*`readLevel` reads to the end* above).
+  Nothing off the branch moved: the census's other rows are the same files.
+- ❗ **The other 18 levels hold parts no reader had**, and cwlib fails on them too
+  (`CwlibTrace`: a `ClassCastException` at the same byte). Their Things have **parts revision
+  `0x31`** and mask bit `0x27` or `0x28`. On LBP3 those bits are `POPPET_POWERUP` and
+  `POCKET_ITEM`, from parts revisions `0x30` and `0x31`; **on the Vita the same two revisions
+  and bits are parts of its own**, which cwlib's `Part` table does not have. `VITA_PARTS` in
+  `src/things/thing.ts` sends them on the branch to `readVita27` and `readVita28`
+  (`src/things/parts/vita.ts`), **a reading of our own and a partial one**:
 
-What their bytes show (2026-10-25, by hand over the 18 levels; no reader is in `src/`):
+  ```
+  0x27  u8 (0, 2), u8 (0..12, even), wstr name, f32, i32 0, f32 1.0, f32 1.0, 2 × Thing ref
+  0x28  u8 (0, 2), u8 2, u8 (0, 1), u8 closed (0, 1), 3 × u8 0, u32 (8 when closed),
+        and when not closed a Thing reference
+  ```
 
-- **Bit `0x27` is on Things that carry a `SCRIPT`**, beside `POS` and `RENDER_MESH` or alone.
-  Its body starts with two bytes (even, `00`–`0c`, the second varying as a zigzag type 0–6
-  would; the first `00` or `02`), **a wide string the creator named** (`Beam 1`, `Box1`,
-  `Timer Hand`, `Count - Timer`, `Rec3`, `Sackboy`), an `f32`, four zero bytes and two `f32`
-  1.0. **What follows depends on the instance**: two zero bytes in some (`raise`, `Column 1`),
-  some fifty in others (`Bounce 3` in `gamescom_011`), floats such as 1.4667 and 420 in others.
-- **Bit `0x28` is on Things that carry `SCRIPT` and `SWITCH`.** Seven bytes (`00`/`02`, `02`,
-  `00`/`01`, `00`/`01`, three zeros), then a varint: 8 bytes in all when the fourth is 1
-  (`00 02 01 01 00 00 00 08`), and when it is 0 the varint is any size (8 to 11,129,208) and
-  more follows — on some a Thing reference (`e7 87 01 aa …`).
-- ❗ **A level that "reads" proves less than a plan that does: the trap the work fell into.**
-  `readLevel` stops after the outermost world's `things` and checks nothing after them, and
-  that array is references: **a body read too short leaves zero bytes that read as null
-  references**, the walk goes on, and the level "opens". Candidate readers taking the short
-  `0x27` form opened 12 of the 18 levels this way while `Bounce 3`'s fifty zero bytes were
-  being read as nulls. Prove a part reader on plans, or on a nested world whose tail is read,
-  before believing a level count.
+  ✔ **12 of the 18 levels read to the payload's last byte with them**, so 19 of the 25 Vita
+  levels do (`test/vita.test.ts`). The other 6 contradict them somewhere and do not open.
+- What the parts are: `0x27` is always on a Thing with a `SCRIPT`, beside `POS` and
+  `RENDER_MESH` or alone, and **its string is a name the creator gave** (`Beam 1`, `Box1`,
+  `Timer Hand`, `Count - Timer`, `Rec3`, `Sackboy`); `0x28` is always on a Thing with a
+  `SCRIPT` and a `SWITCH`. Every field is a width only; the two references of `0x27` are 0 on
+  almost every one and 1 on a few, which a pair of bytes would read the same.
+- ⚠️ **Why the 6 are not settled from their bytes.** In `gamescom_011_crossplayvita_03.cpv` the
+  world's Thing array ends two elements before the reader expects — `PWorld`'s tail begins
+  (`maxVel` 100, `maxAVel` 1) at element 1,203 of 1,205 — so two bytes the readers take into a
+  body are two null elements. Reading any one world-level `0x27` without its two references
+  makes the level whole: **null elements are interchangeable, and the check cannot say which
+  instance is the short one**; doing it for every instance of one kind makes none whole.
+- ❗ **A level that reads proves its parts only to its last byte: the trap behind this.**
+  `readLevel` used to stop after the outermost world's `things`. That array is references, so
+  a body read too short left zero bytes that read as null references, the walk went on, and the
+  level "opened": the same readers opened 12 of the 18 that way before there was anything to
+  check them against. A level whose `unreadTail` is set has not proved its parts.
 
 ## The game's meshes — `RMesh`
 

@@ -167,6 +167,13 @@ export function partBit(part: { readonly name: string; readonly index: number },
  * `CREATOR_ANIM_GONE` -- what `fillThing` walks, so `partBit` runs twice per
  * part at load and never per Thing.
  */
+/**
+ * The Vita's own parts: at parts revisions 0x30 and 0x31 and bits 0x27 and
+ * 0x28, where LBP3 put `POPPET_POWERUP` and `POCKET_ITEM`, the Vita's branch
+ * has parts cwlib's table does not (steering/level-files.md, *The Vita branch*).
+ */
+const VITA_PARTS: Readonly<Record<string, string>> = { POPPET_POWERUP: 'VITA_27', POCKET_ITEM: 'VITA_28' };
+
 const PART_BITS: readonly (readonly { readonly part: (typeof PARTS)[number]; readonly bit: number }[])[] =
   [0, CREATOR_ANIM_GONE].map((subVersion) => PARTS.flatMap((part) => {
     const bit = partBit(part, subVersion);
@@ -335,9 +342,12 @@ function fillThing(
   const lo = Number(mask & 0xffffffffn);
   const hi = Number((mask >> 32n) & 0xffffffffn);
 
-  for (const { part, bit } of PART_BITS[subVersion < CREATOR_ANIM_GONE ? 0 : 1]) {
-    if (partsRevision < part.since) continue;
+  const vita = vitaRevision(s.revision) >= 0;
+  for (const { part: declared, bit } of PART_BITS[subVersion < CREATOR_ANIM_GONE ? 0 : 1]) {
+    if (partsRevision < declared.since) continue;
     if (((bit < 32 ? lo >>> bit : hi >>> (bit - 32)) & 1) === 0) continue;
+    const name = (vita && VITA_PARTS[declared.name]) || declared.name;
+    const part = { ...declared, name };
     const read = readers.get(part.name);
     const partStart = s.position;
     trace?.(part.name, partStart, -1);

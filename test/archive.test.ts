@@ -170,6 +170,7 @@ test('readThings opens a level and a game plan, a fresh part table each', async 
   for (let i = 0; i < 2; i += 1) {
     const parse = await readThings(bytes, nodeInflate);
     assert.equal(parse.kind, 'level');
+    assert.equal(parse.unreadTail, undefined, 'the level reads to its last byte');
     assert.equal(parse.things.length, (await readLevel(bytes, nodeInflate, partReaders())).things.length);
   }
 });

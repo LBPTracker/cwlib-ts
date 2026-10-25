@@ -1,6 +1,6 @@
 /** `POPPET_POWERUP`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError } from '../../io/serializer.ts';
+import { Serializer, SerializerError, vitaRevision } from '../../io/serializer.ts';
 import { readNetworkPlayerId } from '../../structs/network.ts';
 import { readEyetoyData } from './stickers.ts';
 
@@ -41,6 +41,7 @@ function readInventoryItemDetails(s: Serializer): void {
   s.reference(readNetworkPlayerId); // creator
   s.i8(); // toolType
   s.i8(); // flags
+  if (vitaRevision(s.revision) >= 0x7d) s.bool(); // makeSizeProportional, the Vita's D1_DETAILS_PROPORTIONAL
 }
 
 /** `InventoryItemPhotoData` and its `PhotoMetadata`: cwlib's `structs/inventory/`. */
@@ -66,7 +67,7 @@ function readInventoryItemPhotoData(s: Serializer): void {
  * 0x235 (`ITEM_FLAGS`). Its integers are fixed-width even in a compressed
  * stream, as cwlib forces them.
  */
-function readInventoryItem(s: Serializer): void {
+export function readInventoryItem(s: Serializer): void {
   const { version, subVersion } = s.revision;
   if (version < 0x235) {
     throw new SerializerError(`InventoryItem at version 0x${version.toString(16)} is not ported`);
