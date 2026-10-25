@@ -1211,7 +1211,7 @@ Every entry of the four FARCs by its first four bytes, each SHA-1 once, with the
 (scratch census, 2026-10-25). ⚠️ **A census by magic misses what has none** — the translation
 tables, the `.raw` files — so it is a list, not proof of absence. With a reader: `GTF `/`TEX `,
 `PLNb`, `GMTb`, `MSHb`, `ANMb`, `FSHb`, `LVLb`, `BEVb`, `PALb`, `MATb`, `GSBt`, `INSb`, `OUTb`,
-`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, `ATXb`, `GLTb`, `VOPb`, `RECb`, the
+`SMHb`, `QSTb`, `PRFb`, `JNTb`, `PCKb`, `SLTb`, `ADCb`, `ADSb`, `CCDb`, `ATXb`, `GLTb`, `VOPb`, `RECb`, `TUTb`, the
 `.trans`, and every
 text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 
@@ -1220,13 +1220,12 @@ text magic (`…t`, 19 of them) as a tree (*Text resources*). Without:
 | none (`00 00`) | 721 `.raw`, beside the 25 `.trans` and 22 `.subt` | 812 of the FileDB's `.raw` are `gamedata/subtitles/<line>.raw`, 12 to 44 bytes of big-endian `u32`s, the first 0 or 3 and the rest rising (`create_thermometer.raw`: 3, 135, 318, 399, 516, 603): a dialogue line's subtitle timings, unit and meaning not measured. Two are `data/colcorrectpresets*.raw`, 904 bytes of mostly floats. Each `languages/<lang>_export.subt` is a `u32` count (587 in English) and then data of no fixed record size that looks compressed or ciphered |
 | none (`00 01`) | 347 | `.fpo` 191, `.sbu` 97, `.vpo` 55, `.epo` 2: compiled shaders |
 | `RIFF` | 216 | `.smp`, the instruments' samples — read by lbptracker (`packages/lbp-tracker-lib/src/wav.ts`), whose `steering/game-assets.md` has them |
-| `TUTb` | 2 | `.tut` (*Small resources*) |
 
 Plus PNGs, JPEGs, `.txt`, `.xml` and the `.rlst` lists, which are not the engine's.
 
-## Small resources — `ATXb`, `GLTb`, `VOPb`
+## Small resources — `ATXb`, `GLTb`, `VOPb`, `TUTb`
 
-Three types cwlib names in `ResourceType` and has no class for; readings of our own, each ending
+Four types cwlib names in `ResourceType` and has no class for; readings of our own, each ending
 on the payload's last byte in every one of the game's (`test/small-resources.test.ts`, 2026-10-25).
 
 - **`ATXb`, `ANIMATED_TEXTURE`** (`readAnimatedTexture`, 24 files, `texture_library/ui/animated/…`):
@@ -1238,8 +1237,16 @@ on the payload's last byte in every one of the game's (`test/small-resources.tes
   90 of them rows (palette plans), the other 11 neither rows nor in the PS4 remap.
 - **`VOPb`, `VOIP_RECORDING`** (`readVoipRecording`, 4 files, inside crossplay `.cpv`s): one
   length-prefixed block of audio, kept as bytes; its codec is not read.
-- ⚠️ **`TUTb`, `TUTORIALS`** (2 files) is not read: `tutorials_beta.tut` is `01 00`, and the other's
-  215 bytes hold nine records of varints whose fields the bytes alone do not name.
+- **`TUTb`, `TUTORIALS`** (`readTutorials`, 0.4.26, 2 files): the fields and their order are the
+  eboot's reflective serialisers' — `RTutorials` `v0xc88960` (`TutorialGroupList`), the list
+  `v0xcd8130` (`TutorialGroups`), a group `v0xcd84e0` (`NameKey`, `Tutorials`), a tutorial
+  `v0xcd88c0` (`LevelGUID`, `VideoGUID`, `NameKey`, `DescriptionKey`, `Image`, `Prerequisites`,
+  `Rewards`, `RewardsGUID`, `BonusRewards`) — and **every object is a reference**, which is what
+  the small numbers between them were: the list is id 1, the group 2, the tutorials 3 to 11.
+  Both end on their last byte. `tutorials_beta.tut` has no group; the other has "How To Play" with
+  nine tutorials ("Acting", "Costumes", … "Stickers: Camera"), each a `.bik` and an `Image` that is
+  the PS3 GUID of `tutorial_thumbnails/<the video>.tex`, found through the PS4 remap. Their level
+  and reward GUIDs are 0 and their three arrays empty, so those elements are not read.
 
 ## Thing recordings — `RECb`
 

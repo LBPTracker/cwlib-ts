@@ -12,9 +12,11 @@ import { readAnimatedTexture } from '../src/resources/animated-texture.ts';
 import { readGuidList } from '../src/resources/guid-list.ts';
 import { readTexture } from '../src/resources/texture.ts';
 import { readVoipRecording } from '../src/resources/voip-recording.ts';
+import { readTutorials } from '../src/resources/tutorials.ts';
+import { readGuidRemap } from '../src/archives/filedb.ts';
 
 /**
- * The types cwlib names and has no class for: `ATXb`, `GLTb`, `VOPb`; skips
+ * The types cwlib names and has no class for: `ATXb`, `GLTb`, `VOPb`, `TUTb`; skips
  * without `LBP_GAME`. steering/level-files.md, *Small resources*.
  */
 const GAME = process.env.LBP_GAME ?? '';
@@ -55,4 +57,33 @@ test('every ATXb, GLTb and VOPb reads to its last byte, and a flipbook fits its 
   }
   for (const access of accesses) await access.close();
   assert.deepEqual(counts, { ATXb: 24, GLTb: 2, VOPb: 4 });
+});
+
+test('the two tutorial lists read to their last byte: nine videos, each with its thumbnail', async (t) => {
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
+  const db = readFileDB(await readFile(path.join(GAME, 'output', 'orbisguids.map')));
+  const { remap } = readGuidRemap(await readFile(path.join(GAME, 'output', 'orbisguids.remap')));
+  const pathOf = new Map([...db.values()].map((r) => [r.guid, r.path]));
+  const rows = new Map([...db.values()].filter((r) => r.path.endsWith('.tut')).map((r) => [r.path, r.sha1]));
+  const read = new Map<string, Awaited<ReturnType<typeof readTutorials>>>();
+  for (const file of FARCS) {
+    const access = await openFileAccess(path.join(GAME, file));
+    const farc = await openFarc(access);
+    for (const [name, sha1] of rows) {
+      if (!read.has(name) && farc.entries.has(sha1)) read.set(name, await readTutorials((await farc.get(sha1))!, nodeInflate));
+    }
+    await access.close();
+  }
+  assert.equal(read.get('gamedata/data/tutorials_beta.tut')!.groups.length, 0);
+  const groups = read.get('gamedata_orbis/data/tutorials.tut')!.groups;
+  assert.equal(groups.length, 1);
+  const tutorials = groups[0]!.tutorials;
+  assert.equal(tutorials.length, 9);
+  for (const tutorial of tutorials) {
+    const video = pathOf.get(tutorial!.videoGuid)!;
+    assert.match(video, /\.bik$/);
+    // The image is the PS3 GUID of the video's thumbnail, which the PS4 build remaps.
+    const thumbnail = remap.get(tutorial!.image!.guid)!.path;
+    assert.equal(path.posix.basename(thumbnail, '.tex'), path.posix.basename(video, '.bik'));
+  }
 });
