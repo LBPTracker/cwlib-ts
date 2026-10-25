@@ -168,6 +168,54 @@ function unpackNormal32(word: number, out: Float32Array, to: number): void {
   out[to + 2] = word >>> 31 ? -(511 - z) / 511 : z / 511;
 }
 
+/**
+ * Each vertex's handedness on a UV channel: +1 where the bitangent
+ * `normal × tangent` runs the way `v` grows (`∂P/∂v`, summed over the
+ * vertex's triangles), -1 where it runs against it, 0 where no triangle says.
+ * The stream stores no handedness (`Mesh.tangents`); a tangent frame takes its
+ * sign from this, by its own convention -- glTF's runs toward `v = 0`
+ * (`mesh-gltf.ts`), a renderer with `v` down the image may run with it.
+ */
+export function uvHandedness(mesh: Mesh, channel = 0): Int8Array {
+  const n = mesh.vertexCount;
+  const out = new Int8Array(n);
+  const uv = mesh.uvs[channel];
+  if (uv === undefined) return out;
+  const dpdv = new Float64Array(n * 3);
+  const p = mesh.positions;
+  for (const primitive of mesh.primitives) {
+    const t = primitive.triangles;
+    for (let i = 0; i + 2 < t.length; i += 3) {
+      const a = t[i];
+      const b = t[i + 1];
+      const c = t[i + 2];
+      if (a >= n || b >= n || c >= n) continue;
+      const du1 = uv[b * 2] - uv[a * 2];
+      const dv1 = uv[b * 2 + 1] - uv[a * 2 + 1];
+      const du2 = uv[c * 2] - uv[a * 2];
+      const dv2 = uv[c * 2 + 1] - uv[a * 2 + 1];
+      const det = du1 * dv2 - du2 * dv1;
+      if (!Number.isFinite(det) || det === 0) continue;
+      for (let k = 0; k < 3; k += 1) {
+        const d = ((p[c * 3 + k] - p[a * 3 + k]) * du1 - (p[b * 3 + k] - p[a * 3 + k]) * du2) / det;
+        dpdv[a * 3 + k] += d;
+        dpdv[b * 3 + k] += d;
+        dpdv[c * 3 + k] += d;
+      }
+    }
+  }
+  const nr = mesh.normals;
+  const tg = mesh.tangents;
+  for (let v = 0; v < n; v += 1) {
+    const i = v * 3;
+    const side = (nr[i + 1] * tg[i + 2] - nr[i + 2] * tg[i + 1]) * dpdv[i]
+      + (nr[i + 2] * tg[i] - nr[i] * tg[i + 2]) * dpdv[i + 1]
+      + (nr[i] * tg[i + 1] - nr[i + 1] * tg[i]) * dpdv[i + 2];
+    out[v] = side > 0 ? 1 : side < 0 ? -1 : 0;
+  }
+  return out;
+}
+
 /** One primitive's run of the index buffer, as a triangle list. */
 function triangles(indices: DataView, first: number, count: number, type: number): Uint16Array {
   const run = new Uint16Array(count);

@@ -797,9 +797,9 @@ caller gives (`materialName`).
   normal map. With the tangents (0.4.42) not even a warning is left: a sample of 300 meshes with
   their textures, and all 5,941 without, validate with none. Before them, 7,998 primitives drew the
   warning that a normal-mapped material had no tangent space.
-  - A tangent's w is made from the geometry, the stream holding none: the sign that turns
-    `normal × tangent` toward `v = 0`, where glTF's normal map has +Y, against `∂P/∂v` over the
-    vertex's triangles on UV 0. It is +1 on 82% of the game's vertices. glTF's convention, not a
+  - A tangent's w is made from the geometry, the stream holding none: `uvHandedness` in
+    `mesh.ts` (0.4.43) says per vertex whether `normal × tangent` runs with `∂P/∂v` over its
+    triangles on UV 0, and the export turns it toward `v = 0`, where glTF's normal map has +Y. It is +1 on 82% of the game's vertices. glTF's convention, not a
     measurement of the game's — like the normal map's x sign below.
   - The material is `materialSummary`'s reading: port 0's first texture sample upstream as the base
     colour, port 3's as the normal map, a colour box as `baseColorFactor`, `GFX_TWO_SIDED` as

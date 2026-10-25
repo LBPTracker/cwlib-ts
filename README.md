@@ -33,7 +33,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
 | `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
 | **`resources/`** | |
-| `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
+| `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents (and their handedness from the UVs, `uvHandedness`), every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `mesh-gltf.ts`, `gltf-material.ts` | an `RMesh` written as a binary glTF: geometry, skin and morphs, its materials with their textures as PNG |

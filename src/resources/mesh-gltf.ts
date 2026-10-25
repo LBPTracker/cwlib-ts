@@ -43,7 +43,7 @@
 
 import type { ResourceRef } from '../io/serializer.ts';
 import { refKey, type GltfMaterial, type GltfTexture } from './gltf-material.ts';
-import type { Mesh } from './mesh.ts';
+import { uvHandedness, type Mesh } from './mesh.ts';
 
 const FLOAT = 5126;
 const UNSIGNED_BYTE = 5121;
@@ -134,51 +134,18 @@ function foldJoints(joints: Uint8Array, weights: Float32Array): { joints: Uint8A
 
 /**
  * The tangents as glTF's VEC4: xyz as `readMesh` gives them, w the handedness
- * (header): `-sign((n × t) · ∂P/∂v)` over the vertex's triangles on UV 0.
+ * (header) -- `uvHandedness` turned round, glTF's +Y running toward `v = 0`.
  */
 function tangentsWithHandedness(mesh: Mesh): Float32Array {
-  const n = mesh.vertexCount;
-  const out = new Float32Array(n * 4);
-  const dpdv = new Float64Array(n * 3);
-  const p = mesh.positions;
-  const uv = mesh.uvs[0];
-  if (uv !== undefined) {
-    for (const primitive of mesh.primitives) {
-      const t = primitive.triangles;
-      for (let i = 0; i + 2 < t.length; i += 3) {
-        const a = t[i];
-        const b = t[i + 1];
-        const c = t[i + 2];
-        if (a >= n || b >= n || c >= n) continue;
-        const du1 = uv[b * 2] - uv[a * 2];
-        const dv1 = uv[b * 2 + 1] - uv[a * 2 + 1];
-        const du2 = uv[c * 2] - uv[a * 2];
-        const dv2 = uv[c * 2 + 1] - uv[a * 2 + 1];
-        const det = du1 * dv2 - du2 * dv1;
-        if (!Number.isFinite(det) || det === 0) continue;
-        for (let k = 0; k < 3; k += 1) {
-          const e1 = p[b * 3 + k] - p[a * 3 + k];
-          const e2 = p[c * 3 + k] - p[a * 3 + k];
-          const d = (e2 * du1 - e1 * du2) / det;
-          dpdv[a * 3 + k] += d;
-          dpdv[b * 3 + k] += d;
-          dpdv[c * 3 + k] += d;
-        }
-      }
-    }
-  }
-  const nr = mesh.normals;
+  const out = new Float32Array(mesh.vertexCount * 4);
+  const hand = uvHandedness(mesh);
   const tg = mesh.tangents;
-  for (let v = 0; v < n; v += 1) {
+  for (let v = 0; v < mesh.vertexCount; v += 1) {
     const i = v * 3;
-    const x = Number.isNaN(tg[i]) ? 0 : tg[i];
-    const y = Number.isNaN(tg[i + 1]) ? 0 : tg[i + 1];
-    const z = Number.isNaN(tg[i + 2]) ? 0 : tg[i + 2];
-    const cx = nr[i + 1] * z - nr[i + 2] * y;
-    const cy = nr[i + 2] * x - nr[i] * z;
-    const cz = nr[i] * y - nr[i + 1] * x;
-    const side = cx * dpdv[i] + cy * dpdv[i + 1] + cz * dpdv[i + 2];
-    out.set([x, y, z, side > 0 ? -1 : 1], v * 4);
+    out.set([
+      Number.isNaN(tg[i]) ? 0 : tg[i], Number.isNaN(tg[i + 1]) ? 0 : tg[i + 1], Number.isNaN(tg[i + 2]) ? 0 : tg[i + 2],
+      hand[v] > 0 ? -1 : 1,
+    ], v * 4);
   }
   return out;
 }
