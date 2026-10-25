@@ -64,6 +64,8 @@ export interface MarkSegment {
   readonly kind: 'mark';
   readonly label: string;
   readonly bytes: Uint8Array;
+  /** What the reader made of the bytes, where it says: a `resource` mark's `ResourceRef`. */
+  readonly value?: unknown;
   write?: (w: Writer) => void;
 }
 
@@ -87,6 +89,8 @@ export class Tape {
   private pendingLabel: string | undefined;
   /** Every mark, in stream order. */
   readonly marks: MarkSegment[] = [];
+  /** Every raw run, in stream order: the bytes no reference or mark cut out. */
+  readonly raws: Uint8Array[] = [];
 
   constructor(data: Uint8Array) {
     this.data = data;
@@ -103,7 +107,9 @@ export class Tape {
     if (this.frame.list) {
       throw new SerializerError(`${to - this.last} raw bytes between the items of list ${this.frame.list.label}`);
     }
-    this.frame.body.push(this.data.subarray(this.last, to));
+    const raw = this.data.subarray(this.last, to);
+    this.frame.body.push(raw);
+    this.raws.push(raw);
     this.last = to;
   }
 
@@ -170,9 +176,10 @@ export class Tape {
   }
 
   /** The bytes between `start` and `end` are the field `label`. */
-  mark(label: string, start: number, end: number): void {
+  mark(label: string, start: number, end: number, value?: unknown): void {
     this.flush(start);
-    const mark: MarkSegment = { kind: 'mark', label, bytes: this.data.subarray(start, end) };
+    const bytes = this.data.subarray(start, end);
+    const mark: MarkSegment = value === undefined ? { kind: 'mark', label, bytes } : { kind: 'mark', label, bytes, value };
     this.frame.body.push(mark);
     this.marks.push(mark);
     this.last = end;

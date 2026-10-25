@@ -334,8 +334,16 @@ export class Serializer {
     return out;
   }
 
+  /**
+   * A bare GUID. On a tape it is a mark, as a descriptor is: a Thing's plan,
+   * an animation a part names, are dependencies a table lists that no
+   * descriptor holds (`archives/hashinate.ts`).
+   */
   guid(): number {
-    return this.u32();
+    const start = this.position;
+    const guid = this.u32();
+    if (guid !== 0) this.tape?.mark('guid', start, this.position, { guid });
+    return guid;
   }
 
   sha1(): Uint8Array {
@@ -354,6 +362,7 @@ export class Serializer {
    */
   resource(isDescriptor = false, includeType = false): ResourceRef | undefined {
     if (this.revision.version > 0x22e && !isDescriptor) this.i32();
+    const start = this.position;
     const flag = this.u8();
     // ✔ **A null descriptor still carries its type when the type is inline.**
     // `ChunkFile.userResources` is the one place `includeType` is set; over the
@@ -370,10 +379,14 @@ export class Serializer {
     let guid = 0;
     let hash: Uint8Array | undefined;
     const [GUID, HASH] = this.revision.version < 0x191 ? [1, 2] : [2, 1];
-    if ((flag & GUID) !== 0) guid = this.guid();
+    if ((flag & GUID) !== 0) guid = this.u32();
     if ((flag & HASH) !== 0) hash = this.sha1();
+    const ref = guid === 0 && !hash ? undefined : { guid, hash };
+    // The flag, GUID and hash are what a dependency rewritten in place replaces
+    // (`archives/hashinate.ts`); the flags word before and the type after stay.
+    if (ref) this.tape?.mark('resource', start, this.position, ref);
     if (includeType) this.i32(); // the resource type, written inline
-    return guid === 0 && !hash ? undefined : { guid, hash };
+    return ref;
   }
 
   /**

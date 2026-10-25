@@ -449,14 +449,28 @@ export async function writeResource(
   const { magic, revision, compressionFlags, payload, dependencies, isCompressed = true } = resource;
   if (magic.length !== 4) throw new WriterError(`magic ${JSON.stringify(magic)} is not 4 bytes`);
 
+  // ❗ **The header's fields follow the head word, as `loadResource` reads
+  // them**: the branch pair from head 0x271, the compression flags from 0x297
+  // (LEERDAMMER 0x272 from its revision 2), the `isCompressed` byte from 0x189
+  // -- below it the payload is always compressed. Below 0x109 there is no
+  // dependency table, which this does not write.
+  const head = ((revision.subVersion << 16) | revision.version) >>> 0;
+  if (head < 0x109) throw new WriterError(`head 0x${head.toString(16)} has no dependency table, which this writer always writes`);
+  const modern = head >= 0x189;
+  const hasBranch = modern && head >= 0x271;
+  const hasFlags = modern && (head >= 0x297 || (head === 0x272 && revision.branchId === 0x4c44 && revision.branchRevision >= 2));
+  if (!modern && !isCompressed) throw new WriterError(`head 0x${head.toString(16)} is always compressed`);
+  if (!hasFlags && compressionFlags !== 0) throw new WriterError(`head 0x${head.toString(16)} has no compression flags to say ${compressionFlags}`);
+  const tableAt = 0x0c + (hasBranch ? 4 : 0) + (hasFlags ? 1 : 0) + (modern ? 1 : 0);
+
   const chunks: { deflated: Uint8Array; rawSize: number }[] = [];
   for (let at = 0; isCompressed && at < payload.length; at += CHUNK_SIZE) {
     const raw = payload.subarray(at, Math.min(at + CHUNK_SIZE, payload.length));
     chunks.push({ deflated: await deflate(raw), rawSize: raw.length });
   }
 
-  // Uncompressed, the payload follows the `isCompressed` byte at 0x11 directly.
-  let size = isCompressed ? 0x16 + chunks.length * 4 : 0x12 + payload.length;
+  // Uncompressed, the payload follows the `isCompressed` byte directly.
+  let size = isCompressed ? tableAt + 4 + chunks.length * 4 : tableAt + payload.length;
   for (const chunk of chunks) size += chunk.deflated.length;
   const depsAt = size;
   for (const dependency of dependencies) {
@@ -475,15 +489,18 @@ export async function writeResource(
   for (let i = 0; i < 4; i += 1) out[i] = magic.charCodeAt(i);
   view.setUint32(4, ((revision.subVersion << 16) | revision.version) >>> 0, false);
   view.setUint32(8, depsAt, false);
-  view.setUint16(12, revision.branchId, false);
-  view.setUint16(14, revision.branchRevision, false);
-  out[0x10] = compressionFlags;
-  out[0x11] = isCompressed ? 1 : 0;
-  let at = 0x12;
+  let at = 0x0c;
+  if (hasBranch) {
+    view.setUint16(at, revision.branchId, false);
+    view.setUint16(at + 2, revision.branchRevision, false);
+    at += 4;
+  }
+  if (hasFlags) out[at++] = compressionFlags;
+  if (modern) out[at++] = isCompressed ? 1 : 0;
   if (isCompressed) {
-    view.setUint16(0x12, 1, false); // the flag that is 0x0001 in every file seen
-    view.setUint16(0x14, chunks.length, false);
-    at = 0x16;
+    view.setUint16(at, 1, false); // the flag that is 0x0001 in every file seen
+    view.setUint16(at + 2, chunks.length, false);
+    at += 4;
   } else {
     out.set(payload, at);
     at += payload.length;

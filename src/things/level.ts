@@ -140,7 +140,12 @@ const chunkFiles = new WeakMap<Serializer, ChunkPlacement[]>();
 function readChunkFile(s: Serializer): void {
   const { subVersion } = s.revision;
   let sha1 = '';
-  if (subVersion > 0x130) sha1 = toHex(s.mark('chunkHash', (self) => self.sha1()));
+  if (subVersion > 0x130) {
+    const start = s.position;
+    const hash = s.sha1();
+    s.tape?.mark('chunkHash', start, s.position, { guid: 0, hash });
+    sha1 = toHex(hash);
+  }
   else if (subVersion >= 0x73) {
     const ref = s.resource(true); // chunkHash, as a descriptor
     if (ref?.hash) sha1 = toHex(ref.hash);

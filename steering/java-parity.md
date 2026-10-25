@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 51 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 53 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -52,8 +52,9 @@ level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
 - **Things from their values**: a field of a part changed and written, or a part added to a Thing —
   every edit but a `PPos` matrix, the list of Things and the Things in it.
-- **Any other resource written**: a mesh, a texture, a profile, an adventure… — and so no
-  `Resources.hashinate` either, which rewrites each dependency's table.
+- **Any other resource written** from its values: a mesh, a texture, a profile, an adventure…
+  Their dependencies can be rewritten in place, and `hashinate` is ported (*Dependencies
+  rewritten*, level-files.md), except in an `RStaticMesh`, whose descriptors are in its header.
 
 ## Tools
 

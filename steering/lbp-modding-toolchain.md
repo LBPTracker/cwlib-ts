@@ -197,6 +197,8 @@ never silently follow the toolkit against our own measurement.
 | 49 | an inventory plan's path in a `BigSave` | `items/<object type>/…`, by `InventoryObjectType` | `resources/plans/<sha1>.plan`, by magic | a name in the toolkit's tree, not a format; the type tables are not ported ([level-files.md](level-files.md), *Ported from Java, proven on no file*) |
 | 50 | a `RGuidSubst` CSV row whose GUID does not parse | put under a `null` key | dropped | a map with a null key is no substitution ([level-files.md](level-files.md), *Ported from Java, proven on no file*) |
 | 51 | a reference's id, writing | fresh, from 1 in first-mention order (`Serializer.nextReference`) | the object's id from the file it was read from, where no other object has it | 19 of the game's 340 LBP3 levels hold ids out of order, and only kept ids write them back byte for byte ([level-files.md](level-files.md), *Writing a level*) |
+| 52 | a dependency replaced in a payload | every run of bytes spelling the old descriptor (`SerializedResource.replaceDependency`) | the descriptors the resource's reader read; refused where its bytes lie in a run no reader read | a float or a count can spell a descriptor: one did, in a `PShape` ([level-files.md](level-files.md), *Dependencies rewritten*) |
+| 53 | `hashinate`'s walk | recursive with no memory, a dependency hashinated at each mention | each dependency once, a loop cut where it closes | the same output, without the repeats ([level-files.md](level-files.md), *Dependencies rewritten*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

@@ -14,6 +14,7 @@
 import { ByteReader, Revision } from './stream.ts';
 import { toHex } from './hex.ts';
 import { Serializer, latin1, type RevisionInfo } from './serializer.ts';
+import { Tape } from './tape.ts';
 
 /** Inflate one zlib stream. May be sync or async; `rawSize` is the expected output length. */
 export type Inflate = (
@@ -255,7 +256,47 @@ export async function openSerializer(
 ): Promise<{ resource: Resource; revision: RevisionInfo; s: Serializer }> {
   const resource = await loadResource(bytes, inflate);
   const revision = resource.revisionInfo;
-  return { resource, revision, s: new Serializer(resource.data, revision, resource.compressionFlags) };
+  const s = new Serializer(resource.data, revision, resource.compressionFlags);
+  if (tapeRequests.has(bytes)) {
+    tapeRequests.delete(bytes);
+    s.tape = new Tape(resource.data);
+    openedOnTape.set(bytes, { resource, s });
+  }
+  return { resource, revision, s };
+}
+
+/**
+ * Files whose next `openSerializer` puts its serializer on a tape, by the
+ * very array: what lets any reader run on a tape with no parameter of its own
+ * (`readOnTape`). Keyed by object, so two reads at once do not meet.
+ */
+const tapeRequests = new WeakSet<Uint8Array>();
+const openedOnTape = new WeakMap<Uint8Array, { resource: Resource; s: Serializer }>();
+
+/**
+ * Run `read` with the serializer it opens on `bytes` put on a tape. The
+ * result names the tape and the container, or is undefined when the reader
+ * opened no serializer on these bytes (one that slices them, or reads its own
+ * header). The tape is finished at the payload's end: what the reader did not
+ * read is one raw run.
+ */
+export async function readOnTape(
+  bytes: Uint8Array,
+  read: (bytes: Uint8Array) => Promise<unknown>,
+): Promise<{ resource: Resource; tape: Tape; position: number } | undefined> {
+  tapeRequests.add(bytes);
+  try {
+    await read(bytes);
+  } finally {
+    tapeRequests.delete(bytes);
+  }
+  const opened = openedOnTape.get(bytes);
+  openedOnTape.delete(bytes);
+  if (!opened?.s.tape) return undefined;
+  const { resource, s } = opened;
+  const position = s.position;
+  s.tape!.finish(s.data.length);
+  return { resource, tape: s.tape!, position };
 }
 
 /**

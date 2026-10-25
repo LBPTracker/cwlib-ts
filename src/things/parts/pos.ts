@@ -17,7 +17,10 @@ import { readThingRef, type PartReader } from '../thing.ts';
  */
 export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>): Float32Array {
   readThingRef(s, readers); // thingOfWhichIAmABone
-  s.i32(); // animHash
+  // `animHash`, an `i32` in cwlib, is the GUID of an animation: the level's
+  // table lists it as type 5, and a bare GUID is what lets it be found there
+  // (steering/level-files.md, *Dependencies rewritten*). The bytes are the same.
+  s.guid(); // animHash
   // Below 0x341 the local matrix is STORED as well; from 0x341 the game keeps
   // only the world one and regenerates the local. The old comment here said
   // "localPosition is regenerated above 0x341", which is true and was written as
