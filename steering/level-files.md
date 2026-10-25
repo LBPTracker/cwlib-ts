@@ -505,12 +505,21 @@ Since 2026-10-25 `readLevel` reads the outermost world's tail, the world Thing's
 and the rest of `RLevel` — `PlayerRecord`, the tutorial inventory and its cached data, the
 Vita's music GUIDs, `dceUuid`, `AdventureData` — cwlib's `RLevel.java` gate for gate, and
 requires the payload's last byte. Where that fails the Things are still returned and
-`LevelParse.unreadTail` says why. ✔ **It holds on 247 of the 251 `LVLb` in the FARCs that
+`LevelParse.unreadTail` says why. ✔ **It holds on 249 of the 251 `LVLb` in the FARCs that
 open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the toolkit's
-`sequencerdump/data` and the fixture**. The four that do not are `pod2.bin` and `sack_town.bin`
-(one byte past `RLevel`'s last field, subVersions `0xe2` and `0xc8`) and `stitchem_manor.bin`
-and `game_outro.bin` (a negative string length in the tail, `0x130` and `0x151`): gates not
-found yet, *28* in [open-questions.md](open-questions.md).
+`sequencerdump/data` and the fixture** (2026-10-25).
+
+- ❗ **It found a gate at once.** `StreamingManager` reads `streamingZoneShape`,
+  `streamingZoneSize` and `numInUsePlans` from subVersion `0x160` only, as cwlib has it; this
+  reader read them always, and LBP3's pre-alpha `stitchem_manor.bin` (`0x130`) and the outro
+  `game_outro.bin` (`0x151`) still "opened" — their worlds hold one Thing each, and the three
+  integers came out of what followed. Every story level is past the gate.
+- ⚠️ **Two levels end one byte after `RLevel`'s last field**: `pod2.bin` (subVersion `0xe2`) and
+  the pre-alpha `sack_town.bin` (`0xc8`), both version `0x3e7`. The byte is zero in one and 1 in
+  the other; after `PlayerRecord` and the two empty tutorial lists come three booleans and then
+  it. No gate of cwlib's `RLevel` falls between `0xc8`–`0xe2`, which have it, and `0x12c`, the
+  next level, which does not — so which field it is, and its gate, are open (*28* in
+  [open-questions.md](open-questions.md)); they keep their `unreadTail`.
 
 Before the container's header gates, 567 plans and 116 levels died in the container instead of at
 the bound. That makes the game's own archives the largest corpus this reader has met, and the first

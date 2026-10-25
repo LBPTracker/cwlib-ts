@@ -195,10 +195,15 @@ function readStreamingManager(s: Serializer): void {
   if (subVersion > 0x1ff) s.i32(); // numPendingIslands
   s.resource(true); // fartDesc, a descriptor
   s.skipVector3(); // startingPointPosition
-  s.i32(); // streamingZoneShape
-  s.i32(); // streamingZoneSize
-  s.i32(); // numInUsePlans
-  if (subVersion >= 0x1a9) s.i32(); // maintainIslandsCount
+  // ⚠️ From subVersion 0x160, as cwlib has it: below, the walk read three integers out
+  // of what follows (`stitchem_manor.bin` at 0x130, `game_outro.bin` at 0x151), which
+  // showed only once `readLevel` read to the end.
+  if (subVersion >= 0x160) {
+    s.i32(); // streamingZoneShape
+    s.i32(); // streamingZoneSize
+    s.i32(); // numInUsePlans
+    if (subVersion >= 0x1a9) s.i32(); // maintainIslandsCount
+  }
 }
 
 /** `EggLink`, inline in `PWorld`'s reward lists: a plan, a bool, and an optional painting. */
