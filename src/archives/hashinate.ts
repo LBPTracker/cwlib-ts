@@ -21,9 +21,12 @@
 
 import { toHex, fromHex } from '../io/hex.ts';
 import { readDependencies, readOnTape, type Dependency, type Inflate } from '../io/resource.ts';
-import { SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
-import type { MarkSegment, Tape } from '../io/tape.ts';
-import { dependencyKey, Writer, writeResource, type Deflate, type DependencyOut } from '../io/writer.ts';
+import { Serializer, SerializerError, type ResourceRef, type RevisionInfo } from '../io/serializer.ts';
+import { Tape, type MarkSegment } from '../io/tape.ts';
+import {
+  dependencyKey, writeDependencyTable, Writer, writeResource, type Deflate, type DependencyOut,
+} from '../io/writer.ts';
+import { readStaticMeshInfo } from '../resources/staticmesh.ts';
 import { readAdventureCreateProfile } from '../resources/adventure-create-profile.ts';
 import { readAdventureSharedData } from '../resources/adventure-shared-data.ts';
 import { readAnimatedTexture } from '../resources/animated-texture.ts';
@@ -44,7 +47,7 @@ import {
   editChunk, editLevel, editPlan, openIsland, writeChunk, writeLevel, writePlan, type EditablePlan,
 } from '../things/write-level.ts';
 
-/** The readers a resource is put on a tape through, by magic; levels, plans and chunks have their own. */
+/** The readers a resource is put on a tape through, by magic; levels, plans, chunks and static meshes have their own. */
 const READERS: Readonly<Record<string, (bytes: Uint8Array, inflate: Inflate) => Promise<unknown>>> = {
   ADCb: readAdventureCreateProfile, ADSb: readAdventureSharedData, ATXb: readAnimatedTexture, BEVb: readBevel,
   FSHb: readScript, GMTb: readMaterial, JNTb: readJointSettings, MSHb: readMesh, OUTb: readOutfitList,
@@ -139,6 +142,8 @@ export async function editResource(bytes: Uint8Array, inflate: Inflate): Promise
         parts: islands, write: (deflate) => writeChunk(chunk, deflate), touched: () => {},
         unread: [], raws: chunk.tape.raws, compressionFlags: chunk.compressionFlags,
       };
+    } else if (magic === 'SMHb') {
+      edit = staticMesh(bytes);
     } else {
       const read = READERS[magic];
       if (!read) return { refused: `no reader for ${JSON.stringify(magic)}` };
@@ -190,6 +195,44 @@ function rewrite(mark: MarkSegment, ref: ResourceRef, revision: RevisionInfo): (
   if (mark.label === 'resource') return descriptor(ref, revision);
   if (mark.label === 'guid') return ref.guid && !ref.hash ? (w) => w.guid(ref.guid) : undefined;
   return ref.hash && !ref.guid ? (w) => w.sha1(ref.hash!) : undefined;
+}
+
+/**
+ * An `RStaticMesh`: its descriptors are in the `StaticMeshInfo` before the
+ * chunk table (`resources/staticmesh.ts`), read plainly, so that header goes on
+ * a tape and the chunks after it are kept as they are, the dependency offset
+ * moved by however much the header grew.
+ */
+function staticMesh(bytes: Uint8Array): EditableResource {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const head = view.getUint32(4, false);
+  const revision: RevisionInfo = { version: head & 0xffff, subVersion: head >>> 16, branchId: 0, branchRevision: 0 };
+  const tableAt = view.getUint32(8, false);
+  const s = new Serializer(bytes.subarray(0x0c, tableAt), revision, 0);
+  const tape = new Tape(s.data);
+  s.tape = tape;
+  readStaticMeshInfo(s);
+  const headerEnd = s.position;
+  tape.finish(headerEnd);
+  const chunks = bytes.subarray(0x0c + headerEnd, tableAt);
+  const dependencies = outOf(readDependencies(bytes));
+  return {
+    magic: 'SMHb', revision, compressionFlags: 0, dependencies, marks: resourceMarks(tape), parts: [],
+    unread: [], raws: tape.raws, touched: () => {},
+    write: async () => {
+      const w = new Writer(revision, 0, headerEnd + 0x100);
+      tape.write(w);
+      const header = w.done();
+      const table = writeDependencyTable(dependencies);
+      const out = new Uint8Array(0x0c + header.length + chunks.length + table.length);
+      out.set(bytes.subarray(0, 0x0c));
+      out.set(header, 0x0c);
+      out.set(chunks, 0x0c + header.length);
+      out.set(table, 0x0c + header.length + chunks.length);
+      new DataView(out.buffer).setUint32(8, 0x0c + header.length + chunks.length, false);
+      return out;
+    },
+  };
 }
 
 /** A row's descriptor as a payload of this revision spells it. */

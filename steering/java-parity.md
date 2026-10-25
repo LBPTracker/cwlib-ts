@@ -54,7 +54,7 @@ level*, level-files.md), and a sequencer `.plan` from values; what is missing:
   every edit but a `PPos` matrix, the list of Things and the Things in it.
 - **Any other resource written** from its values: a mesh, a texture, a profile, an adventure…
   Their dependencies can be rewritten in place, and `hashinate` is ported (*Dependencies
-  rewritten*, level-files.md), except in an `RStaticMesh`, whose descriptors are in its header.
+  rewritten*, level-files.md).
 
 ## Tools
 

@@ -58,8 +58,9 @@ for (const file of FARCS) {
       }
       bump(`${magic} opened`);
       const written = await edit.write(nodeDeflate);
-      const original = await loadResource(bytes, nodeInflate);
-      const identical = original.isCompressed
+      // A static mesh's header is not the container `loadResource` reads: it is compared whole.
+      const original = magic === 'SMHb' ? undefined : await loadResource(bytes, nodeInflate);
+      const identical = original?.isCompressed
         ? same(original.data, (await loadResource(written, nodeInflate)).data) && same(table(bytes), table(written))
         : same(bytes, written);
       bump(`${magic} ${identical ? 'written back identical' : 'written back DIFFERENT'}`, entry.sha1);

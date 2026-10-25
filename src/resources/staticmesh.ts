@@ -107,18 +107,12 @@ function triangles(indices: Uint16Array, first: number, count: number, type: num
   return out.slice(0, n);
 }
 
-export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promise<StaticMesh> {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length < 0x10 || magicOf(bytes) !== 'SMHb') {
-    throw new StaticMeshFormatError('not a static mesh');
-  }
-  const head = view.getUint32(4, false);
-  const revision: RevisionInfo = { version: head & 0xffff, subVersion: head >>> 16, branchId: 0, branchRevision: 0 };
-  if (revision.version < 0x109) throw new StaticMeshFormatError(`static mesh head 0x${head.toString(16)}: no dependency offset`);
-  const dependencyTableOffset = view.getUint32(8, false);
-
-  // The header's `StaticMeshInfo`, read plainly (no compressed integers) from 0x0c.
-  const s = new Serializer(bytes.subarray(0x0c, dependencyTableOffset), revision, 0);
+/**
+ * `StaticMeshInfo`, the header between the dependency offset and the chunk
+ * table, through its `HELP` marker. Exported for `archives/hashinate.ts`,
+ * which reads it on a tape to rewrite the descriptors in it.
+ */
+export function readStaticMeshInfo(s: Serializer) {
   const lightmap = s.resource();
   const risemap = s.resource();
   const fallmap = s.resource();
@@ -145,6 +139,22 @@ export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promi
   });
   const marker = s.u32(true);
   if (marker !== 0x48454c50) throw new StaticMeshFormatError(`the header ends in 0x${marker.toString(16)}, not "HELP"`);
+  return { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw };
+}
+
+export async function readStaticMesh(bytes: Uint8Array, inflate: Inflate): Promise<StaticMesh> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.length < 0x10 || magicOf(bytes) !== 'SMHb') {
+    throw new StaticMeshFormatError('not a static mesh');
+  }
+  const head = view.getUint32(4, false);
+  const revision: RevisionInfo = { version: head & 0xffff, subVersion: head >>> 16, branchId: 0, branchRevision: 0 };
+  if (revision.version < 0x109) throw new StaticMeshFormatError(`static mesh head 0x${head.toString(16)}: no dependency offset`);
+  const dependencyTableOffset = view.getUint32(8, false);
+
+  // The header's `StaticMeshInfo`, read plainly (no compressed integers) from 0x0c.
+  const s = new Serializer(bytes.subarray(0x0c, dependencyTableOffset), revision, 0);
+  const { lightmap, risemap, fallmap, indexBufferSize, vertexStreamSize, raw } = readStaticMeshInfo(s);
 
   // The chunk table, straight after: always compressed.
   const { data, end } = await inflateChunkTable(bytes, 0x0c + s.position, inflate, { error: StaticMeshFormatError });

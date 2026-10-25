@@ -16,6 +16,9 @@ import { editResource, hashinate, replaceDependency } from '../src/archives/hash
 import { toHex } from '../src/io/hex.ts';
 import { readDependencies } from '../src/io/resource.ts';
 import { readLevel } from '../src/things/level.ts';
+import { openFarc } from '../src/archives/farc.ts';
+import { magicOf } from '../src/io/resource.ts';
+import { readStaticMesh } from '../src/resources/staticmesh.ts';
 import { nodeDeflate, nodeInflate, openFileAccess } from '../src/platform/node.ts';
 
 const LEVEL = path.join(
@@ -43,6 +46,34 @@ test("a level's GUID dependency replaced by a hash is named so, in its table and
   const again = await readLevel(written, nodeInflate);
   assert.equal(again.unreadTail, undefined);
   assert.equal(again.things.length, (await readLevel(bytes, nodeInflate)).things.length);
+});
+
+test("a backdrop's material, in the header before its chunks, is renamed and the mesh still reads", async (t) => {
+  if (!GAME || !existsSync(path.join(GAME, FARCS[0]!))) return t.skip('LBP_GAME is not set');
+  for (const file of FARCS) {
+    const access = await openFileAccess(path.join(GAME, file));
+    try {
+      const farc = await openFarc(access);
+      for (const entry of farc.entries.values()) {
+        if (entry.size < 0x16 || magicOf(await access.read(entry.offset, 4)) !== 'SMHb') continue;
+        const bytes = (await farc.get(entry.sha1))!;
+        const edit = await editResource(bytes, nodeInflate);
+        assert.ok(!('refused' in edit), 'refused' in edit ? edit.refused : '');
+        assert.deepEqual(await edit.write(nodeDeflate), bytes, 'unedited, the file is its own bytes');
+        const mesh = await readStaticMesh(bytes, nodeInflate);
+        const guid = mesh.primitives[0]!.material!.guid;
+        const hash = new Uint8Array(20).fill(0x33);
+        replaceDependency(edit, { guid }, { hash });
+        const again = await readStaticMesh(await edit.write(nodeDeflate), nodeInflate);
+        assert.deepEqual(again.primitives[0]!.material?.hash, hash);
+        assert.deepEqual(again.positions, mesh.positions);
+        return;
+      }
+    } finally {
+      await access.close();
+    }
+  }
+  assert.fail('no static mesh in the FARCs');
 });
 
 test('ascetic.lvl hashinated against the game names nothing by GUID it could name by hash', async (t) => {

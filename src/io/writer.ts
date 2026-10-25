@@ -473,16 +473,8 @@ export async function writeResource(
   let size = isCompressed ? tableAt + 4 + chunks.length * 4 : tableAt + payload.length;
   for (const chunk of chunks) size += chunk.deflated.length;
   const depsAt = size;
-  for (const dependency of dependencies) {
-    // ⚠️ Kind 1 is a hash and kind 2 a GUID; a row with both would be kind 3,
-    // 29 bytes, which no file read here has and `readDependencies` refuses. It
-    // used to be sized as 25 and fail on the length check at the end.
-    if (dependency.hash && dependency.guid) {
-      throw new WriterError(`dependency ${dependencyKey(dependency)} has both a GUID and a hash`);
-    }
-    size += dependency.hash ? 25 : 9;
-  }
-  size += 4;
+  const table = writeDependencyTable(dependencies);
+  size += table.length;
 
   const out = new Uint8Array(size);
   const view = new DataView(out.buffer);
@@ -521,13 +513,30 @@ export async function writeResource(
   }
   if (at !== depsAt) throw new WriterError(`chunk data ended at ${at}, table at ${depsAt}`);
 
-  view.setUint32(at, dependencies.length, false);
-  at += 4;
+  out.set(table, at);
+  at += table.length;
+  if (at !== out.length) throw new WriterError(`wrote ${at} bytes of ${out.length}`);
+  return out;
+}
+
+/** The table at a resource's end, as `readDependencies` reads it: a count, then kind, GUID or hash, type. */
+export function writeDependencyTable(dependencies: readonly DependencyOut[]): Uint8Array {
+  let size = 4;
   for (const dependency of dependencies) {
-    let flags = 0;
-    if (dependency.hash) flags |= 1;
-    if (dependency.guid) flags |= 2;
-    out[at] = flags;
+    // ⚠️ Kind 1 is a hash and kind 2 a GUID; a row with both would be kind 3,
+    // 29 bytes, which no file read here has and `readDependencies` refuses. It
+    // used to be sized as 25 and fail on the length check at the end.
+    if (dependency.hash && dependency.guid) {
+      throw new WriterError(`dependency ${dependencyKey(dependency)} has both a GUID and a hash`);
+    }
+    size += dependency.hash ? 25 : 9;
+  }
+  const out = new Uint8Array(size);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, dependencies.length, false);
+  let at = 4;
+  for (const dependency of dependencies) {
+    out[at] = (dependency.hash ? 1 : 0) | (dependency.guid ? 2 : 0);
     at += 1;
     if (dependency.guid) {
       view.setUint32(at, dependency.guid, false);
@@ -540,6 +549,5 @@ export async function writeResource(
     view.setUint32(at, dependency.type, false);
     at += 4;
   }
-  if (at !== out.length) throw new WriterError(`wrote ${at} bytes of ${out.length}`);
   return out;
 }

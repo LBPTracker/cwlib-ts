@@ -313,12 +313,12 @@ dependency and its row in the table; `hashinate` is cwlib's `Resources.hashinate
 a resource and all it reaches, each GUID it names turned to the SHA-1 of what that GUID's bytes
 became, deepest first, loops cut where they close.
 
-✔ **Over the install's four FARCs, 28,396 resources of 18 types open, write back as their own bytes
+✔ **Over the install's four FARCs, 28,443 resources of 19 types open, write back as their own bytes
 and, with one GUID only a descriptor names turned to a made-up SHA-1, read back naming it in their
 table and through their reader, and the GUID nowhere** (`dev/rehash-census.ts`, 2026-10-25): 10,607
 `GMTb`, 10,556 `PLNb`, 5,939 `MSHb`, 530 `FSHb`, 249 `LVLb`, 209 `BEVb`, 174 `PALb`, 59 `OUTb`,
-24 `ATXb`, 17 `PRFb`, 8 `PCKb`, 7 `SLTb`, 5 `QSTb`, 4 `JNTb`, 3 `ADCb`, 3 `ADSb`, 1 `PINb`, 1
-`TUTb`. `test/hashinate.test.ts` hashinates `ascetic.lvl` against the game: 223 resources, and
+47 `SMHb`, 24 `ATXb`, 17 `PRFb`, 8 `PCKb`, 7 `SLTb`, 5 `QSTb`, 4 `JNTb`, 3 `ADCb`, 3 `ADSb`, 1
+`PINb`, 1 `TUTb`. `test/hashinate.test.ts` hashinates `ascetic.lvl` against the game: 223 resources, and
 66 rows the game does not hold — the creator's own textures and plans, by hash.
 
 - ❗ **A row no mark holds is mostly a row nothing names.** 40 of the game's levels and 84 of its
@@ -333,9 +333,12 @@ table and through their reader, and the GUID nowhere** (`dev/rehash-census.ts`, 
   dependency GUIDs: it stays, and so does its row beside the new one. Nor do types 10, 13, 40 and
   49 (`FILENAME`, `FILE_OF_BYTES`, `MUSIC_SETTINGS`, `SAMPLE`), which cwlib also leaves; a
   script's dependencies (type 11) are not followed, as in cwlib.
-- **Not opened**: the 68 `INSb` (every row a sample, type 49, which stays a GUID anyway) and the 47
-  `SMHb`, whose descriptors are in a header no tape covers; what the version bound refuses (265
-  levels, 7,068 plans); the 6 levels that do not read.
+- **An `RStaticMesh`'s descriptors are in its header** (*Backdrops*): the `StaticMeshInfo` goes
+  on a tape of its own (`readStaticMeshInfo`), the chunk table and chunks after it are copied, and
+  the dependency offset moves by what the header grew. All 47 come back whole, and with a
+  material renamed still read (`readStaticMesh`) to the same vertices.
+- **Not opened**: the 68 `INSb` (every row a sample, type 49, which stays a GUID anyway); what the
+  version bound refuses (265 levels, 7,068 plans); the 6 levels that do not read.
 - `writeResource` writes the container a head word implies, as `loadResource` reads it: the branch
   pair from `0x271`, the compression flags from `0x297`, the `isCompressed` byte from `0x189`. The
   1,743 meshes at heads `0x239`–`0x26f` came back identical only once it did.
