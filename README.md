@@ -44,6 +44,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `quest.ts` | `RQuest` (`QSTb`): a story quest — its texts, prize, objectives, the slots that activate and complete it, its key; a reading of our own |
 | `font-face.ts` | `RFontFace` (`FNTb`, loose in `gamedata/fonts/`): a bitmap font — the glyph table, its lookup chains, each glyph's bitmap |
 | `guid-subst.ts`, `dlc.ts` | `RGuidSubst` (`GSBt`) and `RDLC` (`DLCt`) in the game's text form: GUID swaps (a language's dialogue, a character's animations) and the DLC packs' GUIDs and files |
+| `synced-profile.ts` | `RSyncedProfile` (`PRFb`, in a save): time played, the Sackboy the player wears, the creature avatars, the colours, the PSN id |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |

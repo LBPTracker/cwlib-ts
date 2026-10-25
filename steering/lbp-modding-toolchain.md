@@ -171,6 +171,7 @@ never silently follow the toolkit against our own measurement.
 | 23 | `RLevel` after its world Thing | cwlib's gates | three more reads, from the game's loader `v0xc51f60`: a struct at subVersions 0x8e–0xaf, a reference at 0xb0–0x125, a buffer at 0xf0 | `pod2.bin` and `sack_town.bin` end on their last byte only with the reference ([level-files.md](level-files.md), *`readLevel` reads to the end*) |
 | 24 | `PSwitch` of type `GAME_LIVE_STREAMING_CHOICE` from subVersion 0x166 | throws; a comment guesses four wide strings, five from 0x187 | five wide strings at every subVersion from 0x166, the game's loader `v0xd0510a` | `gad_gamelivestreaming_choice.plan` (0x186) ends on its last byte with five ([level-files.md](level-files.md), *`playerMode` at 0x3eb*) |
 | 25 | `PStickers` at versions 0x3bc–0x3cb | nothing after `eyetoyData` | an array of descriptors, the game's loader `v0xcfff80` | the five Move DLC palette plans at 0x3c1 and 0x3c7 end on their last byte only with it ([level-files.md](level-files.md), *`playerMode` at 0x3eb*) |
+| 26 | `RSyncedProfile` on the Vita's branch | nothing after `playerID` and the creature references | one more integer after `playerID` | the saves' one profile, a Vita `PRFb`, ends on its last byte only with it ([level-files.md](level-files.md), *Profiles*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

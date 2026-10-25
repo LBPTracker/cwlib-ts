@@ -1279,6 +1279,24 @@ array is `Name<tab>count` and then its elements `[i]` a level deeper. `TextResou
   `gmat.gsub`'s 575 pairs are none, and all 575 resolve through the PS4 GUID remap — it names
   the PS3 GUIDs. The DLC lists' 6,321 `GUIDS` are all FileDB rows, and 8,118 of their files' 8,119.
 
+## Profiles — `RSyncedProfile`
+
+`readSyncedProfile` in `src/resources/synced-profile.ts` reads a `PRFb` — time played, the
+Sackboy the player wears (a world Thing, read like a plan's), the creature avatars, the player's
+colours and PSN id — by cwlib's `RSyncedProfile` (ennuo/toolkit `d6a2ef8`), and requires the
+payload's last byte.
+
+- **The corpus is one file.** The five PS3 save folders under `LBP_LEVELS` that open (635 resources)
+  hold one profile, a `PRFb` in `data4/BCES00850LEVEL01CFF33A`, and no `BPRb`, `IPRb` or
+  `ADCb`; the install holds none (2026-10-25).
+- ✔ It reads to its last byte (`test/synced-profile.test.ts`): the avatar's world holds four
+  Things — `YELLOWHEAD`, `CREATURE`, `COSTUME`, `JOINT` among their parts — the four colours
+  read as opaque ARGB (`ff5ab432`, …), and the id is `Offline_Player`.
+- ⚠️ **It is on the Vita's branch** (`0x3e2`, branch revision `0x87`), and it ends on its last
+  byte only with **one integer after the PSN id** that cwlib, with no Vita gate here, does not
+  read: `5192869` (`vitaValue`). One file cannot say what it is or from which branch revision it
+  is there — *28* in [open-questions.md](open-questions.md).
+
 ## Quests — `RQuest`
 
 `readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths

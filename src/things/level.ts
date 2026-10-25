@@ -552,7 +552,7 @@ export async function readPlan(
   // and its WORLD part is read like an inner world of a level: its Things are
   // the part's value, not the plan's. Installed on the map the readers close
   // over, as `readLevel` does, and only where nothing installed one already.
-  if (!readers.has('WORLD')) readers.set('WORLD', (self) => readWorld(self, readers));
+  installWorldReader(readers);
   const count = inner.i32();
   const things: (Thing | undefined)[] = [];
   for (let i = 0; i < count; i += 1) things.push(readThingRef(inner, readers));
@@ -586,6 +586,15 @@ export async function readPlan(
     ...(inventory === undefined ? {} : { inventory }),
     ...(unreadTail === undefined ? {} : { unreadTail }),
   };
+}
+
+/**
+ * Put a `WORLD` reader on the map the part readers close over, where none is: a
+ * world Thing inside a plan or a profile reads like an inner world of a level,
+ * its Things the part's value.
+ */
+export function installWorldReader(readers: Map<string, PartReader>): void {
+  if (!readers.has('WORLD')) readers.set('WORLD', (self) => readWorld(self, readers));
 }
 
 /** A streaming island's bounds, as its chunk stores them. */
