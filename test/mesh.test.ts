@@ -207,3 +207,29 @@ test("ascetic.lvl's render meshes name their mesh and the Things that pose it", 
     for (const open of archives) await open?.close();
   }
 });
+
+test("sack_boy.mol's morph targets: each a vertex's offset and its normal", async (t) => {
+  if (!inGame('output', 'orbisguids.map')) return t.skip(NO_GAME);
+  const row = (await gameFileDB()).get(453737)!;
+  assert.equal(row.path, 'gamedata_orbis/mesh_library/player_character/sack_boy.mol');
+  let bytes: Uint8Array | undefined;
+  for (const file of ['base_001.farc', 'chunk1_001.farc', 'craftworld_001.farc', 'intro_001.farc']) {
+    const open = (await meshes(file))!;
+    bytes ??= await open.farc.get(row.sha1);
+    await open.close();
+  }
+  const m = await readMesh(bytes!, nodeInflate);
+  assert.equal(m.morphs.length, m.morphNames.length);
+  assert.equal(m.morphs.length, 29);
+  for (const morph of m.morphs) {
+    assert.equal(morph.offsets.length, m.vertexCount * 3);
+    let moved = 0;
+    for (let v = 0; v < m.vertexCount; v += 1) {
+      const n = Math.hypot(morph.normals[v * 3], morph.normals[v * 3 + 1], morph.normals[v * 3 + 2]);
+      assert.ok(Math.abs(n - 1) < 0.02, `${morph.name}: a normal of length ${n}`);
+      if (morph.offsets[v * 3] || morph.offsets[v * 3 + 1] || morph.offsets[v * 3 + 2]) moved += 1;
+    }
+    // A morph moves some of the face, never the whole Sackboy.
+    assert.ok(moved > 0 && moved < m.vertexCount, `${morph.name} moves ${moved}`);
+  }
+});

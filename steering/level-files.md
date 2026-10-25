@@ -687,8 +687,12 @@ What each convention rests on, every one a count over the same 5,941:
 - ⚠️ `minVert`/`maxVert` are not a bound: six meshes carry nonsense there (`newton_low_poly.mol`,
   `-2147412636..1480`) and 13,626 indices fall outside their primitive's range. The triangles never
   need them.
-- Morphs (on 558 meshes, up to 29) are one 16-byte-a-vertex stream each, skipped by length; only
-  their names are returned.
+- ✔ **Morphs** (on 558 meshes, up to 29) are one 16-byte-a-vertex stream each, and from 0.4.27
+  `morphs` returns them: per vertex an `f32` offset and a `u32` normal, cwlib's `getMorphs` and
+  `unpackNormal32`. Over all 5,567,384 morph vertices the stream count is two more than the morph
+  count on every mesh, the normal has unit length to 0.02 on 99.99%, and 78% of offsets are zero —
+  the vertices a morph leaves alone. ⚠️ One mesh, `c7a1a3b0` (morph 8), has 21 offsets that are no
+  float (`ffff000d`, NaN as read); they are returned as written.
 
 ### `PRenderMesh` — what draws a Thing
 

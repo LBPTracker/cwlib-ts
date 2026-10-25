@@ -33,7 +33,6 @@ value on a reader that already reads every field.
   install nor the saves on this machine hold one (a census of the FARCs and the saves by magic,
   2026-10-25), so a reader would have nothing to be proven on.
 - **Read, but less than Java**:
-  - `RMesh`: the morph targets' vertex streams are walked and dropped; only their names are kept.
   - `RScript`: the instructions are kept as 64-bit words, not decoded per instruction class.
   - `RGfxMaterial`: the compiled shaders are kept as blobs (Java's `CgAssembler`/`GfxAssembler`,
     below, build them).
