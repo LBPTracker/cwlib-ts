@@ -79,11 +79,14 @@ interface Frame {
 /** The writer's view of objects: substitutes, by the object they stand for; `null` writes a null reference. */
 export type Aliases = ReadonlyMap<TapeObject, TapeObject | null>;
 
+const BY_VALUE = new WeakMap<object, TapeObject>();
+
 export class Tape {
   readonly data: Uint8Array;
   readonly root: Segment[] = [];
   private readonly objects = new Map<number, TapeObject>();
-  private readonly byValue = new Map<unknown, TapeObject>();
+  /** Shared by every tape: a value is an object of one tape only, and a Thing copied in keeps its own. */
+  private readonly byValue = BY_VALUE;
   private readonly stack: Frame[] = [{ body: this.root }];
   private last = 0;
   private pendingLabel: string | undefined;
@@ -159,7 +162,7 @@ export class Tape {
 
   private own(target: TapeObject, value: unknown): void {
     target.value = value;
-    if (typeof value === 'object' && value !== null) this.byValue.set(value, target);
+    if (typeof value === 'object' && value !== null) this.byValue.set(value as object, target);
   }
 
   /** The references from here until `listEnd` are one list, its count read between `start` and `end`. */
@@ -193,7 +196,7 @@ export class Tape {
 
   /** The object a reader's value came from. */
   objectOf(value: unknown): TapeObject | undefined {
-    return this.byValue.get(value);
+    return typeof value === 'object' && value !== null ? this.byValue.get(value) : undefined;
   }
 
   /** Write `body` (the root by default): each object at its first mention, under its own id where it is free. */

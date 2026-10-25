@@ -369,7 +369,8 @@ function fillThing(
   // plan -- read three bytes short and produced a plausible, wrong part list.
   // `PartHistory.STREAMING_HINT` is 0x3f, `CONTROLINATOR` 0x2f.
   // cwlib: "I have no idea why they did this" -- at 0x13c the stored revision is 7 short.
-  const partsRevision = s.s32() + (version === 0x13c ? 7 : 0);
+  // Both marked on a tape, so a part can be added to the Thing (`addPart` in `write-level.ts`).
+  const partsRevision = s.mark('partsRevision', (self) => self.s32()) + (version === 0x13c ? 7 : 0);
   // The part mask. `u64` here is a varint when the stream is compressed, and a
   // part index can be as high as 0x35, so this really does need 64 bits.
   //
@@ -383,7 +384,7 @@ function fillThing(
   // declared part treated as present -- and the parts revision it had just read
   // was garbage anyway, so nothing was read at all.
   const masked = version >= 0x297 || onLeerdammer(s.revision, LD_RESOURCES);
-  const mask = masked ? s.u64Big() : -1n;
+  const mask = masked ? s.mark('partsMask', (self) => self.u64Big()) : -1n;
   // `mask` can exceed 2^53, so it is read as a BigInt -- and then split once
   // into two 32-bit halves, so the test below is a shift rather than a BigInt
   // allocated per part per Thing. `1 << bit` alone would wrap at 32.

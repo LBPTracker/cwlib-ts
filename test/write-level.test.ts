@@ -24,11 +24,11 @@ import { openGame } from '../src/archives/game.ts';
 import { readFar } from '../src/archives/savearchive.ts';
 import { readChunk, readLevel, readPlan } from '../src/things/level.ts';
 import {
-  addThings, editChunk, editLevel, editPlan, openIsland, removeThings, replaceChunk, setWorldPosition, worldThings,
+  addPart, addThings, editChunk, editLevel, editPlan, openIsland, removePart, removeThings, replaceChunk, setPart, setWorldPosition, worldThings,
   writeChunk, writeLevel, writeLevelPayload, writePlan, writePlanPayload,
 } from '../src/things/write-level.ts';
 import { nodeDeflate, nodeInflate, openFileAccess } from '../src/platform/node.ts';
-import type { PosPart } from '../src/things/parts.ts';
+import { withBone, type PosPart } from '../src/things/parts.ts';
 
 const LBP3 = { version: 0x3f9, subVersion: 0x218, branchId: 0, branchRevision: 0 } as RevisionInfo;
 
@@ -218,4 +218,29 @@ test("a Thing's bone rides on its POS matrix, out of sight of the 16 floats, and
   const moved = boned.parts.get('POS') as PosPart;
   assert.equal(moved.thingOfWhichIAmABone, bone);
   assert.equal(moved.animHash, pos.animHash);
+});
+
+test('a part written from its value, taken off a Thing and given back, reads back so', async (t) => {
+  if (!existsSync(LEVEL)) return t.skip(`no level at ${LEVEL}`);
+  const bytes = new Uint8Array(readFileSync(LEVEL));
+  const level = await editLevel(bytes, nodeInflate);
+  // Unedited but rewritten from its value, a POS is its own bytes.
+  const first = worldThings(level).find((thing) => thing.parts.get('POS') instanceof Float32Array)!;
+  setPart(level, first, 'POS', first.parts.get('POS'));
+  assert.deepEqual(writeLevelPayload(level), (await loadResource(bytes, nodeInflate)).data);
+
+  const moved = Float32Array.from(first.parts.get('POS') as Float32Array);
+  moved[12] += 10;
+  setPart(level, first, 'POS', withBone(moved, first.parts.get('POS') as PosPart));
+  const other = worldThings(level).filter((thing) => thing.parts.has('POS'))[1]!;
+  const pos = other.parts.get('POS');
+  removePart(level, other, 'POS');
+  let again = await readLevel(await writeLevel(level, nodeDeflate), nodeInflate);
+  assert.equal(again.unreadTail, undefined);
+  assert.deepEqual(again.things.find((thing) => thing?.uid === first.uid)?.parts.get('POS'), moved);
+  assert.equal(again.things.find((thing) => thing?.uid === other.uid)?.parts.has('POS'), false);
+  addPart(level, other, 'POS', pos);
+  again = await readLevel(await writeLevel(level, nodeDeflate), nodeInflate);
+  assert.equal(again.unreadTail, undefined);
+  assert.deepEqual(again.things.find((thing) => thing?.uid === other.uid)?.parts.get('POS'), pos);
 });

@@ -26,15 +26,16 @@
  */
 
 import { openSerializer, readDependencies, type Inflate } from '../io/resource.ts';
-import { requireLbp3, SerializerError, type RevisionInfo } from '../io/serializer.ts';
-import { findSegment, Tape, type ListSegment, type MarkSegment, type TapeObject } from '../io/tape.ts';
+import { requireLbp3, Serializer, SerializerError, type RevisionInfo } from '../io/serializer.ts';
+import { findSegment, Tape, type ListSegment, type MarkSegment, type RefSegment, type Segment, type TapeObject } from '../io/tape.ts';
 import { dependencyKey, Writer, writeResource, type Deflate, type DependencyOut } from '../io/writer.ts';
 import { fromHex, toHex } from '../io/hex.ts';
 import {
   planTapes, readChunkIslandsStream, readLevelStream, readPlanStream, type IslandBounds, type LevelParse,
 } from './level.ts';
 import { partReaders, withBone, type PosPart } from './parts.ts';
-import type { PartReader, Thing } from './thing.ts';
+import { PARTS, partBit, type PartReader, type Thing } from './thing.ts';
+import { partWriters, type PartWriteContext } from './write-parts.ts';
 
 /** What a level, a plan and an island's plan share: a list of Things on a tape. */
 export interface EditableThings {
@@ -240,6 +241,116 @@ export function setWorldPosition(target: EditableThings, thing: Thing, matrix: A
   thing.parts.set('POS', withBone(value, { thingOfWhichIAmABone: old?.thingOfWhichIAmABone, animHash: old?.animHash ?? 0, localPosition: old?.localPosition }));
   target.edited = true;
 }
+
+const WRITERS = partWriters();
+
+/** How a part's writer writes a Thing on this tape: through the tape, its other files' Things as aliases make them. */
+function contextOf(target: EditableThings): PartWriteContext {
+  return {
+    thing: (w, thing) => target.tape.write(w, [{ kind: 'ref', target: thing && target.tape.objectOf(thing) }], target.aliases),
+  };
+}
+
+/** A part's body as its writer writes it from `value`, in place of the bytes it was read from. */
+function bodyOf(target: EditableThings, name: string, value: unknown): Segment[] {
+  const write = WRITERS.get(name);
+  if (!write) throw new SerializerError(`no writer for part ${name}`);
+  const ctx = contextOf(target);
+  return [{ kind: 'mark', label: 'value', bytes: new Uint8Array(0), write: (w) => write(w, value as never, ctx) }];
+}
+
+const partSegment = (object: TapeObject, name: string): RefSegment | undefined => findSegment(object.body, 'ref', name);
+
+/**
+ * A part of a Thing written from `value`, its new value, in place of what the
+ * file held: the part's own writer (`write-parts.ts`) from then on, the rest of
+ * the stream as it was. The Thing must have the part; `addPart` adds one.
+ */
+export function setPart(target: EditableThings, thing: Thing, name: string, value: unknown): void {
+  const object = target.tape.objectOf(thing);
+  const segment = object && partSegment(object, name);
+  if (!segment) throw new SerializerError(`Thing ${thing.uid} has no ${name} on the tape`);
+  if (!segment.target) segment.target = { id: 0, body: [] };
+  segment.target.body = bodyOf(target, name, value);
+  segment.target.value = value;
+  thing.parts.set(name, value);
+  target.edited = true;
+}
+
+/**
+ * A part the Thing does not have, given it: its bit set in the Thing's mask,
+ * the parts revision raised to the part's where it was lower, and the part
+ * written from `value` in its place in declaration order (`PARTS`).
+ *
+ * ⚠️ Refused where raising the parts revision past 0x32 would move the bits
+ * the Thing already has (`partBit`), and on a Thing with no mask (below 0x297).
+ */
+export function addPart(target: EditableThings, thing: Thing, name: string, value: unknown): void {
+  const object = target.tape.objectOf(thing);
+  if (!object) throw new SerializerError(`Thing ${thing.uid} is not on the tape`);
+  if (partSegment(object, name)) {
+    setPart(target, thing, name, value);
+    return;
+  }
+  const declared = PARTS.find((p) => p.name === name);
+  if (!declared) throw new SerializerError(`no part ${name}`);
+  const revisionMark = findSegment(object.body, 'mark', 'partsRevision');
+  const maskMark = findSegment(object.body, 'mark', 'partsMask');
+  if (!revisionMark || !maskMark) throw new SerializerError(`Thing ${thing.uid} has no part mask to add to`);
+  const { subVersion } = target.revision;
+  const oldRevision = readS32(revisionMark, target);
+  const newRevision = Math.max(oldRevision, declared.since);
+  const mask = readU64(maskMark, target);
+  const moved = (r: number) => PARTS.map((p) => partBit(p, subVersion, r));
+  if (moved(oldRevision).some((bit, i) => bit !== moved(newRevision)[i] && bit !== undefined && (mask >> BigInt(bit)) & 1n)) {
+    throw new SerializerError(`adding ${name} would move the bits of the parts Thing ${thing.uid} has`);
+  }
+  const bit = partBit(declared, subVersion, newRevision);
+  if (bit === undefined) throw new SerializerError(`${name} has no bit at subVersion 0x${subVersion.toString(16)}`);
+  const nextMask = mask | (1n << BigInt(bit));
+  revisionMark.write = (w) => w.s32(newRevision);
+  maskMark.write = (w) => w.u64Big(nextMask);
+  // After the last part declared before it.
+  const order = PARTS.findIndex((p) => p.name === name);
+  let at = object.body.indexOf(maskMark) + 1;
+  object.body.forEach((segment, i) => {
+    if (segment instanceof Uint8Array || segment.kind !== 'ref' || !segment.label) return;
+    const index = PARTS.findIndex((p) => p.name === segment.label);
+    if (index >= 0 && index < order) at = i + 1;
+  });
+  const part: TapeObject = { id: 0, body: bodyOf(target, name, value), value };
+  object.body.splice(at, 0, { kind: 'ref', target: part, label: name });
+  thing.parts.set(name, value);
+  target.edited = true;
+}
+
+/** A part taken off a Thing: its bit cleared and its reference gone. */
+export function removePart(target: EditableThings, thing: Thing, name: string): void {
+  const object = target.tape.objectOf(thing);
+  const segment = object && partSegment(object, name);
+  const maskMark = object && findSegment(object.body, 'mark', 'partsMask');
+  const declared = PARTS.find((p) => p.name === name);
+  if (!object || !segment || !maskMark || !declared) throw new SerializerError(`Thing ${thing.uid} has no ${name} to remove`);
+  const revisionMark = findSegment(object.body, 'mark', 'partsRevision')!;
+  const bit = partBit(declared, target.revision.subVersion, readS32(revisionMark, target))!;
+  const nextMask = readU64(maskMark, target) & ~(1n << BigInt(bit));
+  maskMark.write = (w) => w.u64Big(nextMask);
+  object.body.splice(object.body.indexOf(segment), 1);
+  thing.parts.delete(name);
+  target.edited = true;
+}
+
+/** A mark's value as it is now: written by an earlier edit, or its bytes. */
+function markBytes(mark: MarkSegment, target: EditableThings): Uint8Array {
+  if (!mark.write) return mark.bytes;
+  const w = new Writer(target.revision, target.compressionFlags, 16);
+  mark.write(w);
+  return w.done();
+}
+const readS32 = (mark: MarkSegment, target: EditableThings): number =>
+  new Serializer(markBytes(mark, target), target.revision, target.compressionFlags).s32();
+const readU64 = (mark: MarkSegment, target: EditableThings): bigint =>
+  new Serializer(markBytes(mark, target), target.revision, target.compressionFlags).u64Big();
 
 /**
  * Name a chunk written anew where the level named the old one: the
