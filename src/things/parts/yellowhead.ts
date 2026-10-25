@@ -1,7 +1,7 @@
 /** `YELLOWHEAD`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { things } from './common.ts';
 
 /** `PoppetMode`: what the popit has open, and its sub-mode. */
@@ -93,12 +93,21 @@ function readPoppet(s: Serializer, readers: ReadonlyMap<string, PartReader>): vo
  * `0x205`-`0x218` (steering/level-files.md), so neither can fire. Every version gate above 0x359 is likewise always true here;
  * they are written out anyway, because that is where the shape came from.
  */
-export function readYellowHead(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PYellowHead`, kept: a player's Sackboy -- whose, its head, and what it spawns as. */
+export interface YellowHeadPart {
+  readonly head?: Thing;
+  readonly playerNumber: number;
+  readonly animSetKey: number;
+  readonly creatureToSpawnAs: number;
+}
+
+export function readYellowHead(s: Serializer, readers: ReadonlyMap<string, PartReader>): YellowHeadPart {
   const { version, subVersion } = s.revision;
-  readThingRef(s, readers); // head
+  let [animSetKey, creatureToSpawnAs] = [0, 0];
+  const head = readThingRef(s, readers);
   if (version > 0x1fc) readThingRef(s, readers); // legacyToolTetherJoint
   s.f32(); // legacyToolTetherWidth
-  s.s32(); // playerNumber
+  const playerNumber = s.s32();
   // The gate is `version < 0x17f || (0x184 < v < 0x192) || v > 0x1b5`, and the
   // last arm is the live one.
   s.reference((self) => readPoppet(self, readers)); // poppet
@@ -112,10 +121,11 @@ export function readYellowHead(s: Serializer, readers: ReadonlyMap<string, PartR
     readThingRef(s, readers); // recordee
   }
   if (version > 0x359) s.i32(); // lastTimeSlappedAPlayer
-  if (subVersion > 0xa5) s.i32(); // animSetKey
+  if (subVersion > 0xa5) animSetKey = s.i32();
   if (subVersion > 0xd2) s.bool(); // monstrousHeadScale
   if (subVersion > 0x12a) {
-    s.i32(); // creatureToSpawnAs
+    creatureToSpawnAs = s.i32();
     s.bool(); // spawnAsAlternateForm
   }
+  return { head, playerNumber, animSetKey, creatureToSpawnAs };
 }

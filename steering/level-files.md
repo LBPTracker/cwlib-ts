@@ -913,6 +913,16 @@ the meshes it names) and `HudElemPart` (an on-screen element's layer, scale, off
 its quads, each a texture frame on four corners). Needlepoint Peaks: 65 camera zones, 56 of
 `cameraType` 0 and 9 of 3, one node each (a zoom of 2037, a cut-scene field of view of 1.047 —
 60°); 32 animation tweakers, 3 of them playing a looping `.anim`; no HUD element.
+
+From 0.4.32 the last seven, so that every part's reader returns it: `CreaturePart` (its
+`RSettingsCharacter`, state, the modifiers, and the Things that are its legs, life sources, eyes
+and brains), `NpcPart`, `SwitchInputPart`, `ControlinatorPart`, `PoppetPowerupPart` (the plans a
+popit puzzle hands out), `PhysicsTweakPart` (gravity, buoyancy, the configuration, name) and
+`YellowHeadPart` (the head, the player, the animation set, the creature to spawn as). Each keeps
+only some of its fields — the rest are walked as before, the censuses identical. Needlepoint
+Peaks: 3 creatures, 3 NPCs, 58 sensors, 2 controlinators and 539 physics tweakers, of ten
+configurations (0 on 255). ⚠️ None of the 3 creatures lists an eye, a leg or a brain: the 24 eye
+`PEnemy`s of the level belong to no creature in it.
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the

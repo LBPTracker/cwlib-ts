@@ -1,8 +1,8 @@
 /** `CREATURE`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, vitaRevision } from '../../io/serializer.ts';
-import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader } from '../thing.ts';
-import { things } from './common.ts';
+import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
+import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader, type Thing } from '../thing.ts';
+import { thingArray, things } from './common.ts';
 
 /** `WhipSim`: the grappling hook's state, shared by pointer. */
 function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
@@ -30,22 +30,43 @@ function readWhipSim(s: Serializer, readers: ReadonlyMap<string, PartReader>): v
  * in the air, which bullet emitter is next. It is here because it has to be
  * stepped over, not because anything reads it.
  */
-export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PCreature`, kept: a creature's settings and the Things it is built of. */
+export interface CreaturePart {
+  /** Its `RSettingsCharacter`. */
+  readonly config?: ResourceRef;
+  readonly state: number;
+  readonly speedModifier: number;
+  readonly jumpModifier: number;
+  readonly strengthModifier: number;
+  /** The Things that are its legs, its life sources, its eyes and its brains (`PEnemy` parts). */
+  readonly legs: readonly (Thing | undefined)[];
+  readonly lifeSources: readonly (Thing | undefined)[];
+  readonly eyes: readonly (Thing | undefined)[];
+  readonly brainsAi: readonly (Thing | undefined)[];
+  readonly brainsLife: readonly (Thing | undefined)[];
+}
+
+export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartReader>): CreaturePart {
   const { version, subVersion } = s.revision;
+  let legs: (Thing | undefined)[] = [];
+  let lifeSources: (Thing | undefined)[] = [];
+  let eyes: (Thing | undefined)[] = [];
+  let brainsAi: (Thing | undefined)[] = [];
+  let brainsLife: (Thing | undefined)[] = [];
   const thing = () => readThingRef(s, readers);
 
-  s.resource(); // config
+  const config = s.resource();
   s.s32(); // jumpFrame
   s.f32(); // groundDistance
   s.skipVector3(); // groundNormal
   thing(); // grabJoint
   thing(); // jumpingOff
-  s.i32(); // state
+  const state = s.i32();
   if (subVersion >= 0x132) s.i32(); // subState
   s.i32(); // stateTimer
-  s.f32(); // speedModifier
-  s.f32(); // jumpModifier
-  s.f32(); // strengthModifier
+  const speedModifier = s.f32();
+  const jumpModifier = s.f32();
+  const strengthModifier = s.f32();
   s.i32(); // zMode
   s.s32(); // playerAwareness
   s.s32(); // moveDirection
@@ -59,8 +80,8 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   }
   if (version >= 0x221) s.bool(); // haveNotTouchedGroundSinceUsingJetpack
   if (version >= 0x15d) {
-    things(s, readers); // legList
-    things(s, readers); // lifeSourceList
+    legs = thingArray(s, readers);
+    lifeSources = thingArray(s, readers);
     thing(); // lifeCreature
     thing(); // aiCreature
   }
@@ -70,9 +91,9 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   }
   if (version >= 0x169) s.bool(); // meshDirty
   if (version >= 0x166) {
-    things(s, readers); // eyeList
-    things(s, readers); // brainAiList
-    things(s, readers); // brainLifeList
+    eyes = thingArray(s, readers);
+    brainsAi = thingArray(s, readers);
+    brainsLife = thingArray(s, readers);
   }
   if (version >= 0x19c) s.bool(); // reactToLethal
   if (version >= 0x1a9) {
@@ -191,4 +212,5 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
     s.u8(); // springForce
     s.u8(); // springStateTimer
   }
+  return { config, state, speedModifier, jumpModifier, strengthModifier, legs, lifeSources, eyes, brainsAi, brainsLife };
 }

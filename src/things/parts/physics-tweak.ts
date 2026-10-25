@@ -10,10 +10,25 @@ import { Serializer, vitaRevision } from '../../io/serializer.ts';
  * block only when it is 0xe. A reader that ignores the value it just read will
  * work on every level that happens not to use those tools.
  */
-export function readPhysicsTweak(s: Serializer): void {
+/** `PPhysicsTweak`, kept: what a mover, a gravity or a follower tweaker does to a Thing. */
+export interface PhysicsTweakPart {
+  readonly tweakGravity: number;
+  readonly tweakBuoyancy: number;
+  /** cwlib's `TweakConfiguration`; the walk branches on 0xd (a recording follows) and 0xe. */
+  readonly configuration: number;
+  readonly hideInPlayMode: boolean;
+  readonly colorIndex: number;
+  readonly name: string;
+  readonly behavior: number;
+}
+
+export function readPhysicsTweak(s: Serializer): PhysicsTweakPart {
   const { version, subVersion } = s.revision;
-  s.f32(); // tweakGravity
-  if (version > 0x2ff) s.f32(); // tweakBuoyancy
+  let [tweakBuoyancy, colorIndex, behavior] = [0, 0, 0];
+  let hideInPlayMode = false;
+  let name = '';
+  const tweakGravity = s.f32();
+  if (version > 0x2ff) tweakBuoyancy = s.f32();
   if (version > 0x280) s.skipVector3(); // tweakDampening
   s.skipVector3(); // input
   s.skipVector3(); // middleVel
@@ -29,9 +44,9 @@ export function readPhysicsTweak(s: Serializer): void {
   s.bool(); // localSpace
   let configuration = 0;
   if (version > 0x278) configuration = s.i32();
-  if (version > 0x282) s.bool(); // hideInPlayMode
-  if (version > 0x28d) s.i32(); // colorIndex
-  if (version > 0x2db) s.wstr(); // name
+  if (version > 0x282) hideInPlayMode = s.bool();
+  if (version > 0x28d) colorIndex = s.i32();
+  if (version > 0x2db) name = s.wstr();
   if (version < 0x3e8) {
     if (version > 0x2ad) s.u8(); // teamFilter
   } else if (subVersion < 0x132) {
@@ -39,7 +54,7 @@ export function readPhysicsTweak(s: Serializer): void {
   } else {
     s.i32(); // followerPlayerMode
   }
-  if (version > 0x2c5) s.i32(); // behavior
+  if (version > 0x2c5) behavior = s.i32();
   if (version > 0x2dc) {
     s.bool(); // allowInOut
     s.bool(); // allowUpDown
@@ -100,4 +115,5 @@ export function readPhysicsTweak(s: Serializer): void {
   }
   if (subVersion > 0x99) s.f32(); // gridGoalW
   if (subVersion > 0x98) s.skipVector3(); // gridGoal
+  return { tweakGravity, tweakBuoyancy, configuration, hideInPlayMode, colorIndex, name, behavior };
 }

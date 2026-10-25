@@ -1,26 +1,34 @@
 /** `CONTROLINATOR`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { hasPlayerMode } from './common.ts';
 
 /** `PControlinator`: the controller seat. */
-export function readControlinator(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PControlinator`, kept: a controlinator's colour, reach and the switch it drives. */
+export interface ControlinatorPart {
+  readonly colorIndex: number;
+  readonly radius: number;
+  readonly sideMode: boolean;
+  readonly padSwitch?: Thing;
+}
+
+export function readControlinator(s: Serializer, readers: ReadonlyMap<string, PartReader>): ControlinatorPart {
   const { version, subVersion } = s.revision;
   const thing = () => readThingRef(s, readers);
   thing(); // attachedPlayer
   thing(); // lastAttachedPlayer
   thing(); // prompt
   thing(); // promptPlayer
-  s.i32(); // colorIndex
-  s.f32(); // radius
-  s.bool(); // sideMode
+  const colorIndex = s.i32();
+  const radius = s.f32();
+  const sideMode = s.bool();
   s.i32(); // remoteControlState
   s.bool(); // disablePoppetControls
   s.bool(); // autoDock
   s.bool(); // overrideSackbot
   if (subVersion > 0x6e) s.bool(); // killRiderOnCreatureDeath
-  thing(); // padSwitch
+  const padSwitch = thing();
   const vita = vitaRevision(s.revision);
   if (vita >= 0xd) s.f32(); // tiltMax
   if (vita >= 0xe) s.f32(); // tiltMin
@@ -41,4 +49,5 @@ export function readControlinator(s: Serializer, readers: ReadonlyMap<string, Pa
   }
   if (hasPlayerMode(version)) s.u8(); // playerMode
   if (subVersion > 0x189) s.u8(); // layerRange
+  return { colorIndex, radius, sideMode, padSwitch };
 }

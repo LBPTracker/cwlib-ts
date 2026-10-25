@@ -16,13 +16,15 @@ to touch `lib/cwlib/`) against this repository's modules and the return type of 
 (2024-04-30) lacks 147 files' worth of `lib/cwlib/` changes — so name the commit you read, and
 re-check a line against the current checkout before relying on it.
 
-## Thing parts walked and not kept (7)
+## Thing parts: fields walked and not returned
 
 Every part of `Part.java` has a reader (`CREATOR_ANIM` none, and Java too expects it null), so any
-file in range walks to its end; these 7 return nothing, where Java builds an object for each:
-`CREATURE`, `NPC`, `SWITCH_INPUT`, `CONTROLINATOR`, `POPPET_POWERUP`, `PHYSICS_TWEAK`,
-`YELLOWHEAD`.
-Even a kept part returns only the fields a reader of the level needs, not every one it walks. Keeping one is a return
+file in range walks to its end, and since 0.4.32 **every reader returns its part** — but only the
+fields a reader of a level needs, where Java keeps every one. What each returns is its interface in
+`src/things/parts/`; a field a part walks and does not return is a gap here, and keeping it is a
+return value on a reader that already reads it. The part with the most left out is `CREATURE`
+(its state machine, whip, jetpack and the rest; the settings and the Thing lists are returned),
+then `NPC`, `YELLOWHEAD`'s `Poppet`, `PHYSICS_TWEAK` and `SWITCH`. Keeping one is a return
 value on a reader that already reads every field.
 
 ## Resources

@@ -1,6 +1,6 @@
 /** `POPPET_POWERUP`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError } from '../../io/serializer.ts';
+import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
 import { readInventoryItemDetails } from '../../structs/inventory.ts';
 
 /**
@@ -30,12 +30,18 @@ export function readInventoryItem(s: Serializer): void {
  * popit puzzles. cwlib's `PPoppetPowerup.java`; every gate is on subVersion,
  * so a subVersion-0 file (the crossplay levels) holds nothing at all.
  */
-export function readPoppetPowerup(s: Serializer): void {
+/** `PPoppetPowerup`, kept: the plans a popit puzzle hands the player. */
+export interface PoppetPowerupPart {
+  readonly plans: readonly (ResourceRef | undefined)[];
+}
+
+export function readPoppetPowerup(s: Serializer): PoppetPowerupPart {
   const { subVersion } = s.revision;
+  const plans: (ResourceRef | undefined)[] = [];
   if (subVersion > 0x124) {
     s.u64(); // tools
     const items = s.count();
-    for (let i = 0; i < items; i += 1) s.resource(true); // a plan descriptor
+    for (let i = 0; i < items; i += 1) plans.push(s.resource(true)); // a plan descriptor
   }
   if (subVersion >= 0x7 && subVersion < 0x124) {
     // Measured 2026-10-22: `sack_town.bin` (subVersion 0xc8) has powerups
@@ -64,4 +70,5 @@ export function readPoppetPowerup(s: Serializer): void {
   }
   if (subVersion > 0x14a) s.bool(); // vcrBackupTriggered
   if (subVersion > 0x166) s.bool(); // filterContents
+  return { plans };
 }

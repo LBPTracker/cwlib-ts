@@ -1,7 +1,7 @@
 /** `NPC`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 
 /** `InputRecording`: a captured controller performance. */
 function readInputRecording(s: Serializer): void {
@@ -98,9 +98,21 @@ function readNpcJumpSolver(s: Serializer): void {
 }
 
 /** `PNpc`: a sackbot's runtime state. */
-export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+/** `PNpc`, kept: a sackbot's player and name, and the Things that drive its behaviour. */
+export interface NpcPart {
+  readonly behaviorThing?: Thing;
+  readonly rootBehaviorThing?: Thing;
+  readonly playerNumber: number;
+  readonly actorName: string;
+}
+
+export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>): NpcPart {
   const { version, subVersion } = s.revision;
-  if (version < 0x273) return;
+  let behaviorThing: Thing | undefined;
+  let rootBehaviorThing: Thing | undefined;
+  let playerNumber = 0;
+  let actorName = '';
+  if (version < 0x273) return { behaviorThing, rootBehaviorThing, playerNumber, actorName };
   readNpcJumpSolver(s);
   if (subVersion < 0x118) s.skip(s.i32()); // soundRecording
   s.intVector(); // soundRecordingDataNbytes
@@ -114,8 +126,8 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
     s.i32(); // flags
     if (version < 0x2ce) s.s32();
   }
-  if (version > 0x29a) readThingRef(s, readers); // behaviorThing
-  if (version > 0x2d5) readThingRef(s, readers); // rootBehaviorThing
+  if (version > 0x29a) behaviorThing = readThingRef(s, readers);
+  if (version > 0x2d5) rootBehaviorThing = readThingRef(s, readers);
   if (version > 0x2cd && version < 0x36e) {
     s.i32();
     s.i32();
@@ -129,9 +141,9 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
     s.s32(); // waitTime
     if (version < 0x2ce) s.f32();
   }
-  if (version > 0x2ae) s.i32(); // playerNumber
+  if (version > 0x2ae) playerNumber = s.i32();
   if (version > 0x2aa && version < 0x2d5) s.i32();
-  if (version > 0x338) s.wstr(); // actorName
+  if (version > 0x338) actorName = s.wstr();
   if (version > 0x353) {
     if (version === 0x354 || version === 0x355) {
       s.f32();
@@ -144,4 +156,5 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   }
   if (version > 0x391) s.u8(); // costumeToCopy
   if (subVersion > 0x1a5) s.bool(); // copyFormAsWell
+  return { behaviorThing, rootBehaviorThing, playerNumber, actorName };
 }
