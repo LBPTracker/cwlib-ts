@@ -26,6 +26,7 @@ test('every Thing recording reads to its last byte, in the layout of its version
   const layouts = { matrices: 0, positions: 0, packed: 0 };
   const seen = new Set<string>();
   let intro: Awaited<ReturnType<typeof readThingRecording>> | undefined;
+  let packed: Awaited<ReturnType<typeof readThingRecording>> | undefined;
   for (const file of FARCS) {
     const access = await openFileAccess(path.join(GAME, file));
     const farc = await openFarc(access);
@@ -35,17 +36,24 @@ test('every Thing recording reads to its last byte, in the layout of its version
       const recording = await readThingRecording((await farc.get(entry.sha1))!, nodeInflate);
       if (recording.matrices) layouts.matrices += 1;
       if (recording.packed) layouts.packed += 1;
+      else if (recording.positions) layouts.positions += 1;
       if (recording.positions) {
-        layouts.positions += 1;
+        // The arrays and the decoded packed frames alike: one of each a frame, flags 0 or 16.
+        assert.ok(recording.flags!.every((f) => f === 0 || f === 16), 'a flag');
         assert.equal(recording.flags!.length, recording.positions.length);
         assert.equal(recording.angles!.length, recording.positions.length);
-        assert.ok(recording.angles!.every((a) => Math.abs(a) <= Math.PI + 1e-6), 'an angle');
+        if (!recording.packed) assert.ok(recording.angles!.every((a) => Math.abs(a) <= Math.PI + 1e-6), 'an angle');
       }
       if (pathOf.get(entry.sha1)?.endsWith('/move_cutscene_intro_recording_01.rec')) intro = recording;
+      if (pathOf.get(entry.sha1)?.endsWith('/move_cutscene_intro_recording_36.rec')) packed = recording;
     }
     await access.close();
   }
   assert.deepEqual(layouts, { matrices: 1, positions: 54, packed: 36 });
   assert.equal(intro!.positions!.length, 324);
   assert.deepEqual(intro!.positions![0].map((x) => Math.round(x)), [3639, 6772, -200]);
+  // Decoded from its bits: the first position whole, then 275 steps of x and y.
+  assert.equal(packed!.positions!.length, 276);
+  assert.deepEqual(packed!.positions![0].map((x) => Math.round(x)), [5886, 7804, -300]);
+  assert.deepEqual(packed!.positions![275].map((x) => Math.round(x)), [7042, 6206, -300]);
 });

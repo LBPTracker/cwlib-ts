@@ -48,7 +48,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `adventure-create-profile.ts` | `RAdventureCreateProfile` (`ADCb`): an adventure's level slots, its planet and areas as world Things, the links between levels |
 | `adventure-shared-data.ts` | the adventure shared data (`ADSb`): one `AdventureData` — the adventure's items, quests and start points |
 | `animated-texture.ts`, `guid-list.ts`, `voip-recording.ts` | `ATXb` (a flipbook: its atlas and frame size), `GLTb` (a list of GUIDs), `VOPb` (a recorded voice, as bytes) |
-| `thing-recording.ts` | `RThingRecording` (`RECb`): a Thing's recorded path, per frame a position, an angle and a flag, as the game's loader reads it |
+| `thing-recording.ts` | `RThingRecording` (`RECb`): a Thing's recorded path, per frame a position, an angle and a flag, as the game's loader reads it — the newest packed into a bit stream, decoded |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |

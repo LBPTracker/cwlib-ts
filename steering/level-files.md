@@ -1262,9 +1262,18 @@ with no class: a Thing's recorded path, in the LBP2 Move DLC's cutscenes and lev
   54 of arrays, 36 packed. In all 54 the three arrays are equally long — a value of each per
   frame — the positions are world units whose z is a layer's depth (-100, -200, -300, a mean
   step of 87 units a frame), the `f32`s lie in [-π, π], an angle, and the bytes are 0 or 16.
-- ⚠️ The packed frames are kept as bytes: their decoder is `v0x921b40`, not ported. They open
-  with a `u32` and three `f32`s that read as a frame count and a starting position like the
-  arrays'. What the flag byte means is not known.
+- ✔ **The packed frames are decoded** (`decodePackedFrames`, 0.4.25), as `v0x921b40` reads them —
+  the same function writes, by a direction flag. A bit stream, bits lowest first in each byte, a
+  32-bit value's first eight bits its top byte: the frame count and the first position as whole
+  words, then per later frame `dx` and `dy` as 10-bit quantised deltas (`v0xbb81b0` mode 20; range
+  ±1000 at a resolution of 2 — the quantisers `v0xadfe20`/`v0xadfe50` make a value
+  `min + 2·step·q`, and `v0xadfde0` the fewest bits for `(max − min)/(2·step) + 1`), z never
+  moving; the first angle whole and 14-bit deltas (±10 at 0.00125); then one bit for whether any
+  flag is set, the first flag in 8 bits and per later frame a bit and, if set, 8 bits added to the
+  flag before. **All 36 use their bits to within their last byte's padding** (0 to 7 bits), and
+  what comes out is what the arrays hold: flags only 0 or 16, a step of 36 units a frame on
+  average, angles from −3.14 to 3.46 (a sum of deltas, so not wrapped).
+- What the flag byte means is not known.
 
 ## Translation tables — `RTranslationTable`
 
