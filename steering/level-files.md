@@ -1205,6 +1205,31 @@ distinct strings of 16 characters (`PLITTLEBIGDEMO01`, `IGCLBP2KADCO0003`, `LBPD
 ids: 478 of the 485 are the `contentId` of a pack in the game's eight `PCKb`s** (*Slots* below);
 the other seven name no pack there.
 
+## Translation tables — `RTranslationTable`
+
+`readTranslationTable` in `src/resources/translation.ts` reads a `.trans` into a map from LAMS
+key to text; `lamsKeyId` is cwlib's `makeLamsKeyID` (ennuo/toolkit `d6a2ef8`), the key of a tag
+such as `NP_TU01B_130_NEWTON`, and `translate` takes either. FileDB paths
+`gamedata/languages/<language>.trans`, and one per language under `languages/patch/`.
+
+- ❗ **No container and no magic: the FARC entry is the table.** A census of the archives by magic
+  does not see these, which is how the resource census of 2026-10-24 counted none (`java-parity.md`
+  said "not at all"). `u32` count, then `{u32 key, u32 offset}` sorted by key, then UTF-16BE
+  strings, each opening with a BOM, at the offset from the end of the key list; all big-endian.
+- ✔ **All 46 in the FARCs read** (`test/translation.test.ts`, 2026-10-25): 24 full tables, 36,906
+  (Simplified Chinese) to 42,574 (Finnish) keys, English 42,508, and 22 under `patch/` with none.
+  None is cwlib's older text layout, which the reader refuses. Keys share strings — English's
+  42,508 keys point at 35,302 — and in every table the distinct offsets are exactly the BOMs in
+  the string block, starting at 0, so a string runs to the next one's start.
+- ✔ **The hash is the game's**, both halves: `ZIGGURAT_QUEST_TITLE_30` is "Boat Race", and the
+  33-character `TWEAK_MEMORISER_CHANGE_LABEL_NAME` from a script's string pool, which takes the
+  second loop, "Change Label Name".
+- What English names (scratch census, 2026-10-25): of the game's plans, 7,557 of 7,834
+  `titleKey`s, 6,812 of 6,969 `descriptionKey`s and 8,098 of 8,153 categories — the writer's
+  `3423480070` is "My Objects"; every quest title, description and objective that is a tag (59;
+  the other 26 are plain text); and 63 of the 70 tags in the FARC levels' and plans' script
+  fields. The rest are in no table here.
+
 ## Quests — `RQuest`
 
 `readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths

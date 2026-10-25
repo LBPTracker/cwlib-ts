@@ -37,21 +37,25 @@ So any file in range walks to its end. What differs is what a reader returns:
 
 `resources/` holds 28 classes and `resources/custom/` one, and `BigSave` is in `types/save/`.
 
-- **A reader here, on Java's walk** (20): `RLevel` and `RPlan` (`readThings`, `things/level.ts`; the plan's inventory details from 0.4.15),
+- **A reader here, on Java's walk** (21): `RLevel` and `RPlan` (`readThings`, `things/level.ts`; the plan's inventory details from 0.4.15),
   `RStreamingChunk` (`readChunk`, `readChunkIslands`), `RMesh`, `RTexture`, `RGfxMaterial`,
   `RBevel`, `RStaticMesh`, `RInstrument`, and from 2026-10-24 `RMaterial`
   (`readPhysicsMaterial`), `RPalette`, `ROutfitList`, `RJoint` (`readJointSettings`), `RPins`,
   `RCachedCostumeData`, `RSlotList`, `RPacks`, `RAnimation`, `RScript` (its instructions kept as
-  64-bit words, not decoded per class) and `RBoneSet` (the toolkit's own format: its one file,
-  none of the game's). Where one reads differently from Java, *Where we deliberately differ* in
+  64-bit words, not decoded per class), `RBoneSet` (the toolkit's own format: its one file,
+  none of the game's) and from 0.4.16 `RTranslationTable` (the binary layout; the text one is
+  refused, the game having none). Where one reads differently from Java, *Where we deliberately differ* in
   [lbp-modding-toolchain.md](lbp-modding-toolchain.md) has the row (numbered 1 to 25 on 2026-10-25, with a 3b).
 - **A reader here and no reading in Java** (1): `RQuest`, whose `serialize` is empty.
   `readQuest` is a reading of our own, proven on all 25 of the game's `QSTb`; its keys are what
   the levels' `PQuest`s name ([level-files.md](level-files.md), *Quests*).
-- **No reader here** (8, and `BigSave`): `RGuidSubst`, `RDLC`, `RTranslationTable`, `RFontFace`,
-  `RBigProfile`, `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`. Of these the
-  game's four FARCs hold `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`) and
-  the rest not at all (2026-10-24); the profiles and `BigSave` are save data, so a reader would
+- **No reader here** (7, and `BigSave`): `RGuidSubst`, `RDLC`, `RFontFace`, `RBigProfile`,
+  `RLocalProfile`, `RSyncedProfile`, `RAdventureCreateProfile`. Of these the game's four FARCs
+  hold `RGuidSubst` and `RDLC` only in their text form (`GSBt`, `DLCt`, 2026-10-24); the FileDB's
+  19 `.fnt` are in no FARC, but 11 lie loose in the install's `gamedata/fonts/` with magic `FNTb`
+  (2026-10-25), which is where a font reader would be proven. ⚠️ That census went by magic, and
+  `RTranslationTable` has none: it was in the FARCs all along (*Translation tables* in
+  [level-files.md](level-files.md)). The profiles and `BigSave` are save data, so a reader would
   be proven on a save, not on the install.
 
 ## Writing

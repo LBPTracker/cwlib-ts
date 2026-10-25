@@ -41,9 +41,10 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `script.ts` | `RScript` (`FSHb`): a compiled Fish class — its type, field, property and function tables, the 64-bit instructions, the string and constant pools |
 | `bone-set.ts` | `RBoneSet` (`BSTb`): the toolkit's own format, the playable characters' skeletons as its model importer keeps them |
 | `quest.ts` | `RQuest` (`QSTb`): a story quest — its texts, prize, objectives, the slots that activate and complete it, its key; a reading of our own |
+| `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |
-| `slot.ts`, `network.ts` | the structs more than one resource or part reads: a slot, a PSN identity |
+| `slot.ts`, `network.ts`, `inventory.ts` | the structs more than one resource or part reads: a slot, a PSN identity, an item's inventory details |
 | **`sequencer/`** | |
 | `project.ts`, `notes.ts`, `chips.ts` | the music sequencer as data — note records, chaining, automation, the chips' plans and colours |
 | `write-plan.ts` | a sequencer written back out as a `.plan` |
