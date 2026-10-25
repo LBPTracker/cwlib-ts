@@ -16,8 +16,16 @@
  *   `MASK` at `alphaTestLevel` when `GFX_ALPHA_CLIP` is set -- cwlib's names,
  *   not measured.
  *
- * Not ported: Java's occlusion map (a diffuse texture whose path holds
- * `dirt`), its `BLEND` for a material named `decal`, and a cube or volume
+ * - Port 0's texture samples whose path holds `dirt` (`path`, else `name`) as
+ *   `occlusionTexture`, as Java has them, and the first other one as the base
+ *   colour: 1,522 of the game's 11,011 materials have such a sample before
+ *   port 0, where the first sample upstream would otherwise be taken.
+ * - A colour box wired straight into port 2, specular, as
+ *   `KHR_materials_specular`'s `specularColorFactor` (2,048 materials). Java
+ *   writes it as `KHR_materials_pbrSpecularGlossiness`, archived by Khronos.
+ *
+ * Not ported: Java's `BLEND` for a material whose name holds `decal` -- 18 of
+ * the game's 19 such materials have `alphaMode` 0 -- and a cube or volume
  * texture, which glTF has no image for.
  */
 
@@ -26,7 +34,7 @@ import type { ResourceRef } from '../io/serializer.ts';
 import type { Deflate } from '../io/writer.ts';
 import { encodePng } from '../io/png.ts';
 import { toHex } from '../io/hex.ts';
-import { materialSummary, readMaterial, type SampleSummary } from './material.ts';
+import { PORT_DIFFUSE, PORT_SPECULAR, materialSummary, portColour, portSamples, readMaterial, type SampleSummary } from './material.ts';
 /** Anything with primitives that name materials: an `RMesh`, an `RStaticMesh`. */
 export interface WithMaterials {
   readonly primitives: readonly { readonly material?: ResourceRef }[];
@@ -55,6 +63,10 @@ export interface GltfMaterial {
   readonly baseColorFactor?: readonly [number, number, number, number];
   readonly baseColorTexture?: GltfTexture;
   readonly normalTexture?: GltfTexture;
+  /** Port 0's `dirt` texture. */
+  readonly occlusionTexture?: GltfTexture;
+  /** A colour box on port 2, specular, RGB as stored. */
+  readonly specularColor?: readonly [number, number, number];
 }
 
 export interface GltfMaterialSource {
@@ -64,6 +76,8 @@ export interface GltfMaterialSource {
   readonly deflate: Deflate;
   /** A material's or a texture's name; by default `g<GUID>` or its hash. */
   readonly name?: (ref: ResourceRef) => string | undefined;
+  /** A texture's FileDB path, where Java looks for `dirt`; `name` when absent. */
+  readonly path?: (ref: ResourceRef) => string | undefined;
 }
 
 export const refKey = (ref: ResourceRef): string => (ref.hash ? toHex(ref.hash) : `g${ref.guid}`);
@@ -117,7 +131,12 @@ export async function gltfMaterials(mesh: WithMaterials, source: GltfMaterialSou
     if (material === undefined) continue;
     const summary = materialSummary(material);
     const diffuse = summary.diffuse;
-    const baseColorTexture = await sampled(diffuse?.sample, false);
+    const isDirt = (s: SampleSummary): boolean =>
+      s.texture !== undefined && ((source.path ?? source.name)?.(s.texture) ?? '').includes('dirt');
+    const samples = portSamples(material, PORT_DIFFUSE);
+    const baseColorTexture = await sampled(samples.find((s) => !isDirt(s)), false);
+    const occlusionTexture = await sampled(samples.find(isDirt), false);
+    const specular = portColour(material, PORT_SPECULAR);
     const normalTexture = await sampled(summary.bump?.sample, true);
     const coloured = diffuse?.colour !== undefined && (diffuse.shape === 'colour' || diffuse.shape === 'texture*colour');
     out.set(refKey(ref), {
@@ -127,6 +146,8 @@ export async function gltfMaterials(mesh: WithMaterials, source: GltfMaterialSou
       ...(coloured ? { baseColorFactor: diffuse.colour!.map((v) => Math.min(1, Math.max(0, v))) as unknown as GltfMaterial['baseColorFactor'] } : {}),
       ...(baseColorTexture ? { baseColorTexture } : {}),
       ...(normalTexture ? { normalTexture } : {}),
+      ...(occlusionTexture ? { occlusionTexture } : {}),
+      ...(specular ? { specularColor: [specular[0], specular[1], specular[2]] as const } : {}),
     });
   }
   return out;

@@ -47,3 +47,36 @@ export function meshToObj(mesh: Mesh, { channel = 0, materialName }: ObjOptions 
   }
   return `${lines.join('\n')}\n`;
 }
+
+/**
+ * A mesh's softbody springs as OBJ -- cwlib's `MeshExporter.OBJ.exportsprings`:
+ * the vertices `minSpringVert` to `maxSpringVert`, each with its softbody
+ * weight in a comment, and each spring an `l` line between them. The springs
+ * number their vertices from `minSpringVert` (`MeshTail.softbodySprings`), so
+ * the lines' 1-based indices are theirs plus one.
+ */
+export function meshSpringsToObj(mesh: Mesh): string {
+  const p = mesh.positions;
+  const lines: string[] = [];
+  const { minSpringVert, maxSpringVert } = mesh.tail;
+  for (let v = minSpringVert; v <= maxSpringVert && v < mesh.vertexCount; v += 1) {
+    lines.push(`v ${num(p[v * 3])} ${num(p[v * 3 + 1])} ${num(p[v * 3 + 2])} # weight = ${mesh.softbodyWeights[v].toFixed(6)}`);
+  }
+  for (const spring of mesh.tail.softbodySprings) lines.push(`l ${spring.a + 1} ${spring.b + 1}`);
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * The vertices of one softbody cluster as OBJ points, each with its weight in
+ * a comment -- cwlib's `MeshExporter.OBJ.exportcluster`, which writes no faces
+ * either (its loop over them is commented out).
+ */
+export function meshClusterToObj(mesh: Mesh, cluster: number): string {
+  const p = mesh.positions;
+  const lines: string[] = [];
+  for (let v = 0; v < mesh.vertexCount; v += 1) {
+    if (mesh.softbodyClusterIndices[v] !== cluster) continue;
+    lines.push(`v ${num(p[v * 3])} ${num(p[v * 3 + 1])} ${num(p[v * 3 + 2])} # weight = ${mesh.softbodyWeights[v].toFixed(6)}`);
+  }
+  return `${lines.join('\n')}\n`;
+}

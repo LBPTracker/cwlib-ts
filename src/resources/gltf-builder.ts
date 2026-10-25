@@ -140,6 +140,12 @@ export class GltfBuilder {
     };
   }
 
+  /** A specular colour, the extension it needs noted. */
+  private specular(colour: readonly [number, number, number]): number[] {
+    this.extensions.add('KHR_materials_specular');
+    return colour.map((c) => Math.max(0, c));
+  }
+
   /** A material's index: as `options.materials` made it, else a name and a white base colour. */
   material(ref: ResourceRef): number {
     const key = refKey(ref);
@@ -157,6 +163,8 @@ export class GltfBuilder {
             ...(made.baseColorTexture ? { baseColorTexture: this.textureInfo(made.baseColorTexture) } : {}),
           },
           ...(made.normalTexture ? { normalTexture: this.textureInfo(made.normalTexture) } : {}),
+          ...(made.occlusionTexture ? { occlusionTexture: this.textureInfo(made.occlusionTexture) } : {}),
+          ...(made.specularColor ? { extensions: { KHR_materials_specular: { specularColorFactor: this.specular(made.specularColor) } } } : {}),
           ...(made.doubleSided ? { doubleSided: true } : {}),
           ...(made.alphaCutoff !== undefined ? { alphaMode: 'MASK', alphaCutoff: made.alphaCutoff } : {}),
         });

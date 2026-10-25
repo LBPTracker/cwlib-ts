@@ -38,7 +38,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `staticmesh-gltf.ts`, `gltf-builder.ts` | an `RStaticMesh` written as glTF; the buffer, materials and container every glTF export shares |
 | `animation-gltf.ts` | an `RAnimation` written as a glTF animation, alone or on its mesh |
-| `mesh-obj.ts` | an `RMesh` written as Wavefront OBJ |
+| `mesh-obj.ts` | an `RMesh` written as Wavefront OBJ, and its softbody springs and clusters |
 | `mesh-gltf.ts`, `gltf-material.ts` | an `RMesh` written as a binary glTF: geometry, skin and morphs, its materials with their textures as PNG |
 | `bevel.ts`, `staticmesh.ts` | `RBevel` (`BEVb`), the profile a shape's edge is swept with; `RStaticMesh` (`SMHb`), a level's backdrop |
 | `physics-material.ts` | `RMaterial` (`MATb`): a shape's physics — density, friction, bounce, its sound family, what it collides with, whether it breaks |

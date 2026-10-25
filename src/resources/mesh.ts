@@ -105,6 +105,13 @@ export interface Mesh {
    * vertices are 1. What the game does with it is not measured.
    */
   readonly softbodyWeights: Float32Array;
+  /**
+   * `vertexCount`: the vertex's softbody cluster, stream 0's byte 12 over 2 --
+   * cwlib's `getClusterIndex`. ✔ Below the cluster count on every vertex of all
+   * 116 of the game's meshes with clusters (`MeshTail.softbodyClusters`); 0 on
+   * a mesh without.
+   */
+  readonly softbodyClusterIndices: Uint8Array;
   /** One `vertexCount * 2` array per channel -- every channel the mesh has, 1 to 3. */
   readonly uvs: Float32Array[];
   /** `vertexCount * 4` bone indices; a slot whose weight is zero is usually 0. */
@@ -121,6 +128,8 @@ export interface Mesh {
   readonly morphs: MeshMorph[];
   /** cwlib's `SkeletonType`: 0 sackboy, 1 giant, 2 dwarf, 3 bird, 4 quad. */
   readonly skeletonType: number;
+  /** Everything after the bones: mirroring, softbody, implicit shapes, culling (`MeshTail`). */
+  readonly tail: MeshTail;
 }
 
 /**
@@ -324,74 +333,140 @@ export function readBone(s: Serializer): MeshBone {
   };
 }
 
+/** A softbody cluster: cwlib's `SoftbodyCluster`. */
+export interface SoftbodyCluster {
+  readonly name: string;
+  readonly restCOM: readonly [number, number, number, number];
+  /** A 4x4, column-major. */
+  readonly restDyadicSum: Float32Array;
+  /** 81 floats, a 9x9. */
+  readonly restQuadraticDyadicSum: Float32Array;
+}
+
+/** cwlib's `ImplicitEllipsoid`: a collision ellipsoid on a bone. */
+export interface ImplicitEllipsoid {
+  readonly transform: Float32Array;
+  readonly parentBone: number;
+  readonly affectWorldOnly: number;
+}
+
 /**
- * Everything after the bones -- mirroring, softbody, implicit shapes, culling --
- * walked and dropped. Returns the primitive type and the skeleton type.
+ * Everything an `RMesh` holds after its bones, in cwlib's names (`RMesh.java`,
+ * ennuo/toolkit `d6a2ef8`): the mirroring tables, the softbody (clusters,
+ * springs, equivalences, masses), the implicit collision shapes, the spring
+ * range, the cull boxes and the costume fields. ⚠️ Read as cwlib reads them and
+ * proven only by the walk ending on the payload's last byte; what the game does
+ * with each is not measured, except the springs' place in `softbodyWeights`.
  */
-function readTail(s: Serializer): { primitiveType: number; skeletonType: number } {
+export interface MeshTail {
+  readonly mirrorBones: readonly number[];
+  /** cwlib's `FlipType`, an enum8 per mirrored bone. */
+  readonly mirrorBoneFlipTypes: readonly number[];
+  readonly mirrorMorphs: readonly number[];
+  readonly softbodyClusters: readonly SoftbodyCluster[];
+  /**
+   * Vertex `a` to vertex `b`, both counted from `minSpringVert`, and the
+   * square of the rest length. ✔ So read, all 1,038,735 of the game's springs
+   * (1,055 meshes) join vertices up to `maxSpringVert`, and every
+   * `restLengthSq` is the square of the two vertices' distance in the bind
+   * pose; read as plain vertex indices, 504,499 stay in range and 190,639 fit.
+   */
+  readonly softbodySprings: readonly { readonly a: number; readonly b: number; readonly restLengthSq: number }[];
+  readonly softbodyEquivs: readonly { readonly first: number; readonly count: number }[];
+  readonly mass: Float32Array;
+  readonly implicitEllipsoids: readonly ImplicitEllipsoid[];
+  readonly clusterImplicitEllipsoids: readonly Float32Array[];
+  readonly insideImplicitEllipsoids: readonly ImplicitEllipsoid[];
+  readonly implicitPlanes: readonly {
+    readonly planeNormal: readonly [number, number, number, number];
+    readonly pointInPlane: readonly [number, number, number, number];
+    readonly parentBone: number;
+  }[];
+  /** An `RSettingsSoftPhys`. */
+  readonly softPhysSettings?: ResourceRef;
+  readonly minSpringVert: number;
+  readonly maxSpringVert: number;
+  readonly minUnalignedSpringVert: number;
+  readonly springyTriIndices: readonly number[];
+  readonly springTrisStripped: boolean;
+  readonly softbodyContainingBoundBoxMin: readonly [number, number, number, number];
+  readonly softbodyContainingBoundBoxMax: readonly [number, number, number, number];
+  readonly cullBones: readonly {
+    readonly invSkinPoseMatrix: Float32Array;
+    readonly boundBoxMin: readonly [number, number, number, number];
+    readonly boundBoxMax: readonly [number, number, number, number];
+  }[];
+  readonly regionIDsToHide: readonly number[];
+  readonly costumeCategoriesUsed: number;
+  /** cwlib's `HairMorph`, from version `0x141`; 0 before. */
+  readonly hairMorphs: number;
+  readonly bevelVertexCount: number;
+  readonly implicitBevelSprings: boolean;
+  /** The Vita branch's per-vertex colours (`DOUBLE11` at `0x28`); absent elsewhere. */
+  readonly vertexColors?: readonly number[];
+}
+
+/** Everything after the bones, returned; and the primitive and skeleton types among it. */
+function readTail(s: Serializer): { primitiveType: number; skeletonType: number; tail: MeshTail } {
   const { version, subVersion, branchId, branchRevision } = s.revision;
-  s.array((x) => x.i16()); // mirrorBones
-  s.array((x) => x.u8()); // mirrorBoneFlipTypes, enum8
-  s.array((x) => x.i16()); // mirrorMorphs
+  const mirrorBones = s.array((x) => x.i16());
+  const mirrorBoneFlipTypes = s.array((x) => x.u8());
+  const mirrorMorphs = s.array((x) => x.i16());
   const primitiveType = s.u8();
   // SoftbodyClusterData: a count, then four arrays of that many, each with its
   // own redundant length in front.
   const clusters = s.count();
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.skipVector4(); // restCOM
+  const restCOM = Array.from({ length: clusters }, () => s.vector4());
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.skipMatrix(); // restDyadicSum
+  const restDyadicSum = Array.from({ length: clusters }, () => s.matrix());
   s.i32();
-  s.skip(clusters * 81 * 4); // restQuadraticDyadicSum, f32 each
+  const restQuadratic = Array.from({ length: clusters }, () => Float32Array.from({ length: 81 }, () => s.f32()));
   s.i32();
-  for (let i = 0; i < clusters; i += 1) s.skip(0x20); // names
-  s.array((x) => { // softbodySprings
-    x.i16();
-    x.i16();
-    x.f32();
-  });
-  s.array((x) => { // softbodyEquivs
-    x.i16();
-    x.i16();
-  });
-  s.array((x) => x.f32()); // mass
-  const ellipsoid = (x: Serializer): void => {
-    x.skipMatrix();
-    x.i32(); // parentBone
-    x.i32(); // affectWorldOnly
-  };
-  s.array(ellipsoid); // implicitEllipsoids
-  s.array((x) => x.matrix()); // clusterImplicitEllipsoids
-  s.array(ellipsoid); // insideImplicitEllipsoids
-  s.array((x) => { // implicitPlanes
-    x.skipVector4();
-    x.skipVector4();
-    x.i32();
-  });
-  s.resource(); // softPhysSettings
-  s.i32(); // minSpringVert
-  s.i32(); // maxSpringVert
-  s.i32(); // minUnalignedSpringVert
-  s.array((x) => x.i16()); // springyTriIndices
-  s.i32(); // springTrisStripped, an intbool
-  s.skipVector4(); // softbodyContainingBoundBoxMin
-  s.skipVector4(); // softbodyContainingBoundBoxMax
-  s.array((x) => { // cullBones
-    x.skipMatrix();
-    x.skipVector4();
-    x.skipVector4();
-  });
-  s.intVector(); // regionIDsToHide
-  s.i32(); // costumeCategoriesUsed
-  if (version >= 0x141) s.i32(); // hairMorphs, enum32
-  s.i32(); // bevelVertexCount
-  s.bool(); // implicitBevelSprings
+  const names = Array.from({ length: clusters }, () => latin1(s.bytes(0x20)).replace(/\0.*$/s, ''));
+  const softbodyClusters = names.map((name, i) => ({
+    name, restCOM: restCOM[i], restDyadicSum: restDyadicSum[i], restQuadraticDyadicSum: restQuadratic[i],
+  }));
+  const softbodySprings = s.array((x) => ({ a: x.i16(), b: x.i16(), restLengthSq: x.f32() }));
+  const softbodyEquivs = s.array((x) => ({ first: x.i16(), count: x.i16() }));
+  const mass = Float32Array.from(s.array((x) => x.f32()));
+  const ellipsoid = (x: Serializer): ImplicitEllipsoid => ({ transform: x.matrix(), parentBone: x.i32(), affectWorldOnly: x.i32() });
+  const implicitEllipsoids = s.array(ellipsoid);
+  const clusterImplicitEllipsoids = s.array((x) => x.matrix());
+  const insideImplicitEllipsoids = s.array(ellipsoid);
+  const implicitPlanes = s.array((x) => ({ planeNormal: x.vector4(), pointInPlane: x.vector4(), parentBone: x.i32() }));
+  const softPhysSettings = s.resource();
+  const minSpringVert = s.i32();
+  const maxSpringVert = s.i32();
+  const minUnalignedSpringVert = s.i32();
+  const springyTriIndices = s.array((x) => x.i16());
+  const springTrisStripped = s.i32() !== 0;
+  const softbodyContainingBoundBoxMin = s.vector4();
+  const softbodyContainingBoundBoxMax = s.vector4();
+  const cullBones = s.array((x) => ({ invSkinPoseMatrix: x.matrix(), boundBoxMin: x.vector4(), boundBoxMax: x.vector4() }));
+  const regionIDsToHide = s.intVector();
+  const costumeCategoriesUsed = s.i32();
+  const hairMorphs = version >= 0x141 ? s.i32() : 0;
+  const bevelVertexCount = s.i32();
+  const implicitBevelSprings = s.bool();
   // ⚠️ cwlib's, unmeasured: no mesh in the PS4 FARCs is on the Vita branch.
-  if (branchId === DOUBLE11 && version === DOUBLE11_HEAD && branchRevision >= 0x28) {
-    s.array((x) => x.i32(true)); // vertexColors
-  }
+  const vertexColors = branchId === DOUBLE11 && version === DOUBLE11_HEAD && branchRevision >= 0x28
+    ? s.array((x) => x.i32(true))
+    : undefined;
   const skeletonType = subVersion >= 0xd6 ? s.u8() : 0;
-  return { primitiveType, skeletonType };
+  return {
+    primitiveType,
+    skeletonType,
+    tail: {
+      mirrorBones, mirrorBoneFlipTypes, mirrorMorphs, softbodyClusters, softbodySprings, softbodyEquivs, mass,
+      implicitEllipsoids, clusterImplicitEllipsoids, insideImplicitEllipsoids, implicitPlanes,
+      ...(softPhysSettings ? { softPhysSettings } : {}),
+      minSpringVert, maxSpringVert, minUnalignedSpringVert, springyTriIndices, springTrisStripped,
+      softbodyContainingBoundBoxMin, softbodyContainingBoundBoxMax, cullBones, regionIDsToHide,
+      costumeCategoriesUsed, hairMorphs, bevelVertexCount, implicitBevelSprings,
+      ...(vertexColors ? { vertexColors } : {}),
+    },
+  };
 }
 
 /**
@@ -435,7 +510,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   if (subVersion >= 0x16b) s.skip(s.i32()); // triangleAdjacencyInfos
   const runs = s.array(readPrimitive);
   const bones = s.array(readBone);
-  const { primitiveType, skeletonType } = readTail(s);
+  const { primitiveType, skeletonType, tail } = readTail(s);
   if (s.remaining !== 0) {
     throw new SerializerError(`the mesh left ${s.remaining} of ${s.data.length} bytes unread`);
   }
@@ -448,8 +523,9 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
 
   // Stream 0, per vertex: f32 x, y, z, then four bytes cwlib reads as a softbody
   // cluster and weight (`0x000000ff` on 4,664,668 of 4,896,968 vertices): the
-  // weight in byte 15 (`Mesh.softbodyWeights`); bytes 12-14 are non-zero only on
-  // meshes with softbody clusters (112 of 116) and are not returned. Stream 1: the
+  // weight in byte 15 (`Mesh.softbodyWeights`), the cluster in byte 12 over 2
+  // (`Mesh.softbodyClusterIndices`); bytes 12-14 are non-zero only on meshes with
+  // softbody clusters (112 of 116), 13 and 14 not returned. Stream 1: the
   // three weights in bytes 2, 1, 0, a joint in every fourth byte, and the
   // normal as a 24-bit pack at 4, the tangent as one at 12.
   //
@@ -462,6 +538,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   const normals = new Float32Array(vertexCount * 3);
   const tangents = new Float32Array(vertexCount * 3);
   const softbodyWeights = new Float32Array(vertexCount);
+  const softbodyClusterIndices = new Uint8Array(vertexCount);
   const joints = new Uint8Array(vertexCount * 4);
   const weights = new Float32Array(vertexCount * 4);
   const pv = new DataView(position.buffer, position.byteOffset, position.byteLength);
@@ -473,6 +550,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
     unpackNormal(skin, at + 4, normals, v * 3);
     unpackNormal(skin, at + 12, tangents, v * 3);
     softbodyWeights[v] = position[at + 15] / 0xff;
+    softbodyClusterIndices[v] = position[at + 12] >> 1;
     // A single-bone vertex is `ff 00 00` and needs no case of its own: the
     // remainder is then zero. The three never sum past 0xff in the game's meshes.
     const w0 = skin[at + 2];
@@ -523,7 +601,7 @@ export async function readMesh(bytes: Uint8Array, inflate: Inflate): Promise<Mes
   });
 
   return {
-    revision, vertexCount, positions, normals, tangents, softbodyWeights, uvs, joints, weights,
-    primitives, bones, primitiveType, morphNames, morphs, skeletonType,
+    revision, vertexCount, positions, normals, tangents, softbodyWeights, softbodyClusterIndices, uvs, joints, weights,
+    primitives, bones, primitiveType, morphNames, morphs, skeletonType, tail,
   };
 }

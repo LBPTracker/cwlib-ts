@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 46 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 48 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -13,7 +13,7 @@ Measured 2026-10-24 and 2026-10-25 by listing the classes under `lib/cwlib/src/m
 [ennuo/toolkit](https://github.com/ennuo/toolkit) at `main` `d6a2ef8` (2026-09-19, the last commit
 to touch `lib/cwlib/`) against this repository's
 modules and the return type of every reader `partReaders()` binds; revised as each gap closed, last
-at 0.4.47. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
+at 0.4.48. ⚠️ A checkout of the toolkit can be far behind, and its HEAD does not say so: the one
 on this machine is at `fee2239`, but its `lib/cwlib/` is `bb79e81` (2024-04-30), 147 files'
 worth behind — `RTranslationTable.patch`, `MeshExporter` and `RMesh` among them. Name the commit
 whose `lib/cwlib/` you read (`git log -1 -- lib/cwlib/`), and read `d6a2ef8` with `git show`.
@@ -41,9 +41,6 @@ rest), then `NPC`, `YELLOWHEAD`'s `Poppet`, `PHYSICS_TWEAK` and `SWITCH`. Each p
     below version `0x37c` refuse — below the revision bound, *Revisions*.
   - `RDLC` and `RGuidSubst`: the engine's text form only (`GSBt`, `DLCt`), the one the game ships;
     not `RDLC`'s binary form, nor `RGuidSubst`'s other text layout.
-  - `RMesh`: the per-vertex colours of the Vita branch (`DOUBLE11` at `0x28`) are walked, not
-    returned — no mesh in the PS4 FARCs is on that branch — and neither are the softbody
-    clusters, springs, masses, the implicit shapes and the rest after the bones.
 - **The legacy one-file mod**, `MODb`/`MODe` (`Mod.fromLegacyMod`), is not read; no such file was
   on this disk.
 
@@ -55,10 +52,9 @@ and so needs a writer for every resource.
 
 ## Tools
 
-- **glTF and OBJ** (`MeshExporter`): a material's animation (`FromMaterialAnimation`) to glTF; an `RMesh`'s softbody to OBJ, by cluster or its springs; and in an
-  `RMesh`'s glTF, the specular colour
-  (`KHR_materials_pbrSpecularGlossiness`), the occlusion map Java makes of a diffuse texture whose
-  path holds `dirt`, and the `BLEND` it gives a material named `decal`.
+- **glTF** (`MeshExporter`): a material's animation (`FromMaterialAnimation`) — a test in Java
+  rather than an export: a material name written in (`cosmos_pixels`), one triangle, and the first
+  parameter animation as a texture offset through `KHR_animation_pointer`.
 - **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
   `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
 - **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).

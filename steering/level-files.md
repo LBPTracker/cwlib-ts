@@ -746,7 +746,23 @@ What each convention rests on, every one a count over the same 5,941:
   somewhere on 1,063, of which 1,055 have springs (scratch census, 2026-10-25). Bytes 12–14 are
   non-zero only on meshes with softbody clusters (112 of the 116), and are not returned. What the
   game does with the weight is not measured. `test/mesh.test.ts` pins `intro_001.farc`'s 14
-  weighted meshes.
+  weighted meshes. Byte 12 over 2 is the vertex's softbody cluster (`Mesh.softbodyClusterIndices`,
+  cwlib's `getClusterIndex`): below the cluster count on every vertex of all 116 meshes that have
+  clusters.
+- **Everything after the bones is returned** (`Mesh.tail`, `MeshTail`, 0.4.48), in cwlib's names:
+  the mirror tables, the softbody clusters, springs, equivalences and masses, the implicit
+  ellipsoids and planes, the spring range, the cull boxes, the costume fields, the Vita branch's
+  vertex colours. Scratch census, 2026-10-25:
+  - ❗ **A spring counts its vertices from `minSpringVert`.** So read, all 1,038,735 springs of the
+    1,055 meshes that have them stay up to `maxSpringVert`, and every `restLengthSq` is the squared
+    distance of its two vertices in the bind pose; read as plain indices, 504,499 stay in range and
+    190,639 fit — the trap a reading by the field's name falls into.
+  - Every mesh has one `cullBones` box per bone, and mirror tables; 116 have clusters and, with
+    them, a `mass` per vertex; 670 name an `RSettingsSoftPhys`; 25 have implicit ellipsoids, 13
+    implicit planes, 1,700 `regionIDsToHide`.
+  - `meshSpringsToObj` and `meshClusterToObj` (`mesh-obj.ts`) are cwlib's `exportsprings` and
+    `exportcluster`: the spring range's vertices with their weights and the springs as lines, and
+    one cluster's vertices.
 - ⚠️ `minVert`/`maxVert` are not a bound: six meshes carry nonsense there (`newton_low_poly.mol`,
   `-2147412636..1480`) and 13,626 indices fall outside their primitive's range. The triangles never
   need them.
@@ -827,6 +843,16 @@ caller gives (`materialName`).
   - A normal map goes in as Java converts it, x = 1 − alpha and y = green, with z rebuilt as the
     game's shader does, `sqrt(|1 − x² − y²|)` (lbprender's steering/game-shaders.md), where Java
     writes 1. The sign of x is Java's and is not measured.
+  - ❗ **Port 0's `dirt` textures are occlusion, not colour** (0.4.48), as Java has them: 1,522 of
+    the game's 11,011 materials have such a sample before port 0 and 2,886 more than one sample
+    there, so "the first sample upstream" took a dirt map for the colour. Now the first other
+    sample is `baseColorTexture` and the dirt one `occlusionTexture` (`portSamples` in
+    `material.ts`). A colour box wired straight into port 2 is `KHR_materials_specular`'s
+    `specularColorFactor` (2,048 materials; Java writes the archived spec-gloss extension). With
+    them, all 5,941 meshes still validate with no error and no warning: counted per mesh, 1,419
+    occlusion maps and 2,426 specular colours; 10,278 base-colour textures where there were 10,666.
+    Java's `BLEND` for a material named `decal` is not ported: 18 of the 19 such materials have
+    `alphaMode` 0.
   - A sample's UV matrix goes in as `KHR_texture_transform` (151 rotated or skewed); a shear has
     no place there and is lost, on 4. Wrap 1 is `REPEAT`, 2 `MIRRORED_REPEAT`, the rest
     `CLAMP_TO_EDGE`. A cube or volume texture has no glTF image and is left out.

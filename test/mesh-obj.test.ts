@@ -7,7 +7,7 @@ import test from 'node:test';
 import { openGame } from '../src/archives/game.ts';
 import { nodeInflate, openFileAccess } from '../src/platform/node.ts';
 import { readMesh, type Mesh } from '../src/resources/mesh.ts';
-import { meshToObj } from '../src/resources/mesh-obj.ts';
+import { meshClusterToObj, meshSpringsToObj, meshToObj } from '../src/resources/mesh-obj.ts';
 
 /** An `RMesh` written as OBJ and read back here; the game's skips without `LBP_GAME`. */
 const GAME = process.env.LBP_GAME ?? '';
@@ -41,6 +41,16 @@ test('a mesh comes back out of its OBJ: positions, UVs turned over, 1-based face
   assert.deepEqual(obj.get('vt')![2], ['0', '0.75']);
   assert.deepEqual(obj.get('f'), [['1/1/1', '2/2/2', '3/3/3']], 'the repeated run once');
   assert.deepEqual(obj.get('usemtl'), [['m7']]);
+
+  // Springs: the vertices from minSpringVert, which the springs count from; clusters by index.
+  const soft = {
+    ...mesh, softbodyWeights: Float32Array.of(1, 0.5, 0), softbodyClusterIndices: Uint8Array.of(0, 1, 1),
+    tail: { minSpringVert: 1, maxSpringVert: 2, softbodySprings: [{ a: 1, b: 0, restLengthSq: 1.25 }] },
+  } as unknown as Mesh;
+  const springs = readObj(meshSpringsToObj(soft));
+  assert.deepEqual(springs.get('v')!.map((v) => v.slice(0, 3)), [['1', '0', '0'], ['0', '1', '0.5']]);
+  assert.deepEqual(springs.get('l'), [['2', '1']]);
+  assert.deepEqual(readObj(meshClusterToObj(soft, 1)).get('v')!.map((v) => v.slice(0, 3)), [['1', '0', '0'], ['0', '1', '0.5']]);
 });
 
 test("sack_boy.mol's OBJ holds every vertex and every triangle", async (t) => {

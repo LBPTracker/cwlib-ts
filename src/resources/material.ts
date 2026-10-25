@@ -355,12 +355,12 @@ function sampleOf(m: GfxMaterial, index: number): SampleSummary {
   };
 }
 
-function port(m: GfxMaterial, output: number, which: number): PortSummary | undefined {
+/** The boxes upstream of one of the output box's ports: depth-first, inputs in port order, each once. */
+function upstream(m: GfxMaterial, output: number, which: number): number[] | undefined {
   const wire = m.wires.find((w) => w.boxTo === output && w.portTo === which);
   if (!wire) return undefined;
   const inputs = (box: number): number[] =>
     m.wires.filter((w) => w.boxTo === box).sort((a, b) => a.portTo - b.portTo).map((w) => w.boxFrom);
-  // Depth-first upstream, inputs in port order, each box once.
   const order: number[] = [];
   const seen = new Set<number>();
   const visit = (box: number): void => {
@@ -370,6 +370,31 @@ function port(m: GfxMaterial, output: number, which: number): PortSummary | unde
     for (const from of inputs(box)) visit(from);
   };
   visit(wire.boxFrom);
+  return order;
+}
+
+/**
+ * Every texture sample upstream of an output port (`PORT_*`), in the order
+ * `materialSummary` meets them -- its `sample` is the first of these.
+ */
+export function portSamples(m: GfxMaterial, which: number): SampleSummary[] {
+  const output = m.boxes.findIndex((b) => b.type === BOX_OUTPUT);
+  const order = output < 0 ? undefined : upstream(m, output, which);
+  return (order ?? []).filter((b) => m.boxes[b].type === BOX_TEXTURE_SAMPLE).map((b) => sampleOf(m, b));
+}
+
+/** The colour box wired straight into an output port (`PORT_*`): its RGBA, as stored. */
+export function portColour(m: GfxMaterial, which: number): readonly [number, number, number, number] | undefined {
+  const output = m.boxes.findIndex((b) => b.type === BOX_OUTPUT);
+  const wire = m.wires.find((w) => w.boxTo === output && w.portTo === which);
+  const box = wire && m.boxes[wire.boxFrom];
+  return box?.type === BOX_COLOR ? (box.floatParams.slice(0, 4) as unknown as [number, number, number, number]) : undefined;
+}
+
+function port(m: GfxMaterial, output: number, which: number): PortSummary | undefined {
+  const wire = m.wires.find((w) => w.boxTo === output && w.portTo === which);
+  const order = upstream(m, output, which);
+  if (!wire || !order) return undefined;
   const types = order.map((b) => m.boxes[b].type);
   const first = (type: number): number | undefined => order.find((b) => m.boxes[b].type === type);
   const sampleBox = first(BOX_TEXTURE_SAMPLE);

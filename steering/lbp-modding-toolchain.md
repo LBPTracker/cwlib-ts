@@ -192,6 +192,8 @@ never silently follow the toolkit against our own measurement.
 | 44 | an animation's position and scale channels on a mesh | the named bone's node, then overwritten with `bone + 1` | the mesh bone of the same `animHash` | Java's own rotation channel does so; the overwrite is a slip ([level-files.md](level-files.md), *Animations*) |
 | 45 | an animation alone in glTF | an armature with a skin, no mesh, no inverse bind matrices | the skeleton's nodes, no skin | a skin is for a mesh; 2,664 of 2,664 validate clean ([level-files.md](level-files.md), *Animations*) |
 | 46 | an animation's rotations in glTF | as unpacked | unit length | glTF's samplers want unit quaternions; the game's are so only to 15 bits ([level-files.md](level-files.md), *Animations*) |
+| 47 | a glTF material named `decal` | `BLEND` | as its flags say | 18 of the game's 19 materials so named have `alphaMode` 0 ([level-files.md](level-files.md), *Written as glTF*) |
+| 48 | a specular colour in glTF | `KHR_materials_pbrSpecularGlossiness` | `KHR_materials_specular`'s `specularColorFactor` | Khronos archived spec-gloss; the newer extension keeps the metal-rough model the rest uses ([level-files.md](level-files.md), *Written as glTF*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the
