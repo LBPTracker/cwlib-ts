@@ -818,9 +818,9 @@ bytes walked are unchanged. On Needlepoint Peaks, its chunks placed
 Things that both have a `PPos`**; between those, 831 units at the median and 7,805 at most. The
 two most common types, 36 and 37, are 658 each; no switch is hidden in play mode.
 
-## Costumes, material overrides, weather — kept for a renderer
+## Costumes, material overrides, weather, scripts — kept for a renderer
 
-From 0.4.12 four parts return what they read (`src/things/parts/`); their walks are unchanged,
+From 0.4.12 four parts, and from 0.4.13 `SCRIPT`, return what they read (`src/things/parts/`); their walks are unchanged,
 so the censuses are the same files. Over the story chunks and the FARCs' levels (2026-10-25):
 
 - `PCostume` (`CostumePart`, 1,310 Things): its base mesh resolves to a `.mol` on all 1,310,
@@ -830,6 +830,15 @@ so the censuses are the same files. Over the story chunks and the FARCs' levels 
   48 region overrides name a `.gmat`, 15 none.
 - `PAtmosphericTweak` (`AtmosphericTweakPart`, 824): `atmosType` is 0 on 709, 3 on 92, 5 on
   11, 4 on 10, 2 on 2; which number is which weather is not measured.
+- `PScript` (`ScriptInstance`, 0.4.13, 20,329): the script and, per field of its layout, name,
+  machine and Fish types and value — a boxed object as a typed value, the same object met
+  twice through its pointer the same value, and a `DIVERGENT` field the instance does not
+  reflect marked `stored: false`. 20,209 scripts are an `.ff` in the FileDB (119 GUIDs not, 1
+  none); 20,024 instances have fields, 305 none. The commonest are the tweakers' UI
+  (`ColourTex`, `TweakPlayerNumber`, 19,901 each) and the speech bubbles' text (`Text`, a wide
+  string holding a LAMS key such as `NP_TU01B_130_NEWTON`); the commonest scripts
+  `post_it_note.ff` (3,743), `collision_tweaker.ff`, `launcher.ff`, `trigger_speech_bubble.ff`.
+  No script the game's levels carry has "eye" in its name.
 - `PAnimation` (`AnimationPart`, 783): ⚠️ **empty in every one** — a null reference and two
   zero floats — so the game's own files do not say here what a Thing plays.
 

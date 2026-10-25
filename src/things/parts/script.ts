@@ -1,8 +1,7 @@
 /** `SCRIPT`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, SerializerError } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
-import { things } from './common.ts';
+import { Serializer, SerializerError, type ResourceRef } from '../../io/serializer.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 
 /** `MachineType`: how a script field's value is stored. */
 const MACHINE_BOOL = 0x1;
@@ -24,9 +23,61 @@ const MACHINE_SAFE_PTR = 0xa;
 /** `ModifierType.DIVERGENT` is bit 0xc of the modifier flags. */
 const MODIFIER_DIVERGENT = 1 << 0xc;
 
-interface FieldLayout {
+/** One field of a script instance's layout, as the stream describes it. */
+export interface ScriptFieldLayout {
+  readonly name: string;
+  /** cwlib's `MachineType`: 1 bool, 2 char, 3 s32, 4 f32, 5 v4, 6 m44, 10 a Thing, 11 a boxed object. */
   readonly machineType: number;
+  /** cwlib's `BuiltinType`, the type the script declares; 0 below version 0x145. */
+  readonly fishType: number;
   readonly divergent: boolean;
+}
+
+/**
+ * A boxed value in a script field: `ScriptObjectType` and what it holds. The
+ * same object, met twice through its pointer, is the same JavaScript value.
+ */
+export type ScriptObject =
+  | { readonly type: 'bools'; readonly values: readonly boolean[] }
+  | { readonly type: 's32s'; readonly values: readonly number[] }
+  | { readonly type: 'f32s'; readonly values: readonly number[] }
+  | { readonly type: 'vector4s'; readonly values: readonly (readonly [number, number, number, number])[] }
+  | { readonly type: 'things'; readonly values: readonly (Thing | undefined)[] }
+  | { readonly type: 'objects'; readonly values: readonly (ScriptObject | undefined)[] }
+  /** `resourceType` is cwlib's `ResourceType`; 0 is none, and no descriptor follows. */
+  | { readonly type: 'resource'; readonly resourceType: number; readonly resource?: ResourceRef }
+  | { readonly type: 'instance'; readonly instance?: ScriptInstance }
+  | { readonly type: 'stringW'; readonly value: string }
+  | { readonly type: 'stringA'; readonly value: string }
+  /** An audio handle has no bytes: nothing survives the save. */
+  | { readonly type: 'audioHandle' };
+
+/** What one field holds, by its machine type: a `Float32Array` for a matrix, column-major like `PPos`. */
+export type ScriptValue =
+  | boolean
+  | number
+  | readonly [number, number, number, number]
+  | Float32Array
+  | Thing
+  | ScriptObject
+  | undefined;
+
+export interface ScriptField extends ScriptFieldLayout {
+  /**
+   * The field's value. ⚠️ A `DIVERGENT` field is in the layout and **not in the
+   * stream** unless the instance reflects divergent fields: then `stored` is
+   * false and `value` undefined.
+   */
+  readonly stored: boolean;
+  readonly value: ScriptValue;
+}
+
+/** `ScriptInstance`: a script and the values of its reflected fields. */
+export interface ScriptInstance {
+  /** The `RScript` (`FSHb`) -- `readScript` in `resources/script.ts` reads it. */
+  readonly script?: ResourceRef;
+  /** Empty when the instance is not serialised or has no layout. */
+  readonly fields: readonly ScriptField[];
 }
 
 /**
@@ -40,25 +91,25 @@ interface FieldLayout {
  * field's name, which is how "read of 1634429294 bytes" (`aimn`, out of a
  * script's own text) turned out to mean this. 101 of the corpus's 2,553 islands.
  */
-function readFieldLayout(s: Serializer): FieldLayout {
+function readFieldLayout(s: Serializer): ScriptFieldLayout {
   const { version } = s.revision;
-  s.str(); // name
+  const name = s.str();
   if (version >= 0x3d9) {
     const flags = s.i16();
     const machineType = s.u8();
-    s.u8(); // fishType
+    const fishType = s.u8();
     s.i8(); // dimensionCount
     s.u8(); // arrayBaseMachineType
     s.i32(); // instanceOffset
-    return { machineType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
+    return { name, machineType, fishType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
   }
   const flags = s.i32();
   const machineType = s.i32();
-  if (version >= 0x145) s.i32(); // fishType
+  const fishType = version >= 0x145 ? s.i32() : 0;
   s.i8(); // dimensionCount
   s.i32(); // arrayBaseMachineType
   s.i32(); // instanceOffset
-  return { machineType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
+  return { name, machineType, fishType, divergent: (flags & MODIFIER_DIVERGENT) !== 0 };
 }
 
 /**
@@ -78,20 +129,20 @@ function readFieldLayout(s: Serializer): FieldLayout {
  * `DIVERGENT` fields are in the table but **not** in the value stream unless the
  * `reflectDivergent` flag that precedes it says so.
  */
-function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartReader>): ScriptInstance {
   const { version } = s.revision;
-  s.resource(); // script
+  const script = s.resource();
 
   let serialize = true;
   if (version > 0x1a0) serialize = s.bool();
-  if (!serialize) return;
+  if (!serialize) return { script, fields: [] };
 
   const pointer = s.i32();
-  if (pointer === 0) return;
+  if (pointer === 0) return { script, fields: [] };
 
-  let layout = s.pointers.get(pointer) as FieldLayout[] | undefined;
+  let layout = s.pointers.get(pointer) as ScriptFieldLayout[] | undefined;
   if (layout === undefined) {
-    const fields: FieldLayout[] = [];
+    const fields: ScriptFieldLayout[] = [];
     const count = s.count();
     for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(s));
     s.i32(); // instanceSize
@@ -100,44 +151,51 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
   }
 
   const reflectDivergent = version > 0x19c ? s.bool() : false;
+  const fields: ScriptField[] = [];
   for (const field of layout) {
-    if (field.divergent && !reflectDivergent) continue;
+    if (field.divergent && !reflectDivergent) {
+      fields.push({ ...field, stored: false, value: undefined });
+      continue;
+    }
+    let value: ScriptValue;
     switch (field.machineType) {
       case MACHINE_BOOL:
-        s.bool();
+        value = s.bool();
         break;
       case MACHINE_CHAR:
-        s.i16();
+        value = s.i16();
         break;
       case MACHINE_S32:
-        s.i32();
+        value = s.i32();
         break;
       case MACHINE_F32:
-        s.f32();
+        value = s.f32();
         break;
       case MACHINE_V4:
-        s.skipVector4();
+        value = s.vector4();
         break;
       case MACHINE_M44:
-        s.skipMatrix();
+        value = s.matrix();
         break;
       case MACHINE_SAFE_PTR:
-        readThingRef(s, readers);
+        value = readThingRef(s, readers);
         break;
       case MACHINE_OBJECT_REF:
-        readScriptObject(s, readers);
+        value = readScriptObject(s, readers);
         break;
       default:
         throw new SerializerError(
           `script field machine type 0x${field.machineType.toString(16)} has no reader`,
         );
     }
+    fields.push({ ...field, stored: true, value });
   }
+  return { script, fields };
 }
 
-/** `PScript`: a script attached to a Thing. */
-export function readScript(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
-  readScriptInstance(s, readers);
+/** `PScript`: a script attached to a Thing, and its fields' values. */
+export function readScript(s: Serializer, readers: ReadonlyMap<string, PartReader>): ScriptInstance {
+  return readScriptInstance(s, readers);
 }
 
 /** `ScriptObjectType`: what a boxed script value holds. */
@@ -165,6 +223,9 @@ const OBJ_AUDIOHANDLE = 15;
 
 const OBJ_STRINGA = 16;
 
+/** The boxed objects a stream has met, by pointer, beside the layouts in `Serializer.pointers`. */
+const OBJECTS = new WeakMap<Serializer, Map<number, ScriptObject>>();
+
 /**
  * `ScriptObject`: a boxed value in a script field.
  *
@@ -172,61 +233,57 @@ const OBJ_STRINGA = 16;
  * can be referenced by many scripts. `AUDIOHANDLE` is a type with **no bytes at
  * all**: it reads its id and stops.
  */
-function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader>): ScriptObject | undefined {
   const type = s.i32();
-  if (type === OBJ_NULL) return;
+  if (type === OBJ_NULL) return undefined;
   if (type === OBJ_INSTANCE) {
-    s.reference((self) => readScriptInstance(self, readers));
-    return;
+    return { type: 'instance', instance: s.reference((self) => readScriptInstance(self, readers)) };
   }
   const pointer = s.i32();
-  if (pointer === 0) return;
-  if (s.pointers.has(pointer)) return;
+  if (pointer === 0) return undefined;
+  const shared = OBJECTS.get(s) ?? OBJECTS.set(s, new Map()).get(s)!;
+  if (s.pointers.has(pointer)) return shared.get(pointer);
   s.pointers.set(pointer, true);
 
+  let object: ScriptObject;
   switch (type) {
-    case OBJ_ARRAY_BOOL: {
-      const n = s.count();
-      for (let i = 0; i < n; i += 1) s.bool();
+    case OBJ_ARRAY_BOOL:
+      object = { type: 'bools', values: s.array((self) => self.bool()) };
       break;
-    }
     case OBJ_ARRAY_S32:
-      s.intVector();
+      object = { type: 's32s', values: s.intVector() };
       break;
-    case OBJ_ARRAY_F32: {
-      const n = s.count();
-      for (let i = 0; i < n; i += 1) s.f32();
+    case OBJ_ARRAY_F32:
+      object = { type: 'f32s', values: s.array((self) => self.f32()) };
       break;
-    }
-    case OBJ_ARRAY_VECTOR4: {
-      const n = s.count();
-      for (let i = 0; i < n; i += 1) s.skipVector4();
+    case OBJ_ARRAY_VECTOR4:
+      object = { type: 'vector4s', values: s.array((self) => self.vector4()) };
       break;
-    }
     case OBJ_STRINGW:
-      s.wstr();
+      object = { type: 'stringW', value: s.wstr() };
       break;
     case OBJ_STRINGA:
-      s.str();
+      object = { type: 'stringA', value: s.str() };
       break;
     case OBJ_RESOURCE: {
       // The resource's own type is written first, and `INVALID` means no
       // descriptor follows at all.
       const resourceType = s.i32();
-      if (resourceType !== 0) s.resource();
+      object = { type: 'resource', resourceType, resource: resourceType !== 0 ? s.resource() : undefined };
       break;
     }
     case OBJ_AUDIOHANDLE:
+      object = { type: 'audioHandle' };
       break;
     case OBJ_ARRAY_SAFE_PTR:
-      things(s, readers);
+      object = { type: 'things', values: s.array((self) => readThingRef(self, readers)) };
       break;
-    case OBJ_ARRAY_OBJECT_REF: {
-      const n = s.count();
-      for (let i = 0; i < n; i += 1) readScriptObject(s, readers);
+    case OBJ_ARRAY_OBJECT_REF:
+      object = { type: 'objects', values: s.array((self) => readScriptObject(self, readers)) };
       break;
-    }
     default:
       throw new SerializerError(`script object type ${type} has no reader`);
   }
+  shared.set(pointer, object);
+  return object;
 }

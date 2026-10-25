@@ -20,15 +20,16 @@ is closed by a commit here; re-check against the current checkout before relying
 `PARTS`, which is every part of `Part.java`. `CREATOR_ANIM` has none, and Java too expects it null.
 So any file in range walks to its end. What differs is what a reader returns:
 
-- **Kept** (21): `POS`, `SHAPE`, `RENDER_MESH`, `GENERATED_MESH`, `DECORATIONS`, `JOINT`,
+- **Kept** (22): `POS`, `SHAPE`, `RENDER_MESH`, `GENERATED_MESH`, `DECORATIONS`, `JOINT`,
   `STICKERS`, `SWITCH`, `SPRITE_LIGHT`, `LEVEL_SETTINGS`, `GROUP`, `GAMEPLAY_DATA`, `INSTRUMENT`,
-  `SEQUENCER`, `MICROCHIP`, `QUEST` (its keys, 0.4.6), `WORLD`, and from 0.4.12 `COSTUME`,
-  `MATERIAL_OVERRIDE`, `ATMOSPHERIC_TWEAK` and `ANIMATION` (empty in all 783 of the game's).
-- **Walked, nothing returned** (33): `BODY`, `CREATURE`, `ENEMY`, `NPC`, `EMITTER`, `TRIGGER`,
+  `SEQUENCER`, `MICROCHIP`, `QUEST` (its keys, 0.4.6), `WORLD`, from 0.4.12 `COSTUME`,
+  `MATERIAL_OVERRIDE`, `ATMOSPHERIC_TWEAK` and `ANIMATION` (empty in all 783 of the game's), and
+  from 0.4.13 `SCRIPT` (the instance's fields and their values).
+- **Walked, nothing returned** (32): `BODY`, `CREATURE`, `ENEMY`, `NPC`, `EMITTER`, `TRIGGER`,
   `CHECKPOINT`, `SWITCH_KEY`, `SWITCH_INPUT`, `CONTROLINATOR`, `WORMHOLE`, `POWER_UP`,
   `POPPET_POWERUP`, `POCKET_ITEM`, `HUD_ELEM`, `FADER`, `TAG_SYNCHRONIZER`, `TRANSITION`, `REF`,
   `PHYSICS_TWEAK`, `MATERIAL_TWEAK`, `CAMERA_TWEAK`, `WIND_TWEAK`, `ANIMATION_TWEAK`,
-  `AUDIO_WORLD`, `CONNECTOR_HOOK`, `EFFECTOR`, `SCRIPT`, `SCRIPT_NAME`, `STREAMING_DATA`,
+  `AUDIO_WORLD`, `CONNECTOR_HOOK`, `EFFECTOR`, `SCRIPT_NAME`, `STREAMING_DATA`,
   `STREAMING_HINT`, `METADATA`, `YELLOWHEAD`. Java builds an object for each. Keeping one is a return value on a reader that
   already reads every field.
 

@@ -114,7 +114,7 @@ export { readNpc } from './parts/npc.ts';
 export { readPhysicsTweak } from './parts/physics-tweak.ts';
 export { readPos } from './parts/pos.ts';
 export { readRenderMesh, type RenderMeshPart } from './parts/render-mesh.ts';
-export { readScript } from './parts/script.ts';
+export { readScript, type ScriptField, type ScriptFieldLayout, type ScriptInstance, type ScriptObject, type ScriptValue } from './parts/script.ts';
 export { readSequencerPart, type SequencerPart } from './parts/sequencer.ts';
 export { readShape, type ShapePart } from './parts/shape.ts';
 export { readSpriteLight, type SpriteLightPart } from './parts/sprite-light.ts';
