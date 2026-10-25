@@ -44,6 +44,8 @@
  * none of them is a part this reader is merely missing.
  */
 
+import type { Tape } from './tape.ts';
+
 /**
  * Bytes as a string, one character per byte: the format's ASCII, and the
  * four-character tags inside a payload. `untilNul` stops at the first zero,
@@ -154,6 +156,12 @@ export class Serializer {
    * separate.
    */
   readonly pointers = new Map<number, unknown>();
+  /**
+   * Set to keep the stream as read, so it can be written back (`tape.ts`).
+   * Every reference, list and mark below reports to it; unset, they cost a
+   * property test each.
+   */
+  tape?: Tape;
 
   constructor(data: Uint8Array, revision: RevisionInfo, compressionFlags: number) {
     this.data = data;
@@ -378,15 +386,50 @@ export class Serializer {
    * that happens to be.
    */
   reference<T>(build: (self: Serializer) => T): T | undefined {
+    const start = this.position;
     const id = this.i32();
+    const seen = id === 0 || this.referenced.has(id);
+    const object = this.tape?.ref(start, this.position, id, !seen);
     if (id === 0) return undefined;
-    if (this.referenced.has(id)) return this.referenced.get(id) as T;
+    if (seen) return this.referenced.get(id) as T;
     // The entry has to exist before `build` runs: an object that refers back to
     // itself, directly or through a child, would otherwise recurse forever.
     const placeholder = {} as T;
     this.referenced.set(id, placeholder);
     const value = build(this);
     this.referenced.set(id, value);
+    if (object) this.tape!.end(this.position, object, value);
+    return value;
+  }
+
+  /**
+   * A raw id in the reference space with its body inline at first mention --
+   * a script's field layout or boxed object, which `Serializer.pointers`
+   * keeps. `build` runs on the first mention only, and must enter the id in
+   * `pointers`; the result says which mention this was.
+   */
+  pointer(build: (self: Serializer, id: number) => void): { id: number; isNew: boolean } {
+    const start = this.position;
+    const id = this.i32();
+    const isNew = id !== 0 && !this.pointers.has(id);
+    const object = this.tape?.ref(start, this.position, id, isNew);
+    if (isNew) {
+      build(this, id);
+      if (object) this.tape!.end(this.position, object);
+    }
+    return { id, isNew };
+  }
+
+  /** Name the next reference for the tape: a Thing's parent, a part. */
+  label(label: string): void {
+    this.tape?.label(label);
+  }
+
+  /** Read a field and name its bytes for the tape, so it can be rewritten. */
+  mark<T>(label: string, read: (self: Serializer) => T): T {
+    const start = this.position;
+    const value = read(this);
+    this.tape?.mark(label, start, this.position);
     return value;
   }
 
@@ -403,13 +446,18 @@ export class Serializer {
    * it. Callers that do not care can keep using `reference`.
    */
   referenceInto<T>(create: () => T, fill: (self: Serializer, value: T) => void): T | undefined {
+    const start = this.position;
     const id = this.i32();
-    if (id === 0) return undefined;
-    const seen = this.referenced.get(id);
-    if (seen !== undefined) return seen as T;
+    const seen = id === 0 ? undefined : this.referenced.get(id);
+    if (id === 0 || seen !== undefined) {
+      this.tape?.ref(start, this.position, id, false);
+      return seen as T | undefined;
+    }
     const value = create();
+    const object = this.tape?.ref(start, this.position, id, true, value);
     this.referenced.set(id, value);
     fill(this, value);
+    if (object) this.tape!.end(this.position, object);
     return value;
   }
 
@@ -438,6 +486,21 @@ export class Serializer {
     if (count < 0) throw new SerializerError(`negative array length ${count}`);
     const out: (T | undefined)[] = [];
     for (let i = 0; i < count; i += 1) out.push(this.reference(build));
+    return out;
+  }
+
+  /**
+   * A count and that many references, read by `readOne`, kept on the tape as
+   * one list named `label` -- so items can be dropped and added and the count
+   * written from what is left.
+   */
+  list<T>(label: string, readOne: (self: Serializer) => T): T[] {
+    const start = this.position;
+    const count = this.count();
+    this.tape?.listStart(label, start, this.position);
+    const out: T[] = [];
+    for (let i = 0; i < count; i += 1) out.push(readOne(this));
+    this.tape?.listEnd();
     return out;
   }
 

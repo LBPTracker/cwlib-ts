@@ -144,19 +144,15 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
   if (version > 0x1a0) serialize = s.bool();
   if (!serialize) return { script, fields: [] };
 
-  const pointer = s.i32();
-  if (pointer === 0) return { script, fields: [] };
-
   // A layout is written once and named by pointer after; its instance size with it.
-  let shared = s.pointers.get(pointer) as { layout: ScriptFieldLayout[]; instanceSize: number } | undefined;
-  if (shared === undefined) {
+  const { id: pointer } = s.pointer((self, id) => {
     const fields: ScriptFieldLayout[] = [];
-    const count = s.count();
-    for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(s));
-    shared = { layout: fields, instanceSize: s.i32() };
-    s.pointers.set(pointer, shared);
-  }
-  const { layout, instanceSize } = shared;
+    const count = self.count();
+    for (let i = 0; i < count; i += 1) fields.push(readFieldLayout(self));
+    self.pointers.set(id, { layout: fields, instanceSize: self.i32() });
+  });
+  if (pointer === 0) return { script, fields: [] };
+  const { layout, instanceSize } = s.pointers.get(pointer) as { layout: ScriptFieldLayout[]; instanceSize: number };
 
   const reflectDivergent = version > 0x19c ? s.bool() : false;
   const fields: ScriptField[] = [];
@@ -247,12 +243,16 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
   if (type === OBJ_INSTANCE) {
     return { type: 'instance', instance: s.reference((self) => readScriptInstance(self, readers)) };
   }
-  const pointer = s.i32();
-  if (pointer === 0) return undefined;
   const shared = OBJECTS.get(s) ?? OBJECTS.set(s, new Map()).get(s)!;
-  if (s.pointers.has(pointer)) return shared.get(pointer);
-  s.pointers.set(pointer, true);
+  const { id } = s.pointer((self, pointer) => {
+    self.pointers.set(pointer, true);
+    shared.set(pointer, readScriptObjectBody(self, type, readers));
+  });
+  return id === 0 ? undefined : shared.get(id);
+}
 
+/** A boxed object's bytes after its pointer, on its first mention. */
+function readScriptObjectBody(s: Serializer, type: number, readers: ReadonlyMap<string, PartReader>): ScriptObject {
   let object: ScriptObject;
   switch (type) {
     case OBJ_ARRAY_BOOL:
@@ -292,6 +292,5 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
     default:
       throw new SerializerError(`script object type ${type} has no reader`);
   }
-  shared.set(pointer, object);
   return object;
 }

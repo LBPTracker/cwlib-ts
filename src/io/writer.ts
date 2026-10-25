@@ -89,6 +89,8 @@ export class Writer {
   private at = 0;
   /** Object → the id already written for it. */
   private readonly ids = new Map<object, number>();
+  /** Every id handed out, so a kept one and a fresh one never meet. */
+  private readonly taken = new Set<number>();
   private nextId = 1;
   /** Dependencies in first-mention order, deduplicated. */
   private readonly deps = new Map<string, DependencyOut>();
@@ -309,8 +311,15 @@ export class Writer {
    * the object's bytes follow **right here**. Ids are handed out in first-mention
    * order from 1, which is what `Serializer.reference` expects to see and what
    * cwlib's own writer does.
+   *
+   * ❗ **`id` keeps an object's id from the file it was read from**, where no
+   * other object has it yet. The game does not number in first-mention order:
+   * of its 340 LBP3 levels, 19 hold ids out of sequence -- `40980` as the 20th
+   * object, gaps after it -- and only kept ids write them back byte for byte
+   * (`tape.ts`, `dev/rewrite-levels.ts`). Any id is a valid one so long as no
+   * two objects share it.
    */
-  reference<T extends object>(value: T | undefined, write: (self: Writer, value: T) => void): void {
+  reference<T extends object>(value: T | undefined, write: (self: Writer, value: T) => void, id?: number): void {
     if (!value) {
       this.i32(0);
       return;
@@ -320,10 +329,15 @@ export class Writer {
       this.i32(seen);
       return;
     }
-    const id = this.nextId;
-    this.nextId += 1;
-    this.ids.set(value, id);
-    this.i32(id);
+    let fresh = id;
+    if (fresh === undefined || fresh <= 0 || this.taken.has(fresh)) {
+      while (this.taken.has(this.nextId)) this.nextId += 1;
+      fresh = this.nextId;
+      this.nextId += 1;
+    }
+    this.taken.add(fresh);
+    this.ids.set(value, fresh);
+    this.i32(fresh);
     write(this, value);
   }
 

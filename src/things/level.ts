@@ -440,9 +440,7 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather
   // than the empty placeholder `reference` would register.
-  const count = s.count();
-  const things: (Thing | undefined)[] = [];
-  for (let i = 0; i < count; i += 1) things.push(readThingRef(s, readers));
+  const things = s.list('things', (self) => readThingRef(self, readers));
   if (tail) readWorldTail(s, readers);
   // ⚠️ **Only the OUTERMOST world's Things are the level's.** `readLevel` keeps
   // the first world's and reads the others as any part. A level can carry a second
@@ -733,7 +731,18 @@ export async function readLevel(
   readers: Map<string, PartReader> = partReaders(),
 ): Promise<LevelParse> {
   const { revision, s } = await open(bytes, inflate);
+  return readLevelStream(s, revision, readers);
+}
 
+/**
+ * `readLevel` on a payload already open: what `editLevel` (`write-level.ts`)
+ * calls, with a tape on the serializer.
+ */
+export function readLevelStream(
+  s: Serializer,
+  revision: RevisionInfo,
+  readers: Map<string, PartReader> = partReaders(),
+): LevelParse {
   // `RLevel`: the cross-play hashes came in at 0x3e7, and the corpus straddles
   // that, so the count is only there on the later files.
   if (revision.version > 0x3e6) {

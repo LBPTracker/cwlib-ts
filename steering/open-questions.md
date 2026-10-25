@@ -2,7 +2,8 @@
 
 Read before planning a work session on the reader or the writer. Nothing here blocks reading a
 level or writing a plan: what is left is three things about the chip tint only Create Mode can
-answer, one loose end from the export, what a quest objective's first field is, and the files that
+answer, one loose end from the export, what a quest objective's first field is, whether the game
+opens a level edited here, and the files that
 still will not open. When one gets
 resolved, move the answer into the descriptive file it belongs to and delete the entry; numbers
 are shared with lbptracker's [open-questions.md](../../lbptracker/steering/open-questions.md).
@@ -77,6 +78,14 @@ The game's loader settled every other field of `RQuest` (*Quests* in
 [level-files.md](level-files.md)). This one it reads raw and the reflective serialiser does not
 name: 101 on 13 of the game's 35 objectives, 0 on 7, and values as far as 13,352 and −15,317 on
 the rest. What reads it — the quest log, the objective UI — would say what it is.
+
+## 66. Whether the game opens an edited level
+
+A level written with no edit is the game's own bytes (*Writing a level*, level-files.md), so the
+game opens it. An edited one has never been loaded: whether the game minds a removed Thing still
+in the stream outside the world, two Things with one uid after a copy, or ids out of its own
+numbering is not known. **What would settle it**: move, remove and copy Things in a level of the
+corpus with `write-level.ts`, put it in a save and open it in the game.
 
 ## 28. What still will not open — the archive sweep's leftovers, and Bonsai's
 

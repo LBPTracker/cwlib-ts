@@ -22,6 +22,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `stream.ts`, `serializer.ts` | the big-endian readers: the fixed-width header one, and the payload's with its revision gates and compressed integers |
 | `text-resource.ts` | the engine's text serialisation (`GSBt`, `DLCt`, `MUSt`, `SSPt`, … 19 magics): tab-indented fields, arrays of `[i]`, read typed or as a tree |
 | `writer.ts`, `hex.ts` | the payload writer and the container around it; SHA-1s as hex |
+| `tape.ts` | a stream kept as read — bytes cut at every reference — so it can be written back and edited |
 | `json.ts` | any reader's result as JSON text: typed arrays, maps, big integers, NaN and a Thing graph's cycles spelled out |
 | `png.ts` | RGBA8 pixels as a PNG, for an export that carries images |
 | **`archives/`** | |
@@ -34,6 +35,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | **`things/`** | |
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
 | `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |
+| `write-level.ts` | a level written back byte for byte, with Things removed, added from another level or moved |
 | **`resources/`** | |
 | `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents (and their handedness from the UVs, `uvHandedness`), the softbody weight, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |

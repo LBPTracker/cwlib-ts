@@ -196,6 +196,7 @@ never silently follow the toolkit against our own measurement.
 | 48 | a specular colour in glTF | `KHR_materials_pbrSpecularGlossiness` | `KHR_materials_specular`'s `specularColorFactor` | Khronos archived spec-gloss; the newer extension keeps the metal-rough model the rest uses ([level-files.md](level-files.md), *Written as glTF*) |
 | 49 | an inventory plan's path in a `BigSave` | `items/<object type>/…`, by `InventoryObjectType` | `resources/plans/<sha1>.plan`, by magic | a name in the toolkit's tree, not a format; the type tables are not ported ([level-files.md](level-files.md), *Ported from Java, proven on no file*) |
 | 50 | a `RGuidSubst` CSV row whose GUID does not parse | put under a `null` key | dropped | a map with a null key is no substitution ([level-files.md](level-files.md), *Ported from Java, proven on no file*) |
+| 51 | a reference's id, writing | fresh, from 1 in first-mention order (`Serializer.nextReference`) | the object's id from the file it was read from, where no other object has it | 19 of the game's 340 LBP3 levels hold ids out of order, and only kept ids write them back byte for byte ([level-files.md](level-files.md), *Writing a level*) |
 
 The general shape: their tool converts *to MIDI*, so anything MIDI cannot express gets flattened
 or dropped. We reproduce the instrument, so the things they flatten — per-step automation, the

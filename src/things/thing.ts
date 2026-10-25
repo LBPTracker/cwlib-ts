@@ -285,11 +285,14 @@ function fillThing(
   // lowered by hand. See question 28.
   if (version >= 0x27f) {
     thing.uid = s.i32();
+    s.label('parent');
     thing.parent = readThingRef(s, readers);
   } else {
+    s.label('parent');
     thing.parent = readThingRef(s, readers);
     thing.uid = s.i32();
   }
+  s.label('groupHead');
   thing.groupHead = readThingRef(s, readers);
   if (version >= 0x1c7) readThingRef(s, readers); // oldEmitter
 
@@ -362,6 +365,7 @@ function fillThing(
     // ⚠️ It also means `UnimplementedPartError` now says what it always claimed
     // to: this file has data for a part nothing here can read. A part that is
     // merely *declared* costs nothing and is skipped.
+    s.label(part.name);
     const value = s.reference((self) => {
       if (!read) throw new UnimplementedPartError(part.name);
       return read(self, thing);

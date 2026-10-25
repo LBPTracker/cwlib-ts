@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 50 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 51 on 2026-10-25, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -46,9 +46,15 @@ in [level-files.md](level-files.md), *Ported from Java, proven on no file*.
 
 ## Writing
 
-Java's one serializer writes every resource it reads. Here: **no level, and no resource other than a
-sequencer `.plan`** — so no `Resources.hashinate` either, which rewrites each dependency's table
-and so needs a writer for every resource.
+Java's one serializer writes every resource it reads, from its fields. Here a level is written
+back from the bytes it was read from, with three edits (*Writing a level*, level-files.md), and a
+sequencer `.plan` from values; what is missing:
+
+- **A level from its values**: a field of a part changed and written, or a part added to a Thing —
+  every edit but a `PPos` matrix, the world's list and the Things in it.
+- **Any other resource written**: a plan other than a sequencer, a streaming chunk, a mesh, a
+  texture, a profile… — and so no `Resources.hashinate` either, which rewrites each dependency's
+  table.
 
 ## Tools
 

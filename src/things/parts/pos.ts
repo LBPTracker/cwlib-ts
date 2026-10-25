@@ -24,5 +24,5 @@ export function readPos(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   // if it were true everywhere -- so every pre-0x341 Thing was read 64 bytes
   // short. cwlib `PPos.serialize`.
   if (s.revision.version < 0x341) s.skipMatrix(); // localPosition
-  return s.matrix(); // worldPosition
+  return s.mark('worldPosition', (self) => self.matrix());
 }

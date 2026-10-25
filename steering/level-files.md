@@ -235,6 +235,48 @@ plans. `test/plan.test.ts` pins the counts. ⚠️ `PLNb` was once in the level
 magic list meaning "read a plan as if it were a world", which produced eleven loud failures for a
 backup that was fine; the magic was never the problem, the reader was.
 
+## Writing a level — the tape
+
+`editLevel` (`src/things/write-level.ts`) reads an `LVLb` with a **tape** on the serializer
+(`src/io/tape.ts`), and `writeLevel` writes the tape back into a container (`writeResource`). The
+tape is the stream's own bytes, cut at every reference: a raw run between two references, and a
+node per reference naming its object, whose body — inline at its first mention, as
+`Serializer.reference` reads it — is a tape of its own. Writing walks it through a `Writer`. Why
+not a writer per reader is in the file's header: the readers step over fields, and a second
+serializer for all of them would disagree with them unseen.
+
+✔ **Every level that opens writes back byte for byte** (`dev/rewrite-levels.ts`, 2026-10-25): the
+inflated payload and the dependency table, for **all 350** — the 251 of the install's four FARCs, the
+88 of the 01.28 update's `patch_001.farc`, the 10 PS3 levels of the toolkit's `sequencerdump/data`
+and lbprender's fixture — and each written file reads again to its last byte with as many Things.
+`test/write-level.test.ts` pins it on `ascetic.lvl`. The 265 the version bound refuses and the 6
+that do not read (*What of the game's own Things opens*) are not written.
+
+- ❗ **The game does not number references in first-mention order.** Writing fresh ids from 1, as
+  cwlib's `nextReference` does, gave 321 of the first 340 back byte for byte; the other 19 hold ids
+  out of sequence — in `chunk1_001.farc`'s `1c6862be…` the 20th object met is id `40980`, the
+  37th is `53`, then `56`, `57` — and a compressed id is a varint, so the payloads came out
+  shorter. `Writer.reference` now keeps an object's id from its file wherever no other object
+  has it, and all 340 match. Any id the reader has not met is a valid new one; the game's own
+  numbering is not known (row 51 of *Where we deliberately differ*).
+- ❗ **A script's layouts and boxed objects are in the same id space.** The reader keeps them in
+  `Serializer.pointers`, apart from `referenced`; cwlib draws both from one counter
+  (`ScriptInstance`, `ScriptObjectUID` at `d6a2ef8`), and the tape records them as references
+  (`Serializer.pointer`). The 350 identical payloads are what holds them to it: an id written
+  twice would be read as a back-reference.
+
+The edits a tape can make without knowing a part's layout, each read back by the test:
+
+- **remove** Things from the world's list (`removeThings`), with every Thing parented under one;
+- **add** Things of another level of the same revision and compression (`addThings`): their bodies
+  go with them, their mentions of the other level's world Thing become this one's, and the other
+  level's dependency table is merged whole;
+- **move** a Thing (`setWorldPosition`): its `PPos` world matrix, a mark `readPos` names.
+
+⚠️ **A Thing is written at its first mention, in the world's list or not**: a removed Thing a switch
+or a joint still names stays in the stream there, and an added one brings every Thing its parts
+name. Copied Things keep their uids. Whether the game opens an edited level is question 66.
+
 ## Streaming levels — `CHKb` and islands
 
 An LBP3 adventure is not one level: `RLevel` → `StreamingManager` → `LevelData.chunkFileList`
