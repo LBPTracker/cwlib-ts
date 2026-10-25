@@ -87,7 +87,7 @@ import { readYellowHead } from './parts/yellowhead.ts';
 export { readAudioWorld } from './parts/audio-world.ts';
 export { readBody } from './parts/body.ts';
 export { readCameraTweak } from './parts/camera-tweak.ts';
-export { readCheckpoint } from './parts/checkpoint.ts';
+export { readCheckpoint, type CheckpointPart } from './parts/checkpoint.ts';
 export { readControlinator } from './parts/controlinator.ts';
 export { readCostume, type CostumePart, type CostumePiece, type CostumePrimitive } from './parts/costume.ts';
 export { readAnimation, type AnimationPart } from './parts/animation.ts';
@@ -95,8 +95,10 @@ export { readMaterialOverride, type MaterialOverridePart, type RegionOverride } 
 export { readAtmosphericTweak, type AtmosphericTweakPart } from './parts/atmospheric-tweak.ts';
 export { readCreature } from './parts/creature.ts';
 export { readDecorations, type Decoration } from './parts/decorations.ts';
-export { readEmitter } from './parts/emitter.ts';
-export { readEnemy } from './parts/enemy.ts';
+export { readEmitter, type EmittedObjectSource, type EmitterPart } from './parts/emitter.ts';
+export { readEnemy, type EnemyPart } from './parts/enemy.ts';
+export { readEffector, type EffectorPart } from './parts/effector.ts';
+export { readWormhole, type WormholePart } from './parts/wormhole.ts';
 export { decodeEntities, escapeEntities } from './parts/entities.ts';
 export { readGameplayData, type GameplayDataPart } from './parts/gameplay-data.ts';
 export { readGeneratedMesh, type GeneratedMeshPart } from './parts/generated-mesh.ts';
@@ -122,7 +124,7 @@ export { readStickers, type Decal, type StickersPart } from './parts/stickers.ts
 export { readSwitch, type SwitchPart, type SwitchTarget } from './parts/switch.ts';
 export { readSwitchInput } from './parts/switch-input.ts';
 export { readSwitchKey } from './parts/switch-key.ts';
-export { readTrigger } from './parts/trigger.ts';
+export { readTrigger, type TriggerPart } from './parts/trigger.ts';
 export { readYellowHead } from './parts/yellowhead.ts';
 export { SerializerError } from '../io/serializer.ts';
 

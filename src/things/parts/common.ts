@@ -1,12 +1,19 @@
 /** Helpers more than one part reader uses: a Thing array; the PSN identity is `structs/network.ts`. */
 
 import { Serializer } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 
 /** An array of Thing references — cwlib's `thingarray`. */
 export function things(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+  thingArray(s, readers);
+}
+
+/** A Thing array, as references: what `things` reads, kept. */
+export function thingArray(s: Serializer, readers: ReadonlyMap<string, PartReader>): (Thing | undefined)[] {
   const count = s.count();
-  for (let i = 0; i < count; i += 1) readThingRef(s, readers);
+  const out: (Thing | undefined)[] = [];
+  for (let i = 0; i < count; i += 1) out.push(readThingRef(s, readers));
+  return out;
 }
 
 /**

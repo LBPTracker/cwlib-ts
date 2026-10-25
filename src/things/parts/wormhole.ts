@@ -11,14 +11,23 @@ import { Serializer } from '../../io/serializer.ts';
  * wormholes in LBP2 levels #24 and #19883 off Bonsai are exactly eight fields
  * long, and an extra byte would have eaten the next Thing's first one.
  */
-export function readWormhole(s: Serializer): void {
-  s.s32(); // type
+export interface WormholePart {
+  /** cwlib's `WormholeType`. */
+  readonly type: number;
+  readonly playerMode: number;
+  readonly audioEnabled: boolean;
+  readonly activated: boolean;
+}
+
+export function readWormhole(s: Serializer): WormholePart {
+  const type = s.s32();
   if (s.revision.subVersion >= 0x111) s.i8(); // activeTypeForTwoWayHole
-  s.s32(); // playerMode
-  s.bool(); // audioEnabled
+  const playerMode = s.s32();
+  const audioEnabled = s.bool();
   s.bool(); // trigger
   s.bool(); // finished
-  s.bool(); // activated
+  const activated = s.bool();
   s.i32(); // exitCount
   s.i32(); // exitDelay
+  return { type, playerMode, audioEnabled, activated };
 }

@@ -5,7 +5,9 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { readThings } from '../src/things/level.ts';
-import type { AtmosphericTweakPart, CostumePart, MaterialOverridePart, ScriptInstance, ShapePart } from '../src/things/parts.ts';
+import type {
+  AtmosphericTweakPart, CheckpointPart, CostumePart, EmitterPart, EnemyPart, MaterialOverridePart, ScriptInstance, ShapePart, TriggerPart,
+} from '../src/things/parts.ts';
 import { readFar } from '../src/archives/savearchive.ts';
 import { nodeInflate } from '../src/platform/node.ts';
 import { magicOf } from '../src/io/resource.ts';
@@ -28,6 +30,8 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   let shapes = 0;
   const kept = { costumes: 0, costumeMeshes: 0, weather: 0, overrides: 0 };
   const scripts = { instances: 0, withFields: 0, texts: 0 };
+  // The parts kept since 0.4.28: an emitter's plan, a creature part's kind, a volume's kind.
+  const gameplay = { emitters: 0, emittedPlans: 0, eyes: 0, rockets: 0, checkpoints: 0, radiusTriggers: 0, switchTriggers: 0 };
   let firstText = '';
   for (const name of ['needlepoint_peaks.farc', 'needlepoint_peaks_container.farc']) {
     const chunks = await readFar(new Uint8Array(await readFile(path.join(LEVEL, name))));
@@ -57,6 +61,18 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
             firstText ||= text.value;
           }
         }
+        const emitter = thing?.parts.get('EMITTER') as EmitterPart | undefined;
+        if (emitter) {
+          gameplay.emitters += 1;
+          if (emitter.plan) gameplay.emittedPlans += 1;
+        }
+        const enemy = thing?.parts.get('ENEMY') as EnemyPart | undefined;
+        if (enemy?.partType === 1) gameplay.eyes += 1;
+        if (enemy?.partType === 4) gameplay.rockets += 1;
+        if (thing?.parts.get('CHECKPOINT') as CheckpointPart | undefined) gameplay.checkpoints += 1;
+        const trigger = thing?.parts.get('TRIGGER') as TriggerPart | undefined;
+        if (trigger?.triggerType === 0) gameplay.radiusTriggers += 1;
+        if (trigger?.triggerType === 2) gameplay.switchTriggers += 1;
         const shape = thing?.parts.get('SHAPE') as ShapePart | undefined;
         if (shape === undefined) continue;
         shapes += 1;
@@ -72,6 +88,7 @@ test('Needlepoint Peaks: every chunk of the level and of its container reads', a
   assert.deepEqual(kept, { costumes: 3, costumeMeshes: 3, weather: 19, overrides: 1 });
   assert.deepEqual(scripts, { instances: 346, withFields: 346, texts: 36 });
   assert.equal(firstText, 'NP_TU01B_130_NEWTON');
+  assert.deepEqual(gameplay, { emitters: 7, emittedPlans: 7, eyes: 24, rockets: 5, checkpoints: 9, radiusTriggers: 255, switchTriggers: 213 });
 });
 
 const ADVENTURES = path.join(GAME, 'gamedata', 'lbp3', 'official_adventure_levels');

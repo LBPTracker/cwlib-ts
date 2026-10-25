@@ -12,24 +12,39 @@ import { Serializer } from '../../io/serializer.ts';
  * fixed at **46 bytes** under any compression flags, because not one of the nine
  * is an integer and `cf7` only compresses those.
  *
- * ⚠️ **UNEXERCISED, and that is measured rather than suspected.** `EFFECTOR`
- * appears in 13 of the archive sample's 19 LBP1 levels and **all 13 are a null
- * reference** — one byte of id and no body. This function has never run. It is
- * a faithful port and it is not a tested one; the first file that carries a real
- * effector is what would settle it, and 103 archive levels do not contain one.
+ * ✔ **Exercised by the game's own files**: 164 `EFFECTOR`s in the four FARCs'
+ * levels and plans (`dev/things-census.ts`, 2026-10-25), every one inside a
+ * file that reads to its last byte. The archive sample's 13 LBP1 ones are all
+ * null references, which is why this once said it had never run.
  *
  * ⚠️ **Adding it is also not what unblocked those levels.** They were failing on
  * the *declaration*, in the walk, before the reference was read — see the note
  * beside `UnimplementedPartError` in `src/things/thing.ts`.
  */
-export function readEffector(s: Serializer): void {
-  s.skipVector3(); // posVel
-  s.f32(); // angVel
-  s.f32(); // viscosity
-  s.f32(); // density
-  s.skipVector3(); // gravity, defaulting to (0, -2.7, 0)
-  s.bool(); // pushBack
-  s.bool(); // swimmable
-  s.f32(); // viscosityCheap
-  s.f32(); // modScale
+export interface EffectorPart {
+  readonly posVel: readonly [number, number, number];
+  readonly angVel: number;
+  readonly viscosity: number;
+  readonly density: number;
+  /** cwlib's default is (0, -2.7, 0). */
+  readonly gravity: readonly [number, number, number];
+  readonly pushBack: boolean;
+  /** Water: a volume a Sackboy swims in. */
+  readonly swimmable: boolean;
+  readonly viscosityCheap: number;
+  readonly modScale: number;
+}
+
+export function readEffector(s: Serializer): EffectorPart {
+  return {
+    posVel: s.vector3(),
+    angVel: s.f32(),
+    viscosity: s.f32(),
+    density: s.f32(),
+    gravity: s.vector3(),
+    pushBack: s.bool(),
+    swimmable: s.bool(),
+    viscosityCheap: s.f32(),
+    modScale: s.f32(),
+  };
 }

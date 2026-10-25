@@ -873,6 +873,20 @@ so the censuses are the same files. Over the story chunks and the FARCs' levels 
 - `PAnimation` (`AnimationPart`, 783): ⚠️ **empty in every one** — a null reference and two
   zero floats — so the game's own files do not say here what a Thing plays.
 
+
+### Emitters, creature parts, checkpoints, triggers, wormholes, effectors — kept from 0.4.28
+
+Six readers that walked their part now return what a reader of the level needs, the walk itself
+unchanged (the Thing and story censuses identical before and after, 2026-10-25): `EmitterPart`
+(the plan it emits, frequency, phase, lifetime, how many, scale and velocity, where relative to
+itself, the source Things), `EnemyPart` (cwlib's `EnemyPart` — 0 leg, 1 eye, 2 brain, 3 wheel,
+4 rocket, 5 paint — radius, snap vertex, centre offset, the Thing whose animation drives it),
+`CheckpointPart` (lives, infinite or not, the spawning list, start point, name, type),
+`TriggerPart` (cwlib's `TriggerType` — 0 radius, 1 rect, 2 switch, 3 touch, 4 radius 3D — the
+Things in it, radius, z range), `WormholePart` and `EffectorPart` (viscosity, density, gravity,
+whether it is water). On Needlepoint Peaks (`test/story.test.ts`): 7 emitters, each plan a
+FileDB row (`needlepoint_peaks_base_virtual_488.plan`…); 29 creature parts, 24 eyes and 5
+rockets; 9 checkpoints; 468 triggers, 255 radius and 213 switch.
 ## Lights — `PSpriteLight`
 
 `readSpriteLight` returns `SpriteLightPart`: the colour when on (four floats as stored), the

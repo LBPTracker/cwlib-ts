@@ -1,30 +1,48 @@
 /** `TRIGGER`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
-import { readThingRef, type PartReader } from '../thing.ts';
-import { things } from './common.ts';
+import { readThingRef, type PartReader, type Thing } from '../thing.ts';
+import { thingArray } from './common.ts';
+
+/** `PTrigger`, kept: the volume's kind and size, and the Things in it when saved. */
+export interface TriggerPart {
+  /** cwlib's `TriggerType`, an enum8: 0 radius, 1 rect, 2 switch, 3 touch, 4 radius 3D. */
+  readonly triggerType: number;
+  readonly inThings: readonly (Thing | undefined)[];
+  readonly radiusMultiplier: number;
+  readonly zRangeHundreds: number;
+  readonly allZLayers: boolean;
+  readonly hysteresisMultiplier: number;
+  readonly enabled: boolean;
+  readonly zOffset: number;
+  readonly scoreValue: number;
+}
 
 /** `PTrigger`: the volume a switch senses in. */
-export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartReader>): void {
+export function readTrigger(s: Serializer, readers: ReadonlyMap<string, PartReader>): TriggerPart {
   const { version, subVersion } = s.revision;
   const vita = vitaRevision(s.revision);
-  s.u8(); // triggerType, enum8
+  const triggerType = s.u8(); // enum8
+  let inThings: (Thing | undefined)[];
   if (vita >= 0x17) {
     // The Vita's inThings: each with an action.
-    const count = s.count();
-    for (let i = 0; i < count; i += 1) {
-      readThingRef(s, readers);
-      s.s32(); // thingAction
-    }
-  } else things(s, readers); // inThings
-  s.f32(); // radiusMultiplier
+    inThings = s.array((self) => {
+      const thing = readThingRef(self, readers);
+      self.s32(); // thingAction
+      return thing;
+    });
+  } else inThings = thingArray(s, readers);
+  const radiusMultiplier = s.f32();
   if (version < 0x1d5) s.i32();
-  if (subVersion >= 0x2a) s.u8(); // zRangeHundreds
-  s.bool(); // allZLayers
+  const zRangeHundreds = subVersion >= 0x2a ? s.u8() : 0;
+  const allZLayers = s.bool();
+  let hysteresisMultiplier = 0;
+  let enabled = true;
   if (version >= 0x19b) {
-    s.f32(); // hysteresisMultiplier
-    s.bool(); // enabled
+    hysteresisMultiplier = s.f32();
+    enabled = s.bool();
   }
-  if (version >= 0x322) s.f32(); // zOffset
-  if (subVersion >= 0x90 || vita >= 0x30) s.s32(); // scoreValue
+  const zOffset = version >= 0x322 ? s.f32() : 0;
+  const scoreValue = subVersion >= 0x90 || vita >= 0x30 ? s.s32() : 0;
+  return { triggerType, inThings, radiusMultiplier, zRangeHundreds, allZLayers, hysteresisMultiplier, enabled, zOffset, scoreValue };
 }
