@@ -577,7 +577,10 @@ Measured 2026-10-25:
 - **Its 43 `FAR4`s** read whole: 9,546 `CHKb`, every one whole, 285,293 Things; 21 of them stand
   where the install has an archive of the same path (story levels, Needlepoint Peaks among them),
   22 are new — the DLC levels (Adventure Time, Back to the Future, SpongeBob, Seaside, Tiki, a
-  weekly challenge).
+  weekly challenge). ❗ **A replaced level is its own archive only**: the update's
+  `needlepoint_peaks.farc` stands beside the install's `needlepoint_peaks_container.farc`, which it
+  does not replace, and it is repacked — 158 chunks where 01.00 has 943, read with the update's
+  worlds into 9,265 Things where 01.00 gives 9,214 (lbprender's page, 2026-10-25).
 - ❗ **Two text formats changed.** Every `DLCt` of the update has a `NonPlanGuids` list before
   `TypeMask` (`DlcFile.nonPlanGuids`), none of the install's; and two of them disagree with their
   own counts (`TextResource.array` reads every `[n]` line that follows). The update also brings
