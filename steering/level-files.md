@@ -519,7 +519,8 @@ it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (1
 
 - ✔ With them **155 of the 173 read** (`dev/things-census.ts`, 2026-10-25): **all 148 plans
   and 7 of the 25 levels**, where none did before. Nothing off the branch moved: the census's
-  other rows are the same files.
+  other rows are the same files. The plans are the proof — `readPlan` requires the Thing array
+  to end on its last byte; a level's "reads" is weaker, by the trap below.
 - ❗ **The other 18 levels hold a part no reader knows**, and cwlib fails on them too (`CwlibTrace`:
   a `ClassCastException` at the same byte). Their Things have **parts revision `0x31`** and mask
   bit `0x27` (14 levels) or `0x28` (3); the last one fails in a `PTrigger`'s decorations
@@ -529,6 +530,26 @@ it is cwlib's `has(DOUBLE11, n)` (ennuo/toolkit `d6a2ef8`): the Thing's flags (1
   `level_2b_crossplayvita_33.cpv`, is 31 bytes: `00 00`, the wide string `raise`, `45 03 40`,
   five zero bytes, two `f32` 1.0 and `00 00`. What the parts are is open: *28* in
   [open-questions.md](open-questions.md).
+
+What their bytes show (2026-10-25, by hand over the 18 levels; no reader is in `src/`):
+
+- **Bit `0x27` is on Things that carry a `SCRIPT`**, beside `POS` and `RENDER_MESH` or alone.
+  Its body starts with two bytes (even, `00`–`0c`, the second varying as a zigzag type 0–6
+  would; the first `00` or `02`), **a wide string the creator named** (`Beam 1`, `Box1`,
+  `Timer Hand`, `Count - Timer`, `Rec3`, `Sackboy`), an `f32`, four zero bytes and two `f32`
+  1.0. **What follows depends on the instance**: two zero bytes in some (`raise`, `Column 1`),
+  some fifty in others (`Bounce 3` in `gamescom_011`), floats such as 1.4667 and 420 in others.
+- **Bit `0x28` is on Things that carry `SCRIPT` and `SWITCH`.** Seven bytes (`00`/`02`, `02`,
+  `00`/`01`, `00`/`01`, three zeros), then a varint: 8 bytes in all when the fourth is 1
+  (`00 02 01 01 00 00 00 08`), and when it is 0 the varint is any size (8 to 11,129,208) and
+  more follows — on some a Thing reference (`e7 87 01 aa …`).
+- ❗ **A level that "reads" proves less than a plan that does: the trap the work fell into.**
+  `readLevel` stops after the outermost world's `things` and checks nothing after them, and
+  that array is references: **a body read too short leaves zero bytes that read as null
+  references**, the walk goes on, and the level "opens". Candidate readers taking the short
+  `0x27` form opened 12 of the 18 levels this way while `Bounce 3`'s fifty zero bytes were
+  being read as nulls. Prove a part reader on plans, or on a nested world whose tail is read,
+  before believing a level count.
 
 ## The game's meshes — `RMesh`
 

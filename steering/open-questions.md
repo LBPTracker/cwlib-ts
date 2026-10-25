@@ -99,7 +99,8 @@ branch, into one that stands between a reader and a song. What is left:
   173 crossplay resources on the branch read, all 148 plans and 7 of 25 levels. ⚠️ The other 18
   hold the Vita's own parts at parts revision `0x30`/`0x31`, bits `0x27`/`0x28` — LBP3's
   `POPPET_POWERUP` and `POCKET_ITEM` slots — which cwlib has no table for and fails on too
-  (*The Vita branch* in [level-files.md](level-files.md)). Before that: one level in the saves,
+  (*The Vita branch* in [level-files.md](level-files.md), which has what their bytes show and why
+  a level count cannot prove a reader for them). Before that: one level in the saves,
   `f331efa7`, version `0x3e2`, and nothing in the archive sample. ❗ **Bonsai is the corpus that was missing**: its Vita levels are on this
   branch, revision `0x87`, and a search for "a" alone finds 847 of them; six of six music levels
   fail with "the world Thing carried no WORLD part" ([level-files.md](level-files.md)). Vita has a
