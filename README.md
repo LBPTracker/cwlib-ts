@@ -41,6 +41,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `script.ts` | `RScript` (`FSHb`): a compiled Fish class — its type, field, property and function tables, the 64-bit instructions, the string and constant pools |
 | `bone-set.ts` | `RBoneSet` (`BSTb`): the toolkit's own format, the playable characters' skeletons as its model importer keeps them |
 | `quest.ts` | `RQuest` (`QSTb`): a story quest — its texts, prize, objectives, the slots that activate and complete it, its key; a reading of our own |
+| `font-face.ts` | `RFontFace` (`FNTb`, loose in `gamedata/fonts/`): a bitmap font — the glyph table, its lookup chains, each glyph's bitmap |
 | `translation.ts` | `RTranslationTable` (`.trans`, no magic): the game's text by LAMS key, one table per language, and the tag-to-key hash |
 | `instrument.ts` | `RInstrument` (`INSb`): the sampler patch — slots, sample GUIDs, key splits, the 27 parameters, the arpeggiator |
 | **`structs/`** | |

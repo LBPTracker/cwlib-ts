@@ -1230,6 +1230,29 @@ such as `NP_TU01B_130_NEWTON`, and `translate` takes either. FileDB paths
   the other 26 are plain text); and 63 of the 70 tags in the FARC levels' and plans' script
   fields. The rest are in no table here.
 
+## Fonts — `RFontFace`
+
+`readFontFace` in `src/resources/font-face.ts` reads an `FNTb`: the glyph table and the block of
+bitmaps; `findGlyph` looks a character up and `glyphBitmap` inflates one. The layout is cwlib's
+`RFontFace` and `GlyphInfo` (ennuo/toolkit `d6a2ef8`), a 16-byte header — magic, head word, data
+offset, 0 — and then plain big-endian fields, no container.
+
+- ❗ **The fonts are not in the FARCs.** The FileDB lists 19 `gamedata/fonts/*.fnt` and no archive
+  holds one; 11 lie loose in the install's `gamedata/fonts/` (2026-10-25), and those are the
+  corpus: `body-md`, `crikey_squat`, `crikey_tall`, `eigerdalsbla`, `helveticaneueltstd-md`
+  (the same bytes as `body-md`), `icon_patch_font`, `omnesbla`, `omnesblaita`, `omnessem`,
+  `omnessemita`, `tall`, at versions `0x26e`, `0x3b3`, `0x3d9` and `0x3ef`/`0x161`.
+- ✔ **All 11 read whole** (`test/font-face.test.ts`): the walk ends where the header's data offset
+  says, and the glyphs' bitmaps follow one another with no gap or overlap to the file's last byte.
+  Every glyph of the compressed seven — from `0x3b3` on; below `0x272` there is no flag and the
+  four `0x26e` fonts, the `omnes` ones, are not — inflates to exactly its width × height, 4 glyphs to 21,754 a font.
+- ✔ **`glyphIndex` and `glyphPageUsed` are measured, not just walked**: 128 chain heads, one per
+  `character & 127`, running through `nextGlyph` and reaching every glyph with none in the wrong
+  chain; and a 512-bit set of 128-character pages, bit `character >> 7` from each word's lowest,
+  which is exactly the pages the glyphs fall in. The glyphs are sorted by character.
+- ⚠️ An uncompressed font's two bytes per pixel are cwlib's "green and blue"; what they are to the
+  game is not measured, nor what unit `advance` is in (`A` in `tall` is 17 px wide, advance 564).
+
 ## Quests — `RQuest`
 
 `readQuest` in `src/resources/quest.ts`: magic `QSTb`, FileDB paths
