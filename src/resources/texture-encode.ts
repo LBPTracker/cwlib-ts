@@ -47,7 +47,7 @@
 import type { Deflate } from '../io/writer.ts';
 import { compressBc, type BcMetric } from './texture-encode-bc.ts';
 import {
-  GCM_A8R8G8B8, GCM_DXT1, GCM_DXT3, GCM_DXT5, TextureFormatError, writeChunkTable, writeTexture,
+  GCM_A8R8G8B8, GCM_DXT1, GCM_DXT3, GCM_DXT5, TextureFormatError, gameDdsHeader as textureDdsHeader, writeChunkTable, writeTexture,
   type GcmTexture, type Texture, type TextureFormat, type TextureLevel,
 } from './texture.ts';
 
@@ -241,27 +241,9 @@ export function cwlibDdsHeader(format: ImageTextureFormat, width: number, height
   return out;
 }
 
-/**
- * The DDS header of the game's own `TEX `s, which is cwlib's but for one
- * thing: a texture of one level -- or any `A8R8G8B8` -- also sets
- * `DDSD_LINEARSIZE` (`0x80000`) and gives its first level's size as the
- * pitch, and a texture of one level has a level count of 0. Measured on the
- * 2,944 in LBP3 PS4 01.00's four FARCs: of 2,606 single-level DXTs every one has
- * flags `0x81007` and a count of 0, 1,972 of them that size as the pitch (the
- * rest a pitch that is not); the 337 with more levels have cwlib's header
- * exactly (`0x21007`, pitch 0, caps `0x401008`); the one `A8R8G8B8`, of 9
- * levels, has `0xa1007` and its first level's size.
- */
+/** The DDS header of the game's own `TEX `s (`gameDdsHeader` in `texture.ts`), cwlib's but for one level and `A8R8G8B8`. */
 export function gameDdsHeader(format: ImageTextureFormat, width: number, height: number, mips: number): Uint8Array {
-  const out = cwlibDdsHeader(format, width, height, mips);
-  const view = new DataView(out.buffer);
-  const linear = format === 'RGBA8' ? width * height * 4 : Math.max(1, Math.ceil(width / 4)) * Math.max(1, Math.ceil(height / 4)) * (format === 'DXT1' ? 8 : 16);
-  if (mips === 1 || format === 'RGBA8') {
-    view.setUint32(8, view.getUint32(8, true) | 0x80000, true);
-    view.setUint32(20, linear, true);
-  }
-  if (mips === 1) view.setUint32(28, 0, true);
-  return out;
+  return textureDdsHeader(FORMAT[format].format, width, height, mips);
 }
 
 /** The levels' bytes as a DDS stores them: BC blocks as they are, RGBA8 as little-endian ARGB words. */

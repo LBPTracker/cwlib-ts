@@ -287,6 +287,7 @@ async function readGtf(bytes: Uint8Array, inflate: Inflate): Promise<Texture> {
 }
 
 const DDSD_MIPMAPCOUNT = 0x20000;
+const DDSD_LINEARSIZE = 0x80000;
 const DDPF_ALPHAPIXELS = 0x1;
 const DDPF_FOURCC = 0x4;
 const DDPF_RGB = 0x40;
@@ -474,23 +475,35 @@ function packGtf(value: Texture, gcm: GcmTexture): Uint8Array {
   return out;
 }
 
-/** A DDS header for a texture that has none stored: the masks and flags a writer of DDS sets. */
-function ddsHeader(value: Texture): Uint8Array {
+/**
+ * The DDS header of the game's own `TEX `s, for a texture that has none stored.
+ * Measured on the 2,944 in LBP3 PS4 01.00's four FARCs (`dev/dds-header-census.ts`,
+ * 2026-10-26), this header whole on 2,308:
+ * - the 337 DXTs of more than one level: flags `0x21007` (`DDSD_MIPMAPCOUNT`,
+ *   no `DDSD_LINEARSIZE`), pitch 0, the level count, caps `0x401008` -- every one;
+ * - the 2,606 DXTs of one level: flags `0x81007` (`DDSD_LINEARSIZE`), a level
+ *   count of 0, caps `0x1000` -- every one; the level's size as the pitch on all
+ *   DXT1s and 778 of 1,412 DXT5s. ⚠️ The other 634 DXT5s give half that, a DXT1's
+ *   size; what picks it is not known (not the alpha). Two DXT1s hold a word at 124;
+ * - the one `A8R8G8B8`, of 9 levels: `0xa1007` and its first level's size.
+ */
+export function gameDdsHeader(format: TextureFormat, width: number, height: number, mipCount: number): Uint8Array {
   const out = new Uint8Array(DDS_HEADER);
   const view = new DataView(out.buffer);
-  const bc = value.format !== 'rgba8';
+  const bc = format !== 'rgba8';
+  const many = mipCount > 1;
   const le = (o: number, v: number): void => view.setUint32(o, v >>> 0, true);
   out.set([0x44, 0x44, 0x53, 0x20]);
   le(4, 124);
-  le(8, 0x1 | 0x2 | 0x4 | 0x1000 | (value.mipCount > 1 ? DDSD_MIPMAPCOUNT : 0) | (bc ? 0x80000 : 0x8));
-  le(12, value.height);
-  le(16, value.width);
-  le(20, bc ? blocksOf(value.width) * blocksOf(value.height) * (value.format === 'bc1' ? 8 : 16) : value.width * 4);
-  le(28, value.mipCount);
+  le(8, 0x1007 | (many ? DDSD_MIPMAPCOUNT : 0) | (!many || !bc ? DDSD_LINEARSIZE : 0));
+  le(12, height);
+  le(16, width);
+  if (!many || !bc) le(20, bc ? blocksOf(width) * blocksOf(height) * (format === 'bc1' ? 8 : 16) : width * height * 4);
+  le(28, many ? mipCount : 0);
   le(76, 32);
   if (bc) {
     le(80, DDPF_FOURCC);
-    out.set([...(value.format === 'bc1' ? 'DXT1' : value.format === 'bc2' ? 'DXT3' : 'DXT5')].map((c) => c.charCodeAt(0)), 84);
+    out.set([...(format === 'bc1' ? 'DXT1' : format === 'bc2' ? 'DXT3' : 'DXT5')].map((c) => c.charCodeAt(0)), 84);
   } else {
     le(80, DDPF_RGB | DDPF_ALPHAPIXELS);
     le(88, 32);
@@ -499,7 +512,7 @@ function ddsHeader(value: Texture): Uint8Array {
     le(100, 0x000000ff);
     le(104, 0xff000000);
   }
-  le(108, 0x1000 | (value.mipCount > 1 ? 0x400008 : 0));
+  le(108, 0x1000 | (many ? 0x400008 : 0));
   return out;
 }
 
@@ -517,7 +530,7 @@ function packTex(value: Texture): Uint8Array {
   const stored = storedOf(value);
   const out = new Uint8Array(length);
   if (stored && stored.length === length) out.set(stored);
-  else out.set(ddsHeader(value));
+  else out.set(gameDdsHeader(value.format, value.width, value.height, value.mipCount));
   const view = new DataView(out.buffer);
   const pf = view.getUint32(80, true);
   const masks = [view.getUint32(92, true), view.getUint32(96, true), view.getUint32(100, true), pf & DDPF_ALPHAPIXELS ? view.getUint32(104, true) : 0];
