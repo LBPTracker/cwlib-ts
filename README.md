@@ -34,6 +34,8 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `savearchive.ts` | PS3 `FAR4` saves, XXTEA with a constant key; the same archive in the clear, read and written |
 | `legacy-mod.ts`, `big-save.ts` | the one-file `MODb`/`MODe` mod, and a save rooted at an `RBigProfile` listed by path — ported from Java, proven on no file |
 | `mod.ts`, `zip.ts`, `psf.ts` | Craftworld Toolkit `.mod` packages (with their icon and translation patches), a stored/deflated ZIP reader and writer, `PARAM.SFO` |
+| **`imports/`** | |
+| `model-importer.ts`, `animation-importer.ts`, `static-mesh-builder.ts`, `blend-packet-importer.ts` | cwlib's importers: a glTF to an `RMesh` or an `RAnimation`, Things baked into an `RStaticMesh`, a Blender packet to a mesh — Java's bytes, with JOML, `HashSet` order and NvTriStrip ported |
 | **`things/`** | |
 | `thing.ts`, `parts.ts`, `parts/` | the Thing graph and its part readers, one file per part — `partReaders().size` is the number (53 as of 2026-10-24) |
 | `level.ts` | the walk: worlds, plans, streamed `CHKb` chunks and islands; `readThings` picks one by magic |

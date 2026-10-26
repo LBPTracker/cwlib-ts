@@ -1970,6 +1970,32 @@ What is measured and what is only a width:
   Arrays the game has no element of here are refused when not empty. `StateUpdateViewed` is
   true in all 25.
 
+## Importers — `src/imports/`
+
+cwlib's four importers (toolkit `d6a2ef8`), each checked against Java compiled from that commit:
+`importModel` (`ModelImporter`: a glTF or GLB to an `RMesh`, on a bone set's skeleton or the file's
+own skins), `importAnimation` (`AnimationImporter`), `StaticMeshBuilder` (Things or meshes baked
+into one `RStaticMesh`) and `importBlendPacket` (`BlendPacketImporter`, the mesh half of `Work2`).
+JOML's float arithmetic, Java's `HashSet` iteration order and NvTriStrip are ported with them, so
+the output is Java's byte for byte:
+
+| what | inputs | result |
+|---|---|---|
+| meshes (every game mesh through `meshToGlb`, `dev/import-java.ts`) | 5,939 | 5,479 identical; 347 identical but for the edge list's order; 2 off by one smooth-normal byte; 56 that Java crashes on (a primitive with no material); 55 refused by both (over 65,535 vertices) |
+| animations (`animationToGlb` with a skin) | 2,528 | 2,526 identical; 2 "fat" ones differ where Java rounds a half-float tie away from zero |
+| backdrops (`dev/import-staticmesh-java.ts`) | 480 from 400 meshes | positions, normals, UVs, boxes, runs, indices and tree identical; the dependency table in first-mention order, Java's in `HashSet` order |
+| blend packets (synthetic: no real one is here, `dev/import-blend-java.ts`) | 53 | identical; 7 refused by both |
+
+- ⚠️ **The 347 are not reproducible**: there Java's `HashSet` buckets turn into trees, ordered by
+  identity hashes. The importer says so (`notes.uncertainSets`).
+- Where this library differs from Java on purpose — a static mesh's joints blended whole, its
+  tangent where the game keeps it, shared accessors, nulls that crash Java — is in
+  [lbp-modding-toolchain.md](lbp-modding-toolchain.md), *Where we deliberately differ*, rows 57–60.
+- Through glTF and back (`dev/import-roundtrip.ts`): 5,270 of 5,941 meshes keep their positions,
+  UVs and draws exactly, normals within 2.4e-7; 2,525 of 2,528 animations survive. glTF holds no
+  regions, mirroring, softbody, costume fields, morph normals as absolute (554 lose them), sheared
+  bind poses (2,642), morph tracks or locators.
+
 ## Images to textures — `texture-encode.ts`
 
 `textureFromImage` and `encodeImageTexture` port cwlib's `Images.toGTF`/`toTEX` (toolkit `d6a2ef8`):

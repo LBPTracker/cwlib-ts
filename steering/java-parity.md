@@ -4,7 +4,7 @@ Read before porting a reader, a writer or a tool from ennuo's cwlib, and before 
 library covers. **Only the gaps are listed**: what Java reads, writes or does and this library does
 not. What this library has is in [level-files.md](level-files.md) beside each reader and writer,
 and where it does the same thing differently is *Where we deliberately differ* in
-[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 56 on 2026-10-25, with a 3b).
+[lbp-modding-toolchain.md](lbp-modding-toolchain.md) (rows 1 to 60 on 2026-10-26, with a 3b).
 Whether Java's reading is *right* is a separate question: Java is a reading of the format, not
 evidence about it.
 
@@ -63,9 +63,13 @@ image is compressed to a texture (*Images to textures*, level-files.md).
 
 ## Tools
 
-- **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
-  `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
-- **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).
+- **Shaders compiled**: a material's shader source is generated as cwlib generates it
+  (`src/resources/gfx-assembler*.ts`, `GfxAssembler` and `CgAssembler`'s variants); turning it into
+  the binaries an `RGfxMaterial` holds takes Sony's own shader compilers, which cwlib runs as
+  outside programs and which cannot be shipped here.
+- **The rest of the blend importer's `Work2`**: its textures to `.tex`, its materials through Cg,
+  its palette plans and its writing into the FileDB and a FARC. The mesh half is ported
+  (*Importers*, level-files.md).
 - **JSON in Java's field names** (`gson/`). `toJson` and `fromJson` (`src/io/json.ts`,
   `src/io/from-json.ts`) carry this library's own objects, whose fields are not cwlib's: a cwlib
   JSON file does not read here, nor ours there. ✔ A value through JSON and back writes the same
