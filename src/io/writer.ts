@@ -36,7 +36,8 @@
  */
 
 import type { ResourceRef, RevisionInfo } from './serializer.ts';
-import { COMPRESSED_INTEGERS, COMPRESSED_MATRICES, COMPRESSED_VECTORS } from './serializer.ts';
+import { COMPRESSED_INTEGERS, COMPRESSED_MATRICES, COMPRESSED_VECTORS, referenceIdOf } from './serializer.ts';
+import { tapeObjectOf } from './tape.ts';
 import { toHex } from './hex.ts';
 
 /** Deflate one chunk into a complete zlib stream. May be sync or async. */
@@ -320,25 +321,33 @@ export class Writer {
    * two objects share it, and **-1 is one**: 5,905 of the game's 44,089 chunks
    * name their island `0xffffffff`, which `Serializer.reference` takes for an
    * object like any other (steering/level-files.md, *Writing a level*).
+   *
+   * ❗ **Left out, `id` is the one the value was read under**: its tape object's,
+   * else `referenceIdOf`'s, so a struct's writer need keep no ids of its own. And
+   * **a value read onto a tape is keyed on its tape object** (`tapeObjectOf`): the
+   * tape writes the same object under that key wherever another Thing names it,
+   * and two keys for one id would make the second mention a second body.
    */
   reference<T extends object>(value: T | undefined, write: (self: Writer, value: T) => void, id?: number): void {
     if (!value) {
       this.i32(0);
       return;
     }
-    const seen = this.ids.get(value);
+    const object = tapeObjectOf(value);
+    const key: object = object ?? value;
+    const seen = this.ids.get(key);
     if (seen !== undefined) {
       this.i32(seen);
       return;
     }
-    let fresh = id;
+    let fresh = id ?? object?.id ?? referenceIdOf(value);
     if (fresh === undefined || fresh === 0 || this.taken.has(fresh)) {
       while (this.taken.has(this.nextId)) this.nextId += 1;
       fresh = this.nextId;
       this.nextId += 1;
     }
     this.taken.add(fresh);
-    this.ids.set(value, fresh);
+    this.ids.set(key, fresh);
     this.i32(fresh);
     write(this, value);
   }
@@ -375,7 +384,7 @@ export class Writer {
 
   /** A length-prefixed array of references, which is what most Thing lists are. */
   references<T extends object>(
-    values: readonly T[],
+    values: readonly (T | undefined)[],
     write: (self: Writer, value: T) => void,
   ): void {
     this.i32(values.length);

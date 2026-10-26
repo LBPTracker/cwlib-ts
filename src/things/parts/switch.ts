@@ -3,19 +3,9 @@
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { hasPlayerMode, thingArray, writeThingArray } from './common.ts';
-import { readNetworkOnlineId, writeNetworkOnlineId } from '../../structs/network.ts';
+import { readNetworkOnlineIdKept, writeNetworkOnlineId, type NetworkId } from '../../structs/network.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
-import { Tape } from '../../io/tape.ts';
-
-/**
- * Tape objects by the value read from them (every tape shares the table), so an
- * output written from its value takes the identity of the object a Thing's tape
- * body names: a target Thing written inline can refer back to the very output
- * that names it, and that has to come out as a back-reference.
- */
-const TAPE = new Tape(new Uint8Array(0));
-export const keyOf = (value: object): object => TAPE.objectOf(value) ?? value;
 
 /** `SwitchType` values this reader has to branch on. */
 const SWITCH_STICKER = 5;
@@ -78,8 +68,6 @@ export interface SwitchOutput {
   readonly targets: SwitchTarget[];
   /** Version `0x34d` on. */
   readonly userDefinedName?: string;
-  /** The reference id the file gave this output, kept so it is written back under it. */
-  readonly id?: number;
 }
 
 function readSwitchOutput(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchOutput {
@@ -169,6 +157,8 @@ export interface SwitchPart {
   readonly glowColours?: readonly number[];
   /** A data sampler's creator, an online id. */
   readonly creatorID?: string;
+  /** `creatorID`'s `NetworkOnlineID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly creatorIDBytes?: Uint8Array;
   /** cwlib's `SwitchBehavior`, an enum32; version 0x2c4 on. */
   readonly behavior?: number;
   readonly breakSound?: boolean;
@@ -291,6 +281,11 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   let labelName: string | undefined;
   let glowColours: number[] | undefined;
   let creatorID: string | undefined;
+  let creatorIDBytes: Uint8Array | undefined;
+  const creator = (id: NetworkId): void => {
+    creatorID = id.handle;
+    creatorIDBytes = id.bytes;
+  };
   let behavior: number | undefined;
   let referenceThing: Thing | undefined;
   let manualActivation: SwitchSignal | undefined;
@@ -326,12 +321,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     const count = s.count();
     outputPorts = [];
     for (let i = 0; i < count; i += 1) {
-      // The id is peeked and kept, so a writer puts the output back under it.
-      const at = s.position;
-      const id = s.i32();
-      s.position = at;
-      const read = s.reference((self) => readSwitchOutput(self, readers));
-      const output = read && read.id === undefined && id !== 0 ? Object.assign(read, { id }) : read;
+      const output = s.reference((self) => readSwitchOutput(self, readers));
       outputPorts.push(output);
       outputs.push(output?.targets ?? []);
     }
@@ -472,7 +462,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
       // The Vita's data sampler (cwlib: "although 0x2f shouldn't be the switch type?").
       if (vita >= 0x45) labelIndex = s.i32();
       if (vita >= 0x46) {
-        creatorID = readNetworkOnlineId(s);
+        creator(readNetworkOnlineIdKept(s));
         labelName = s.wstr();
       }
       if (vita >= 0x33) analogue = s.array((self) => self.f32());
@@ -489,7 +479,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
   // ⚠️ Data-dependent again, and the block is not small.
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
     labelIndex = s.i32();
-    creatorID = readNetworkOnlineId(s);
+    creator(readNetworkOnlineIdKept(s));
     labelName = s.wstr();
     analogue = s.array((self) => self.f32());
     ternary = s.array((self) => self.u8());
@@ -517,7 +507,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     detectUnspawnedPlayers, unspawnedBehavior, playSwitchAudio, switchTouchType,
     cursorInteractionType, cursorScreenArea, cursorTouchPanels, cursorTouchIndex, flags, outputAndOr,
     includeSameChipTags, playerFilter, playerMode, relativeToSequencer, layerRange, isLbp3Switch,
-    randomNonRepeating, stickerSwitchMode, outputPorts, labelName, analogue, ternary, glowColours, creatorID, behavior,
+    randomNonRepeating, stickerSwitchMode, outputPorts, labelName, analogue, ternary, glowColours, creatorID, ...(creatorIDBytes ? { creatorIDBytes } : {}), behavior,
     referenceThing, manualActivation, singleOutputActivation, connectorPos, connectorGrabbed,
     looseConnectorGrabbed, includeTouching, liveStreamingChoiceLabels, inputList, portThing,
     ...(hideByte > 1 ? { hideInPlayModeByte: hideByte } : {}),
@@ -551,11 +541,9 @@ export function writeSwitch(w: Writer, v: SwitchPart, ctx: PartWriteContext): vo
       ? [...v.outputPorts]
       : v.outputs.map((targets) => ({ activation: { activation: 0, ternary: 0, player: 0 }, targets, userDefinedName: '' }));
     w.i32(ports.length);
-    for (const port of ports) {
-      const key = port && keyOf(port);
-      const id = port?.id ?? (key as { id?: number } | undefined)?.id;
-      w.reference(key, (self) => writeSwitchOutput(self, port!, ctx), id);
-    }
+    // ❗ An output read onto a tape is the tape's object (`Writer.reference`): a target
+    // Thing written inline can refer back to the very output that names it.
+    for (const port of ports) w.reference(port, (self, output) => writeSwitchOutput(self, output, ctx));
   }
 
   if (version < 0x398 && version >= 0x140) w.ref(v.stickerPlan, { descriptor: true });
@@ -672,7 +660,7 @@ export function writeSwitch(w: Writer, v: SwitchPart, ctx: PartWriteContext): vo
     if (type === 0x2f) {
       if (vita >= 0x45) w.i32(v.labelIndex ?? 0);
       if (vita >= 0x46) {
-        writeNetworkOnlineId(w, v.creatorID ?? '');
+        writeNetworkOnlineId(w, v.creatorID ?? '', v.creatorIDBytes);
         w.wstr(v.labelName ?? '');
       }
       if (vita >= 0x33) {
@@ -693,7 +681,7 @@ export function writeSwitch(w: Writer, v: SwitchPart, ctx: PartWriteContext): vo
 
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
     w.i32(v.labelIndex ?? 0);
-    writeNetworkOnlineId(w, v.creatorID ?? '');
+    writeNetworkOnlineId(w, v.creatorID ?? '', v.creatorIDBytes);
     w.wstr(v.labelName ?? '');
     w.i32(v.analogue?.length ?? 0);
     for (const a of v.analogue ?? []) w.f32(a);

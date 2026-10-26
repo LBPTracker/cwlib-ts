@@ -6,10 +6,6 @@ import { thingArray, writeThingArray } from './common.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
 
-/** The reference id each `EmittedObjectSource` had in its file, so a writer names it the same. */
-const IDS = new WeakMap<object, number>();
-/** And its tape object, where read onto a tape: the key the tape writes it under (see `script.ts`, `TAPED`). */
-const TAPED = new WeakMap<object, object>();
 
 /** `EmittedObjectSource`: Things already in the level an emitter copies, and a plan. */
 export interface EmittedObjectSource {
@@ -180,17 +176,7 @@ export function readEmitter(s: Serializer, readers: ReadonlyMap<string, PartRead
   }
   const ignoreParentsVelocity = doubled(0x32e);
   let source: EmittedObjectSource | undefined;
-  if (version >= 0x340) {
-    const at = s.position;
-    const id = s.i32();
-    s.position = at;
-    source = s.reference((self) => readEmittedObjectSource(self, readers));
-    if (source) {
-      IDS.set(source, id);
-      const taped = s.tape?.objectOf(source);
-      if (taped) TAPED.set(source, taped);
-    }
-  }
+  if (version >= 0x340) source = s.reference((self) => readEmittedObjectSource(self, readers));
   const editorEmitter = doubled(0x361);
   const isLimboFlippedForGunEmitter = doubled(0x38d);
   // cwlib names it less politely; the Vita's build, `backupZOffset`.
@@ -276,11 +262,7 @@ export function writeEmitter(w: Writer, e: EmitterPart, ctx: PartWriteContext): 
     }
   }
   doubled(0x32e, e.ignoreParentsVelocity);
-  if (version >= 0x340) {
-    const { source } = e;
-    if (!source) w.reference(undefined, () => {});
-    else w.reference<object>(TAPED.get(source) ?? source, (self) => writeEmittedObjectSource(self, source, ctx), IDS.get(source));
-  }
+  if (version >= 0x340) w.reference(e.source, (self, source) => writeEmittedObjectSource(self, source, ctx));
   doubled(0x361, e.editorEmitter);
   doubled(0x38d, e.isLimboFlippedForGunEmitter);
   if (version >= 0x3ae) w.f32(e.backupZOffset ?? 0);

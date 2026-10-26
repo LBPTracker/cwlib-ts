@@ -82,10 +82,10 @@ export type Aliases = ReadonlyMap<TapeObject, TapeObject | null>;
 const BY_VALUE = new WeakMap<object, TapeObject>();
 
 /**
- * The tape object a value was read as, on any tape. ❗ **A part writer writes a
- * shared struct under this key** (`w.reference(tapeObjectOf(value) ?? value, …)`):
- * the tape writes the same struct under it wherever another Thing names it, and
- * two keys for one id make the second mention a second body.
+ * The tape object a value was read as, on any tape. ❗ **`Writer.reference`
+ * writes a value under this key** where it has one: the tape writes the same
+ * struct under it wherever another Thing names it, and two keys for one id make
+ * the second mention a second body.
  */
 export function tapeObjectOf(value: unknown): TapeObject | undefined {
   return typeof value === 'object' && value !== null ? BY_VALUE.get(value) : undefined;

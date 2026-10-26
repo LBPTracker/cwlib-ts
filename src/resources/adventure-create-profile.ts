@@ -13,8 +13,8 @@ import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
 import { readSlot, readSlotId, writeSlot, writeSlotId, type Slot, type SlotId } from '../structs/slot.ts';
 import { Writer } from '../io/writer.ts';
-import { writeAdventureData } from './adventure-shared-data.ts';
-import { installWorldReader, readAdventureData, type AdventureData } from '../things/level.ts';
+import { installWorldReader, readAdventureData, writeAdventureData, type AdventureData } from '../things/level.ts';
+import { valuesContext } from '../things/encode-things.ts';
 import { partReaders } from '../things/parts.ts';
 import { readThingRef, type PartReader, type Thing } from '../things/thing.ts';
 
@@ -32,26 +32,9 @@ export interface PlanetArea {
   readonly spriteLightPositions?: readonly (readonly [number, number, number])[];
 }
 
-/**
- * The bytes each Thing reference here was read from, so the encoder can write
- * it back: there is no writer for a Thing from its value yet. Kept by the
- * object the Thing hangs off -- a profile's `planetWorld`, an area's `area`
- * below 0x187 and its sprite lights, positions and second `area` above 0x179.
- */
-const RAW = new WeakMap<object, { planetWorld?: Uint8Array; area?: Uint8Array; tail?: Uint8Array }>();
-
-/** Read `read`, returning the bytes it consumed too. */
-function span<T>(s: Serializer, read: () => T): [T, Uint8Array] {
-  const start = s.position;
-  const value = read();
-  return [value, s.data.slice(start, s.position)];
-}
-
-/** Write a Thing's kept bytes, or a null reference; a Thing with no bytes cannot be written. */
-function writeThingBytes(w: Writer, raw: Uint8Array | undefined, thing: Thing | undefined, what: string): void {
-  if (raw) w.bytes(raw);
-  else if (!thing) w.i32(0);
-  else throw new SerializerError(`${what}: a Thing not read from a file, and there is no Thing writer`);
+/** A Thing by reference, written from its values at its first mention (`encode-things.ts`). */
+function writeThingRef(w: Writer, thing: Thing | undefined): void {
+  valuesContext().thing(w, thing);
 }
 
 export interface AdventureCreateProfile {
@@ -86,10 +69,9 @@ function readPlanetArea(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   let area: Thing | undefined;
   let mainArea: ResourceRef | undefined;
   let shadowArea: ResourceRef | undefined;
-  const raw: { area?: Uint8Array; tail?: Uint8Array } = {};
   if (subVersion > 0x109) areaId = s.s32();
   if (subVersion < 0x187) {
-    if (subVersion > 0x109) [area, raw.area] = span(s, () => readThingRef(s, readers));
+    if (subVersion > 0x109) area = readThingRef(s, readers);
   } else {
     mainArea = s.resource(true);
     if (subVersion > 0x18b) shadowArea = s.resource(true);
@@ -103,20 +85,16 @@ function readPlanetArea(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   let spriteLights: (Thing | undefined)[] | undefined;
   let spriteLightPositions: [number, number, number][] | undefined;
   if (subVersion > 0x179) {
-    const start = s.position;
     spriteLights = s.array((self) => readThingRef(self, readers));
     const positions = s.i32();
     spriteLightPositions = [];
     for (let i = 0; i < positions; i += 1) spriteLightPositions.push(s.vector3() as [number, number, number]);
     area = readThingRef(s, readers);
-    raw.tail = s.data.slice(start, s.position);
   }
-  const out: PlanetArea = {
+  return {
     areaId, area, mainArea, shadowArea, ambienceTrack, ambienceVolume,
     ...(spriteLights ? { spriteLights, spriteLightPositions } : {}),
   };
-  RAW.set(out, raw);
-  return out;
 }
 
 /** `PlayedLevelData`: cwlib's `structs/profile/PlayedLevelData.java`, a level's play record. */
@@ -209,7 +187,7 @@ export async function readAdventureCreateProfile(bytes: Uint8Array, inflate: Inf
     for (let i = 0; i < count; i += 1) slots.push({ id: readSlotId(s), slot: readSlot(s) });
     adventureId = readSlotId(s);
   }
-  const [planetWorld, planetWorldRaw] = subVersion > 0x137 ? span(s, () => readThingRef(s, readers)) : [undefined, undefined];
+  const planetWorld = subVersion > 0x137 ? readThingRef(s, readers) : undefined;
   const planetLevel = subVersion >= 0x71 && subVersion < 0x137 ? s.resource(true) : undefined;
   const links = subVersion > 0xd4 ? s.array((self) => ({ from: readSlotId(self), to: readSlotId(self) })) : [];
   const areas = subVersion > 0x109 ? s.array((self) => readPlanetArea(self, readers)) : [];
@@ -234,13 +212,11 @@ export async function readAdventureCreateProfile(bytes: Uint8Array, inflate: Inf
   if (s.remaining !== 0) {
     throw new SerializerError(`ADCb read ended ${s.remaining} bytes before the end of its payload`);
   }
-  const out: AdventureCreateProfile = {
+  return {
     revision, slots, adventureId, planetWorld, links, areas, sharedData, inlineSharedData, photos, startLevel,
     ...(planetLevel ? { planetLevel } : {}),
     ...(startingPlayedLevelData ? { startingPlayedLevelData } : {}),
   };
-  RAW.set(out, { planetWorld: planetWorldRaw });
-  return out;
 }
 
 /** `readPlayedLevelData`'s mirror. */
@@ -302,10 +278,10 @@ export function writePlayedLevelData(w: Writer, d: PlayedLevelData): void {
 
 function writePlanetArea(w: Writer, a: PlanetArea): void {
   const { subVersion } = w.revision;
-  const raw = RAW.get(a) ?? {};
   if (subVersion > 0x109) w.s32(a.areaId);
   if (subVersion < 0x187) {
-    if (subVersion > 0x109) writeThingBytes(w, raw.area, subVersion > 0x179 ? undefined : a.area, 'a planet area');
+    // Above 0x179 the area's Thing is after its sprite lights, and this one is null.
+    if (subVersion > 0x109) writeThingRef(w, subVersion > 0x179 ? undefined : a.area);
   } else {
     w.ref(a.mainArea, { descriptor: true });
     if (subVersion > 0x18b) w.ref(a.shadowArea, { descriptor: true });
@@ -315,21 +291,18 @@ function writePlanetArea(w: Writer, a: PlanetArea): void {
     w.f32(a.ambienceVolume);
   }
   if (subVersion > 0x179) {
-    if (raw.tail) w.bytes(raw.tail);
-    else if (!a.area && !a.spriteLights?.length) {
-      w.i32(0);
-      w.i32(a.spriteLightPositions?.length ?? 0);
-      for (const p of a.spriteLightPositions ?? []) w.vector3(p);
-      w.i32(0);
-    } else throw new SerializerError('a planet area: Things not read from a file, and there is no Thing writer');
+    w.i32(a.spriteLights?.length ?? 0);
+    for (const light of a.spriteLights ?? []) writeThingRef(w, light);
+    w.i32(a.spriteLightPositions?.length ?? 0);
+    for (const p of a.spriteLightPositions ?? []) w.vector3(p);
+    writeThingRef(w, a.area);
   }
 }
 
 /**
  * `readAdventureCreateProfile`'s mirror: the payload, byte for byte, from the
- * value. ⚠️ **Its Things -- the planet's world, each area's -- are written from
- * the bytes they were read from**, as there is no writer for a Thing from its
- * value; a profile built afresh can hold none.
+ * value, its Things -- the planet's world, each area's and its sprite lights --
+ * by the Thing writer (`encode-things.ts`), each under the id it was read with.
  */
 export function encodeAdventureCreateProfile(value: AdventureCreateProfile, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
   const w = new Writer(header.revision, header.compressionFlags);
@@ -342,7 +315,7 @@ export function encodeAdventureCreateProfile(value: AdventureCreateProfile, head
     }
     writeSlotId(w, value.adventureId ?? { type: 0, number: 0 });
   }
-  if (subVersion > 0x137) writeThingBytes(w, RAW.get(value)?.planetWorld, value.planetWorld, 'the planet world');
+  if (subVersion > 0x137) writeThingRef(w, value.planetWorld);
   if (subVersion >= 0x71 && subVersion < 0x137) w.ref(value.planetLevel, { descriptor: true });
   if (subVersion > 0xd4) {
     w.i32(value.links.length);

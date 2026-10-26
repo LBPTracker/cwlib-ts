@@ -46,7 +46,7 @@
 import { Serializer, SerializerError, vitaRevision } from '../io/serializer.ts';
 import type { Writer } from '../io/writer.ts';
 import type { PartWriteContext, PartWriter } from './write-parts.ts';
-import { tapeObjectOf } from '../io/tape.ts';
+
 
 /**
  * cwlib `Branch.LEERDAMMER` and the two of its revisions this reader needs.
@@ -510,8 +510,8 @@ function fillThing(
  * has neither, and gets the parts revision of the newest part the table knows
  * and the mask of the parts it holds.
  *
- * ⚠️ A part's value is the key its reference is written under, `tapeObjectOf`
- * first, as the part writers key the structs they share; a part whose value is
+ * ⚠️ A part's value is the key its reference is written under (its tape object
+ * first, as `Writer.reference` keys every struct); a part whose value is
  * not an object -- a name, a count -- gets a key of its own, so it is never
  * taken for another mention.
  */
@@ -617,7 +617,7 @@ function writePartReference(
     w.i32(0);
     return;
   }
-  const key = typeof value === 'object' && value !== null ? tapeObjectOf(value) ?? value : {};
+  const key = typeof value === 'object' && value !== null ? value : {};
   w.reference(key, (self) => {
     if (!write) throw new UnimplementedPartError(name);
     write(self, value as never, ctx);

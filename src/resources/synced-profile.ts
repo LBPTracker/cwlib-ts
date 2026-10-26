@@ -15,8 +15,9 @@
 
 import { openSerializer, type Inflate } from '../io/resource.ts';
 import { SerializerError, requireLbp3, vitaRevision, type ResourceRef, type RevisionInfo, type Serializer } from '../io/serializer.ts';
-import { readNetworkPlayerId, writeNetworkPlayerId } from '../structs/network.ts';
+import { readNetworkPlayerIdKept, writeNetworkPlayerId } from '../structs/network.ts';
 import { Writer } from '../io/writer.ts';
+import { valuesContext } from '../things/encode-things.ts';
 import { installWorldReader } from '../things/level.ts';
 import { partReaders } from '../things/parts.ts';
 import { readThingRef, type Thing } from '../things/thing.ts';
@@ -41,6 +42,8 @@ export interface SyncedProfile {
   /** The player's colours: primary, secondary, tertiary and, from version 0x3a7, emphasis. */
   readonly colours: readonly number[];
   readonly playerId?: string;
+  /** `playerId`'s `NetworkPlayerID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly playerIdBytes?: Uint8Array;
   /** ⚠️ The Vita's: an integer after the PSN id that cwlib does not read; meaning open. */
   readonly vitaValue?: number;
   readonly creatureToSpawnAs: number;
@@ -60,12 +63,6 @@ export interface SyncedProfile {
   readonly creatureToPodAsPlan?: ResourceRef;
 }
 
-/**
- * The bytes each Thing reference here was read from -- the avatar's world and,
- * below 0x193, the dropped array -- so the encoder writes them back: there is
- * no writer for a Thing from its value yet.
- */
-const RAW = new WeakMap<object, { world?: Uint8Array; dropped?: Uint8Array }>();
 
 /** cwlib's `adventureCreatureReference`: a plan descriptor up to subVersion 0x12a, an `s32` from 0xc5. */
 function readCreatureReference(s: Serializer): [number, ResourceRef | undefined] {
@@ -96,11 +93,8 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
   const readers = partReaders();
   installWorldReader(readers);
 
-  const raw: { world?: Uint8Array; dropped?: Uint8Array } = {};
   const firstTimePlayed = s.i32(); // timePlayed, the first time
-  let start = s.position;
   const sackboyAvatarWorld = readThingRef(s, readers);
-  raw.world = s.data.slice(start, s.position);
   const creatureAvatars = subVersion > 0x17
     ? s.array((self): CreatureAvatar => {
       const [creature, creaturePlan] = readCreatureReference(self);
@@ -112,9 +106,7 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
       };
     })
     : [];
-  start = s.position;
   const droppedThings = version < 0x193 ? s.array((self) => readThingRef(self, readers)) : undefined;
-  if (droppedThings) raw.dropped = s.data.slice(start, s.position);
   const droppedResource = version < 0x13e ? s.resource() : undefined;
   const timePlayed = s.i32();
   const uniqueNumber = s.u64Big();
@@ -123,7 +115,7 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
     for (let i = 0; i < 3; i += 1) colours.push(s.i32());
     if (version > 0x3a6) colours.push(s.i32());
   }
-  const playerId = version > 0x1a7 ? readNetworkPlayerId(s) : undefined;
+  const { handle: playerId, bytes: playerIdBytes } = version > 0x1a7 ? readNetworkPlayerIdKept(s) : { handle: undefined, bytes: undefined };
   const vitaValue = vita >= 0 ? s.i32() : undefined;
   const droppedValue = version > 0x1c4 && version < 0x213 ? s.i32() : undefined;
   const [creatureToSpawnAs, creatureToSpawnAsPlan] = subVersion >= 0x9e ? readCreatureReference(s) : [0, undefined];
@@ -138,8 +130,9 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
   if (s.remaining !== 0) {
     throw new SerializerError(`PRFb read ended ${s.remaining} bytes before the end of its payload`);
   }
-  const out: SyncedProfile = {
+  return {
     revision, timePlayed, sackboyAvatarWorld, creatureAvatars, uniqueNumber, colours, playerId,
+    ...(playerIdBytes ? { playerIdBytes } : {}),
     ...(vitaValue === undefined ? {} : { vitaValue }),
     creatureToSpawnAs, spawnAsAlternateForm, creatureToPodAs, podAsAlternateForm,
     firstTimePlayed,
@@ -149,25 +142,19 @@ export async function readSyncedProfile(bytes: Uint8Array, inflate: Inflate): Pr
     ...(creatureToSpawnAsPlan ? { creatureToSpawnAsPlan } : {}),
     ...(creatureToPodAsPlan ? { creatureToPodAsPlan } : {}),
   };
-  RAW.set(out, raw);
-  return out;
 }
 
 /**
- * `readSyncedProfile`'s mirror: the payload, byte for byte, from the value.
- * ⚠️ **Its Things are written from the bytes they were read from**, as there is
- * no writer for a Thing from its value: a profile built afresh can hold only a
- * null avatar world.
+ * `readSyncedProfile`'s mirror: the payload, byte for byte, from the value, its
+ * Things by the Thing writer (`encode-things.ts`), each under the id it was read with.
  */
 export function encodeSyncedProfile(value: SyncedProfile, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
   const w = new Writer(header.revision, header.compressionFlags);
   const { version, subVersion } = header.revision;
   const vita = vitaRevision(header.revision);
-  const raw = RAW.get(value) ?? {};
+  const things = valuesContext();
   w.i32(value.firstTimePlayed ?? value.timePlayed);
-  if (raw.world) w.bytes(raw.world);
-  else if (!value.sackboyAvatarWorld) w.i32(0);
-  else throw new SerializerError('a synced profile: its avatar world was not read from a file, and there is no Thing writer');
+  things.thing(w, value.sackboyAvatarWorld);
   if (subVersion > 0x17) {
     w.i32(value.creatureAvatars.length);
     for (const a of value.creatureAvatars) {
@@ -177,9 +164,8 @@ export function encodeSyncedProfile(value: SyncedProfile, header: { revision: Re
     }
   }
   if (version < 0x193) {
-    if (raw.dropped) w.bytes(raw.dropped);
-    else if (!value.droppedThings?.length) w.i32(0);
-    else throw new SerializerError('a synced profile: Things not read from a file, and there is no Thing writer');
+    w.i32(value.droppedThings?.length ?? 0);
+    for (const thing of value.droppedThings ?? []) things.thing(w, thing);
   }
   if (version < 0x13e) w.ref(value.droppedResource);
   w.i32(value.timePlayed);
@@ -188,7 +174,7 @@ export function encodeSyncedProfile(value: SyncedProfile, header: { revision: Re
     for (let i = 0; i < 3; i += 1) w.i32(value.colours[i] ?? 0);
     if (version > 0x3a6) w.i32(value.colours[3] ?? 0);
   }
-  if (version > 0x1a7) writeNetworkPlayerId(w, value.playerId ?? '');
+  if (version > 0x1a7) writeNetworkPlayerId(w, value.playerId ?? '', value.playerIdBytes);
   if (vita >= 0) w.i32(value.vitaValue ?? 0);
   if (version > 0x1c4 && version < 0x213) w.i32(value.droppedValue ?? 0);
   if (subVersion >= 0x9e) writeCreatureReference(w, value.creatureToSpawnAs, value.creatureToSpawnAsPlan);

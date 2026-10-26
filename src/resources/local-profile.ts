@@ -16,33 +16,13 @@ import { SerializerError, vitaRevision, type ResourceRef, type RevisionInfo, typ
 import { toHex } from '../io/hex.ts';
 import { fromHex } from '../io/hex.ts';
 import { Writer } from '../io/writer.ts';
-import { readNetworkOnlineId, readNetworkPlayerId, writeNetworkOnlineId, writeNetworkPlayerId } from '../structs/network.ts';
+import { keptField as kept, readNetworkIds, readNetworkOnlineIdKept, readNetworkPlayerIdKept, writeNetworkIds, writeNetworkOnlineId, writeNetworkPlayerId } from '../structs/network.ts';
 import { readSlot, readSlotId, writeSlot, writeSlotId, type Slot, type SlotId } from '../structs/slot.ts';
 import { LD_ANY, onLeerdammer } from '../things/thing.ts';
 import { readInventoryItem, writeInventoryItem, type InventoryItem } from '../things/parts/poppet-powerup.ts';
 import { readPlayedLevelData, writePlayedLevelData, type PlayedLevelData } from './adventure-create-profile.ts';
 import { readStringLookupTable, writeStringLookupTable, type StringLookupTable } from './big-profile.ts';
 
-/**
- * The id each in-stream reference read here had in its file, so the encoder
- * names it the same (`Writer.reference`): the game does not number in
- * first-mention order. An object made afresh has none and is numbered anew.
- */
-const IDS = new WeakMap<object, number>();
-
-/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
-function keepId<T>(s: Serializer, read: (self: Serializer) => T): T | undefined {
-  const at = s.position;
-  const id = s.i32();
-  s.position = at;
-  const value = s.reference(read);
-  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
-  return value;
-}
-
-function writeRef<T extends object>(w: Writer, value: T | undefined, write: (w: Writer, value: T) => void): void {
-  w.reference(value, write, value && IDS.get(value));
-}
 
 // cwlib's `Revisions`, as `RLocalProfile` and its structs gate on them.
 const LD_SAVEGAME_INFO = 0x3;
@@ -100,6 +80,8 @@ export interface ViewedLevelData {
 
 export interface ViewedPlayerData {
   readonly onlineId: string;
+  /** `onlineId`'s `NetworkOnlineID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly onlineIdBytes?: Uint8Array;
   readonly lastReviewCount: number;
   readonly lastCommentCount: number;
   readonly lastPhotosByMeCount: number;
@@ -234,6 +216,8 @@ export interface PaintProperties {
 
 export interface DataLabelValue {
   readonly creatorID: string;
+  /** `creatorID`'s `NetworkOnlineID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly creatorIDBytes?: Uint8Array;
   readonly labelIndex: number;
   readonly analogue?: readonly number[];
   readonly ternary?: Uint8Array;
@@ -241,7 +225,7 @@ export interface DataLabelValue {
 
 function readDataLabelValue(s: Serializer): DataLabelValue {
   const r = s.revision;
-  const creatorID = readNetworkOnlineId(s);
+  const creator = kept('creatorID', readNetworkOnlineIdKept(s));
   const labelIndex = s.i32();
   const vita = vitaRevision(r);
   let analogue: number[] | undefined;
@@ -254,19 +238,22 @@ function readDataLabelValue(s: Serializer): DataLabelValue {
     analogue = s.array((x) => x.f32());
     ternary = s.bytes(s.i32());
   }
-  return { creatorID, labelIndex, analogue, ternary };
+  return { ...creator, labelIndex, analogue, ternary };
 }
 
 export interface PlayerDataLabels {
   readonly values: readonly DataLabelValue[];
   readonly protectedIds?: readonly string[];
+  /** Each of `protectedIds`' `NetworkOnlineID`s as stored, where any holds more than its handle (`structs/network.ts`). */
+  readonly protectedIdsBytes?: readonly (Uint8Array | undefined)[];
 }
 
 function readPlayerDataLabels(s: Serializer): PlayerDataLabels {
   const r = s.revision;
   const values = s.array(readDataLabelValue);
-  const protectedIds = vitaRevision(r) >= D1_PROTECTED_LABELS || r.version >= DATALABELS ? s.array(readNetworkOnlineId) : undefined;
-  return { values, protectedIds };
+  if (!(vitaRevision(r) >= D1_PROTECTED_LABELS || r.version >= DATALABELS)) return { values, protectedIds: undefined };
+  const ids = readNetworkIds(s, false);
+  return { values, protectedIds: ids.handles, ...(ids.bytes ? { protectedIdsBytes: ids.bytes } : {}) };
 }
 
 export interface GoPlayCache {
@@ -318,15 +305,23 @@ export interface LocalProfile {
   /** An `RLevel`, a descriptor. */
   readonly podLevel?: ResourceRef;
   readonly playerId?: string;
+  /** `playerId`'s `NetworkPlayerID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly playerIdBytes?: Uint8Array;
   readonly ownerPlayerId?: string;
+  /** `ownerPlayerId`'s `NetworkPlayerID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly ownerPlayerIdBytes?: Uint8Array;
   /** `OpenPSID`: two u64s. */
   readonly ownerPsid?: readonly [bigint, bigint];
   readonly ownerUserId?: number;
   readonly eulaAgreed?: Uint8Array;
   readonly acceptingPlayer?: string;
+  /** `acceptingPlayer`'s `NetworkPlayerID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly acceptingPlayerBytes?: Uint8Array;
   /** An `RSyncedProfile`, a descriptor. */
   readonly syncedProfile?: ResourceRef;
   readonly voipMutedPlayers?: readonly string[];
+  /** Each of `voipMutedPlayers`' `NetworkPlayerID`s as stored, where any holds more than its handle (`structs/network.ts`). */
+  readonly voipMutedPlayersBytes?: readonly (Uint8Array | undefined)[];
   readonly voipChatPaused?: boolean;
   readonly enableMusicInPlayMode?: boolean;
   readonly enableMusicInPod?: boolean;
@@ -448,7 +443,7 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
       lastAuthorPhotoCount: x.s32(), lastStreamEventTimestamp: x.s64Big(), lastViewedTimestamp: x.s64Big(),
     }));
     out.viewedPlayerData = s.array((x) => ({
-      onlineId: readNetworkOnlineId(x), lastReviewCount: x.s32(), lastCommentCount: x.s32(),
+      ...kept('onlineId', readNetworkOnlineIdKept(x)), lastReviewCount: x.s32(), lastCommentCount: x.s32(),
       lastPhotosByMeCount: x.s32(), lastPhotosWithMeCount: x.s32(), lastFavouriteSlotsCount: x.s32(),
       lastFavouriteUsersCount: x.s32(), lastStreamEventTimestamp: x.s64Big(), lastViewedTimestamp: x.s64Big(),
     }));
@@ -481,32 +476,34 @@ export async function readLocalProfile(bytes: Uint8Array, inflate: Inflate): Pro
   if (version > 0x36b) out.lbp2GameProgressionFlags = s.i32();
   if (version >= 0x387) out.pendingInventoryItems = s.array(readInventoryItem);
   out.podLevel = s.resource(true);
-  if (version > 0x14f) out.playerId = readNetworkPlayerId(s);
+  if (version > 0x14f) Object.assign(out, kept('playerId', readNetworkPlayerIdKept(s)));
   if (version > 0x296 || ldHas(r, LD_SAVEGAME_INFO)) {
-    out.ownerPlayerId = readNetworkPlayerId(s);
+    Object.assign(out, kept('ownerPlayerId', readNetworkPlayerIdKept(s)));
     out.ownerPsid = [s.u64Big(), s.u64Big()];
   }
   if (version > 0x2eb || ldHas(r, LD_OWNER_ID)) out.ownerUserId = s.i32();
   if (version > 0x175) out.eulaAgreed = s.sha1();
-  if (version >= 0x3d5) out.acceptingPlayer = readNetworkPlayerId(s);
+  if (version >= 0x3d5) Object.assign(out, kept('acceptingPlayer', readNetworkPlayerIdKept(s)));
   out.syncedProfile = s.resource(true);
   if (version > 0x1a1) {
-    out.voipMutedPlayers = s.array(readNetworkPlayerId);
+    const muted = readNetworkIds(s, true);
+    out.voipMutedPlayers = muted.handles;
+    if (muted.bytes) out.voipMutedPlayersBytes = muted.bytes;
     out.voipChatPaused = s.bool();
     out.enableMusicInPlayMode = s.bool();
   }
   if (version > 0x1b4) out.enableMusicInPod = s.bool();
   if (version > 0x1b5) {
-    out.legacyInventoryCollections = s.array((x) => keepId(x, (y) => ({
-      inventoryViews: y.array((z) => keepId(z, readInventoryView)),
+    out.legacyInventoryCollections = s.array((x) => x.reference((y) => ({
+      inventoryViews: y.array((z) => z.reference(readInventoryView)),
       currentPageNumber: y.i32(), collectionID: y.i32(), actionOnItemSelect: y.i32(),
     })));
-    out.legacyInventoryViews = s.array((x) => keepId(x, readInventoryView));
+    out.legacyInventoryViews = s.array((x) => x.reference(readInventoryView));
   }
   if (version > 0x316) {
-    out.inventoryCollections = s.array((x) => keepId(x, (y) => ({
+    out.inventoryCollections = s.array((x) => x.reference((y) => ({
       inventoryCollectionIndex: y.i32(),
-      inventoryPageInstances: y.array((z) => keepId(z, (w) => ({ inventoryPageTitleKey: w.i32(), desiredSortMode: w.i32() }))),
+      inventoryPageInstances: y.array((z) => z.reference((w) => ({ inventoryPageTitleKey: w.i32(), desiredSortMode: w.i32() }))),
       currentPageNumber: y.i32(),
       ...(y.revision.subVersion >= COLLECTION_POPPET_POWERUP ? { poppetPowerupSelection: y.bool() } : {}),
     })));
@@ -739,7 +736,7 @@ function writePinsAwarded(w: Writer, p: PinsAwarded | undefined): void {
 
 function writeDataLabelValue(w: Writer, d: DataLabelValue): void {
   const r = w.revision;
-  writeNetworkOnlineId(w, d.creatorID);
+  writeNetworkOnlineId(w, d.creatorID, d.creatorIDBytes);
   w.i32(d.labelIndex);
   const vita = vitaRevision(r);
   const floats = (values: readonly number[] | undefined): void => {
@@ -765,8 +762,7 @@ function writePlayerDataLabels(w: Writer, l: PlayerDataLabels | undefined): void
   w.i32(l?.values.length ?? 0);
   for (const v of l?.values ?? []) writeDataLabelValue(w, v);
   if (vitaRevision(r) >= D1_PROTECTED_LABELS || r.version >= DATALABELS) {
-    w.i32(l?.protectedIds?.length ?? 0);
-    for (const id of l?.protectedIds ?? []) writeNetworkOnlineId(w, id);
+    writeNetworkIds(w, false, l?.protectedIds, l?.protectedIdsBytes);
   }
 }
 
@@ -817,7 +813,7 @@ export function encodeLocalProfile(value: LocalProfile, header: { revision: Revi
     }
     w.i32(v.viewedPlayerData?.length ?? 0);
     for (const d of v.viewedPlayerData ?? []) {
-      writeNetworkOnlineId(w, d.onlineId);
+      writeNetworkOnlineId(w, d.onlineId, d.onlineIdBytes);
       w.s32(d.lastReviewCount);
       w.s32(d.lastCommentCount);
       w.s32(d.lastPhotosByMeCount);
@@ -868,19 +864,18 @@ export function encodeLocalProfile(value: LocalProfile, header: { revision: Revi
     for (const item of v.pendingInventoryItems ?? []) writeInventoryItem(w, item);
   }
   w.ref(v.podLevel, { descriptor: true });
-  if (version > 0x14f) writeNetworkPlayerId(w, v.playerId ?? '');
+  if (version > 0x14f) writeNetworkPlayerId(w, v.playerId ?? '', v.playerIdBytes);
   if (version > 0x296 || ldHas(r, LD_SAVEGAME_INFO)) {
-    writeNetworkPlayerId(w, v.ownerPlayerId ?? '');
+    writeNetworkPlayerId(w, v.ownerPlayerId ?? '', v.ownerPlayerIdBytes);
     w.u64Big(v.ownerPsid?.[0] ?? 0n);
     w.u64Big(v.ownerPsid?.[1] ?? 0n);
   }
   if (version > 0x2eb || ldHas(r, LD_OWNER_ID)) w.i32(v.ownerUserId ?? 0);
   if (version > 0x175) w.sha1(v.eulaAgreed ?? new Uint8Array(20));
-  if (version >= 0x3d5) writeNetworkPlayerId(w, v.acceptingPlayer ?? '');
+  if (version >= 0x3d5) writeNetworkPlayerId(w, v.acceptingPlayer ?? '', v.acceptingPlayerBytes);
   w.ref(v.syncedProfile, { descriptor: true });
   if (version > 0x1a1) {
-    w.i32(v.voipMutedPlayers?.length ?? 0);
-    for (const id of v.voipMutedPlayers ?? []) writeNetworkPlayerId(w, id);
+    writeNetworkIds(w, true, v.voipMutedPlayers, v.voipMutedPlayersBytes);
     w.bool(v.voipChatPaused ?? false);
     w.bool(v.enableMusicInPlayMode ?? false);
   }
@@ -888,25 +883,25 @@ export function encodeLocalProfile(value: LocalProfile, header: { revision: Revi
   if (version > 0x1b5) {
     w.i32(v.legacyInventoryCollections?.length ?? 0);
     for (const c of v.legacyInventoryCollections ?? []) {
-      writeRef(w, c, (x, col) => {
+      w.reference(c, (x, col) => {
         x.i32(col.inventoryViews.length);
-        for (const view of col.inventoryViews) writeRef(x, view, writeInventoryView);
+        for (const view of col.inventoryViews) x.reference(view, writeInventoryView);
         x.i32(col.currentPageNumber);
         x.i32(col.collectionID);
         x.i32(col.actionOnItemSelect);
       });
     }
     w.i32(v.legacyInventoryViews?.length ?? 0);
-    for (const view of v.legacyInventoryViews ?? []) writeRef(w, view, writeInventoryView);
+    for (const view of v.legacyInventoryViews ?? []) w.reference(view, writeInventoryView);
   }
   if (version > 0x316) {
     w.i32(v.inventoryCollections?.length ?? 0);
     for (const c of v.inventoryCollections ?? []) {
-      writeRef(w, c, (x, col) => {
+      w.reference(c, (x, col) => {
         x.i32(col.inventoryCollectionIndex);
         x.i32(col.inventoryPageInstances.length);
         for (const page of col.inventoryPageInstances) {
-          writeRef(x, page, (y, pg) => {
+          x.reference(page, (y, pg) => {
             y.i32(pg.inventoryPageTitleKey);
             y.i32(pg.desiredSortMode);
           });

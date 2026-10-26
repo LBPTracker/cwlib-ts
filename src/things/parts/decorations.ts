@@ -12,8 +12,6 @@ import type { PartWriteContext } from '../write-parts.ts';
  */
 export interface Decoration {
   readonly renderMesh?: RenderMeshPart;
-  /** The stream id `renderMesh` was read under, peeked so a writer puts it back under the same. */
-  readonly renderMeshId?: number;
   /** 4x4, column-major like `PPos`. */
   readonly offset: Float32Array;
   readonly parentBone: number;
@@ -40,9 +38,6 @@ export interface Decoration {
 
 function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>): Decoration {
   const { version, subVersion } = s.revision;
-  const at = s.position;
-  const renderMeshId = s.i32();
-  s.position = at;
   const renderMesh = s.reference((self) => readRenderMesh(self, readers));
   const offset = s.matrix();
   const parentBone = s.i32();
@@ -61,7 +56,7 @@ function readDecoration(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   const planGUID = version >= 0x25b ? s.guid() : 0;
   const zBias = vitaRevision(s.revision) >= 0x7c ? s.f32() : undefined;
   return {
-    renderMesh, renderMeshId, offset, parentBone, parentTriVert, baryU, baryV, decorationAngle, decorationScale,
+    renderMesh, offset, parentBone, parentTriVert, baryU, baryV, decorationAngle, decorationScale,
     reversed, playModeFrame, planGUID, onCostumePiece, earthDecoration, placedBy, hasShadow, isQuest, zBias,
   };
 }
@@ -76,7 +71,7 @@ export function readDecorations(s: Serializer, readers: ReadonlyMap<string, Part
 
 function writeDecoration(w: Writer, d: Decoration, ctx: PartWriteContext): void {
   const { version, subVersion } = w.revision;
-  w.reference(d.renderMesh, (self, mesh) => writeRenderMesh(self, mesh, ctx), d.renderMeshId);
+  w.reference(d.renderMesh, (self, mesh) => writeRenderMesh(self, mesh, ctx));
   w.matrix(d.offset);
   w.i32(d.parentBone);
   w.i32(d.parentTriVert);

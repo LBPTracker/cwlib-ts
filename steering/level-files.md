@@ -268,7 +268,9 @@ Things opens*) are not written.
   out of sequence — in `chunk1_001.farc`'s `1c6862be…` the 20th object met is id `40980`, the
   37th is `53`, then `56`, `57` — and a compressed id is a varint, so the payloads came out
   shorter. `Writer.reference` now keeps an object's id from its file wherever no other object
-  has it, and all 340 match. Any id the reader has not met is a valid new one; the game's own
+  has it, and all 340 match. The id is the one `Serializer.reference`, `referenceInto` and
+  `pointer` read the object under (`referenceIdOf` in `io/serializer.ts`), taken by default: no
+  reader or writer keeps ids of its own. Any id the reader has not met is a valid new one; the game's own
   numbering is not known (row 51 of *Where we deliberately differ*).
 - ❗ **-1 is an id.** 5,905 of the 44,089 chunks name their one island `0xffffffff`; a writer that
   took any id at or below 0 for "none kept" wrote them `1`, the same length and four bytes off.
@@ -317,20 +319,28 @@ the world's Things with every other field on it out of sight (`WorldPart`). The 
 
 - ❗ **A shared struct is keyed on its tape object.** A switch's output, an NPC's behaviour, a
   script's layout is named by more than one Thing; the tape writes it under its tape object
-  wherever another Thing names it, so a part writer writes it under the same key
-  (`tapeObjectOf` in `io/tape.ts`) and under its id from the file. Two keys for one id made the
-  second mention a second body: 13,007 `SCRIPT`s and 307 `NPC`/`CREATURE`s differed that way.
+  wherever another Thing names it, so `Writer.reference` writes every value under the same key
+  (`tapeObjectOf` in `io/tape.ts`) and under its id from the file (`referenceIdOf`). Two keys for
+  one id made the second mention a second body: 13,007 `SCRIPT`s and 307 `NPC`/`CREATURE`s
+  differed that way, while each part writer still keyed its structs itself.
 - ❗ **Two readers held empty placeholders.** A struct named while it is still being read — an
   NPC's behaviour names the NPC, whose part names the behaviour; a shape's contacts name shapes —
   got the bare `{}` `Serializer.reference` registers for the build, never filled. A plain object now
-  becomes that placeholder (`Serializer.reference`), and a contact finds its shape by id.
+  becomes that placeholder (`Serializer.reference`), so a contact holds its shape too.
 - **What cwlib writes as a constant, the files do not always hold.** Where the census found
   other values, the reader keeps them and the writer writes them back — an animation tweaker's
   byte at subVersions `0x5c`–`0x151` (40 of 772), a physics tweaker's Thing at `0x27a`–`0x326` (5),
   an atmosphere's byte and float at `0xb9`–`0xd3`, a trigger's `zLayers` below `0x1d5`, a bool stored
   as `0x0d` or `0x48` (an NPC's jump flag, a switch's and key's `hideInPlayMode`, a metadata's
-  `referencable`), a microchip's name with its apostrophes bare, a group creator's padding, a NaN
-  in a creature's retired float. Row 56 of *Where we deliberately differ*.
+  `referencable`), a microchip's name with its apostrophes bare, a NaN in a creature's retired
+  float. Row 56 of *Where we deliberately differ*.
+- ❗ **A PSN id holds more than its handle.** Past the handle's NUL, in the terminator, the padding
+  and the `opt` and `reserved` blocks, the game's levels hold data (a group's creator, `RLevel`'s
+  player records). Every reader of one keeps those bytes beside the handle (`…Bytes`, from
+  `readNetworkPlayerIdKept`/`readNetworkOnlineIdKept` in `structs/network.ts`) where writing the
+  handle afresh would not give them back, and the writer writes them while the handle is the one
+  they hold. Below 0x37d, `InventoryItemDetails` likewise keeps the `i32` words of its 16-bit
+  location, category and primary indices (`indexWords`) where they hold more.
 
 ## Levels and plans written from their values — `encode-things.ts`
 
@@ -367,7 +377,8 @@ file here and are checked by round trip alone (`test/write-profiles.test.ts`).
   buffer: each is written as stored while it still decodes to the value, and encoded from the value
   where the value changed — so an edited or built mesh writes too (`Mesh.stored`, non-enumerable).
 - ⚠️ A texture is written from its levels as held; an image is not compressed to DXT (*Tools* in
-  java-parity.md). An `ADCb`'s and a `PRFb`'s Things are written as the bytes read.
+  java-parity.md). An `ADCb`'s and a `PRFb`'s Things are written from their values, by the Thing
+  writer of *Levels and plans written from their values*.
 
 ## Dependencies rewritten — `replaceDependency` and `hashinate`
 

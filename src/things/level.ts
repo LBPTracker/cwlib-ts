@@ -30,11 +30,11 @@ import { partReaders, type GroupPart, type InstrumentPart, type Microchip, type 
 import { onLeerdammer, readThingRef, type PartReader, type Thing } from './thing.ts';
 import type { PartWriteContext } from './write-parts.ts';
 import { lamsKeyId } from '../resources/translation.ts';
-import { Tape, tapeObjectOf } from '../io/tape.ts';
+import { Tape } from '../io/tape.ts';
 import { Writer } from '../io/writer.ts';
 import { toHex } from '../io/hex.ts';
 import { readSlotId, writeSlotId, type SlotId } from '../structs/slot.ts';
-import { readNetworkPlayerId, writeNetworkPlayerId } from '../structs/network.ts';
+import { readNetworkIds, writeNetworkIds } from '../structs/network.ts';
 import { readInventoryItemDetails, writeInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
 import { readInventoryItem, writeInventoryItem, type InventoryItem } from './parts/poppet-powerup.ts';
 
@@ -74,116 +74,6 @@ type Vector3 = readonly [number, number, number];
 type Vector4 = readonly [number, number, number, number];
 const ZERO3: Vector3 = [0, 0, 0];
 const ZERO4: Vector4 = [0, 0, 0, 0];
-
-/**
- * The id each in-stream reference read here had in its file, so a writer names
- * it the same: the game does not number in first-mention order (`Writer.reference`).
- */
-const IDS = new WeakMap<object, number>();
-
-/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
-function keepId<T>(s: Serializer, read: (self: Serializer) => T): T | undefined {
-  const at = s.position;
-  const id = s.i32();
-  s.position = at;
-  const value = s.reference(read);
-  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
-  return value;
-}
-
-/**
- * The bytes a struct was read from and a copy of its value then, by the value,
- * where its writer in another file does not write every byte back:
- * `InventoryItemDetails` and an `InventoryItem` around one
- * (`structs/inventory.ts`), whose creator's `NetworkPlayerID` keeps only the
- * handle and whose older layouts keep 16 bits of some `i32`s. ⚠️ A stand-in
- * for those writers keeping what they read: while the value is as it was read
- * its bytes are written (`writeAsRead`), else its writer's.
- *
- * ❗ **Bytes written so name no object to the `Writer`**, and the details of a
- * level's tutorial items share their creator and creation history by reference
- * id, the second item naming the first's. So a list is written all as read or
- * all by its writer (`writeListAsRead`), never mixed: mixed, an object would be
- * given a body twice.
- */
-const READ_AS = new WeakMap<object, { readonly bytes: Uint8Array; readonly then: unknown }>();
-
-/** Read a struct and keep its bytes and a copy of it beside it. */
-function readKeepingBytes<T extends object>(s: Serializer, read: (self: Serializer) => T): T {
-  const at = s.position;
-  const value = read(s);
-  READ_AS.set(value, { bytes: s.data.slice(at, s.position), then: structuredClone(value) });
-  return value;
-}
-
-/** Two values alike field for field: plain objects, arrays, typed arrays and primitives. */
-function alike(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
-  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
-    if (!(a instanceof Uint8Array) || !(b instanceof Uint8Array) || a.length !== b.length) return false;
-    return a.every((x, i) => x === b[i]);
-  }
-  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
-  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
-  if (ka.length !== kb.length || Array.isArray(a) !== Array.isArray(b)) return false;
-  return ka.every((k) => alike((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
-}
-
-/** The bytes a struct was read from, while it is as it was read. */
-function bytesAsRead(value: object): Uint8Array | undefined {
-  const kept = READ_AS.get(value);
-  return kept && alike(value, kept.then) ? kept.bytes : undefined;
-}
-
-/** A struct read by `readKeepingBytes`: its bytes as read while it is unchanged, else its writer's. */
-function writeAsRead<T extends object>(w: Writer, value: T, write: (self: Writer, value: T) => void): void {
-  const bytes = bytesAsRead(value);
-  if (bytes) w.bytes(bytes);
-  else write(w, value);
-}
-
-/** A list of such structs: as read when every one is unchanged, else every one by its writer. */
-function writeListAsRead<T extends object>(w: Writer, values: readonly T[] | undefined, write: (self: Writer, value: T) => void): void {
-  const list = values ?? [];
-  const bytes = list.map(bytesAsRead);
-  w.i32(list.length);
-  if (bytes.every((b) => b !== undefined)) for (const b of bytes) w.bytes(b!);
-  else for (const value of list) write(w, value);
-}
-
-/** `InventoryItemDetails`, its bytes kept. */
-export function readDetailsKeepingBytes(s: Serializer): InventoryItemDetails {
-  return readKeepingBytes(s, readInventoryItemDetails);
-}
-
-/** `readDetailsKeepingBytes`' mirror. */
-export function writeDetailsAsRead(w: Writer, details: InventoryItemDetails): void {
-  writeAsRead(w, details, writeInventoryItemDetails);
-}
-
-/** A reference to a struct written from its value, under the key and the id it was read with. */
-function writeKept<T extends object>(w: Writer, value: T | undefined, write: (self: Writer, value: T) => void): void {
-  if (!value) {
-    w.i32(0);
-    return;
-  }
-  w.reference(tapeObjectOf(value) ?? value, () => write(w, value), IDS.get(value));
-}
-
-/** `s.references(read)`, each id kept. */
-function keptReferences<T>(s: Serializer, read: (self: Serializer) => T): (T | undefined)[] {
-  const count = s.i32();
-  if (count < 0) throw new SerializerError(`negative array length ${count}`);
-  const out: (T | undefined)[] = [];
-  for (let i = 0; i < count; i += 1) out.push(keepId(s, read));
-  return out;
-}
-
-function writeKeptReferences<T extends object>(w: Writer, values: readonly (T | undefined)[], write: (self: Writer, value: T) => void): void {
-  w.i32(values.length);
-  for (const value of values) writeKept(w, value, write);
-}
 
 function writeArray<T>(w: Writer, values: readonly T[] | undefined, write: (self: Writer, value: T) => void): void {
   w.i32(values?.length ?? 0);
@@ -471,11 +361,11 @@ function readLevelData(s: Serializer): LevelData {
   // on LBP3 PS4's own story levels, where a second LevelData of type 2 follows
   // the main one and the walk ends right only without the list
   // (steering/level-files.md, *Streaming levels*).
-  const files = type !== 2 ? keptReferences(s, readChunkFile) : undefined;
+  const files = type !== 2 ? s.references(readChunkFile) : undefined;
   const offset = s.vector3();
   const min = s.vector3();
   const max = s.vector3();
-  const parent = keepId(s, readLevelData);
+  const parent = s.reference(readLevelData);
   // ⚠️ The gate was in this comment and not in the code for a month: LBP3's own
   // story levels are subVersion 0x1ab, one below it, and every one of them
   // failed a Thing marker 100 KB later (steering/answered-questions.md).
@@ -486,11 +376,11 @@ function readLevelData(s: Serializer): LevelData {
 function writeLevelData(w: Writer, v: LevelData): void {
   writeSlotId(w, v.slot);
   w.i32(v.type);
-  if (v.type !== 2) writeKeptReferences(w, v.chunkFiles ?? [], writeChunkFile);
+  if (v.type !== 2) w.references(v.chunkFiles ?? [], writeChunkFile);
   w.vector3(v.offset);
   w.vector3(v.min);
   w.vector3(v.max);
-  writeKept(w, v.parent, writeLevelData);
+  w.reference(v.parent, writeLevelData);
   if (w.revision.subVersion >= 0x1ac) w.guid(v.farcGuid ?? 0);
 }
 
@@ -512,7 +402,7 @@ function readStreamingManager(s: Serializer): StreamingManager {
   emptyOnly(s, 'StreamingManager.editingThingsList');
   const count = s.count();
   const levels: (LevelData | undefined)[] = [];
-  for (let i = 0; i < count; i += 1) levels.push(keepId(s, readLevelData));
+  for (let i = 0; i < count; i += 1) levels.push(s.reference(readLevelData));
   const { subVersion } = s.revision;
   const numIslands = s.i32();
   const numPendingIslands = subVersion > 0x1ff ? s.i32() : undefined;
@@ -536,7 +426,7 @@ function readStreamingManager(s: Serializer): StreamingManager {
 function writeStreamingManager(w: Writer, v: StreamingManager): void {
   const { subVersion } = w.revision;
   w.i32(0); // editingThingsList, empty
-  writeKeptReferences(w, v.levels, writeLevelData);
+  w.references(v.levels, writeLevelData);
   w.i32(v.numIslands);
   if (subVersion > 0x1ff) w.i32(v.numPendingIslands ?? 0);
   w.ref(v.fartDesc, { descriptor: true });
@@ -614,7 +504,7 @@ function readEggLink(s: Serializer): WorldEggLink {
     out.level = s.resource(true, false, false); // item: a GlobalThingDescriptor's level
     out.uid = s.i32(); // and the Thing's UID in it
   } else out.plan = s.resource(false, false, false); // plan
-  if (version > 0x15f && version < 0x197) out.details = readDetailsKeepingBytes(s);
+  if (version > 0x15f && version < 0x197) out.details = readInventoryItemDetails(s);
   if (version > 0x207 && version < 0x22a) out.unknown = s.bool();
   if (version > 0x23b) out.shareable = s.bool();
   if (version > 0x3e0) {
@@ -632,7 +522,7 @@ function writeEggLink(w: Writer, v: WorldEggLink): void {
   } else w.ref(v.plan, { classPointer: false });
   if (version > 0x15f && version < 0x197) {
     if (!v.details) throw new SerializerError('an EggLink at this version needs its inventory details');
-    writeDetailsAsRead(w, v.details);
+    writeInventoryItemDetails(w, v.details);
   }
   if (version > 0x207 && version < 0x22a) w.bool(v.unknown ?? false);
   if (version > 0x23b) w.bool(v.shareable ?? false);
@@ -987,7 +877,7 @@ function readWorldTail(s: Serializer, readers: ReadonlyMap<string, PartReader>):
     t.old1a4 = version < 0x14b ? { floats: f, int, things: s.array((self) => readThingRef(self, readers)) } : { floats: f, int };
   }
   // cwlib skips the next four on its own toolkit branch from its scene graph on; no game file is that.
-  t.selections = keptReferences(s, (self): EditorSelection => ({ name: self.str(), things: things() }));
+  t.selections = s.references((self): EditorSelection => ({ name: self.str(), things: things() }));
   t.backdrop = readThingRef(s, readers);
   t.backdropNew = readThingRef(s, readers);
   t.backdropTimer = s.f32();
@@ -1199,7 +1089,7 @@ function writeWorldTail(w: Writer, t: WorldTail, ctx: PartWriteContext): void {
     w.i32(t.old1a4?.int ?? 0);
     if (version < 0x14b) things(t.old1a4?.things);
   }
-  writeKeptReferences(w, t.selections ?? [], (self, selection) => {
+  w.references(t.selections ?? [], (self, selection) => {
     self.str(selection.name);
     things(selection.things);
   });
@@ -1436,7 +1326,7 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail
   if (subVersion >= 0x70) fields.backdropOffsetZAuto = s.bool();
   if (subVersion >= 0xe2) fields.overrideBackdropAmbience = s.str();
   if (version < 0x14b) fields.materials = s.array((self) => self.resource());
-  if (subVersion >= 0x3f) fields.streamingManager = keepId(s, readStreamingManager);
+  if (subVersion >= 0x3f) fields.streamingManager = s.reference(readStreamingManager);
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather
   // than the empty placeholder `reference` would register.
@@ -1470,7 +1360,7 @@ export function writeWorld(w: Writer, value: WorldPart, ctx: PartWriteContext): 
   if (subVersion >= 0x70) w.bool(f.backdropOffsetZAuto ?? false);
   if (subVersion >= 0xe2) w.str(f.overrideBackdropAmbience ?? '');
   if (version < 0x14b) writeArray(w, f.materials, (self, m) => self.ref(m));
-  if (subVersion >= 0x3f) writeKept(w, f.streamingManager, writeStreamingManager);
+  if (subVersion >= 0x3f) w.reference(f.streamingManager, writeStreamingManager);
   writeThingList(w, f.things, ctx);
   writeWorldTail(w, f.tail ?? {}, ctx);
 }
@@ -1615,7 +1505,6 @@ export function readPlanStream(
   // over, as `readLevel` does, and only where nothing installed one already.
   installWorldReader(readers);
   const things = inner.list('things', (self) => readThingRef(self, readers));
-  keepFileIds(inner);
   // ❗ **The array fills the blob exactly, and that is checked.** `thingData`
   // holds the Thing array and nothing else, so bytes left over mean a part
   // reader took the wrong number and the parse is wrong even though it finished.
@@ -1635,7 +1524,7 @@ export function readPlanStream(
   let unreadTail: string | undefined = leftover;
   try {
     if (revision.version >= PLAN_DETAILS && !streaming) {
-      const details = readDetailsKeepingBytes(s);
+      const details = readInventoryItemDetails(s);
       // Below `LAMS_KEYS` these are two translation tags, `str`s, and cwlib
       // makes the keys from them: `POPIT_PAGE_COMMUNITY_OBJECTS` closes 380 of
       // the game's plans at 0x26e (`RPlan.java` at `d6a2ef8`).
@@ -1659,27 +1548,6 @@ export function readPlanStream(
   };
 }
 
-/**
- * Every object a level's or a plan's Things stream referred to, by the object:
- * the id it had there. ❗ **A writer from values names an object under this id
- * where the struct's own reader kept none** -- an NPC behaviour's inner structs
- * (`npc.ts`'s ids are kept on the object before `Serializer.reference` merges it
- * into its placeholder, so on no object a reader returns), a contact's shape
- * that no Thing holds (`shape.ts`). `encode-things.ts`'s writer asks it.
- */
-const FILE_IDS = new WeakMap<object, number>();
-
-/** Enter every object a stream referred to under its id, once the stream is read. */
-function keepFileIds(s: Serializer): void {
-  for (const [id, value] of s.referenced) {
-    if (typeof value === 'object' && value !== null && !FILE_IDS.has(value)) FILE_IDS.set(value, id);
-  }
-}
-
-/** The reference id `value` had in the level or plan it was read from. */
-export function fileIdOf(value: object): number | undefined {
-  return FILE_IDS.get(value);
-}
 
 /** A plan's outer tape → the tape of its `thingData` stream. */
 export const planTapes = new WeakMap<Tape, Tape>();
@@ -1865,7 +1733,6 @@ export function readLevelStream(
     if (!worldThings) throw error;
     unreadTail = (error as Error).message;
   }
-  keepFileIds(s);
   const parse: LevelParse = {
     revision, things: worldThings, chunks: chunkFiles.get(s) ?? [],
     ...(crossPlayHashes ? { crossPlayHashes } : {}),
@@ -1984,12 +1851,10 @@ export interface LevelTail {
   /** `PlayerRecord`, above version 0x213: each player's handle. */
   readonly playerIds?: readonly string[];
   /**
-   * Each `NetworkPlayerID` as its bytes, beside the handle read from them:
-   * past the handle its terminator, padding and `opt` and `reserved` blocks
-   * hold data in the game's own levels (the platform, a counter), which
-   * `readNetworkPlayerId` steps over. Written back while the handle is unchanged.
+   * Each `NetworkPlayerID` as stored, beside its handle in `playerIds`, where
+   * any holds more than the handle -- the game's own levels do (`structs/network.ts`).
    */
-  readonly playerIdBytes?: readonly Uint8Array[];
+  readonly playerIdBytes?: readonly (Uint8Array | undefined)[];
   readonly playerNumbers?: readonly number[];
   readonly playerRecordOffset?: number;
   readonly tutorialInventory?: readonly InventoryItem[];
@@ -2022,18 +1887,13 @@ function readLevelTail(s: Serializer): LevelTail {
   const t: { -readonly [K in keyof LevelTail]: LevelTail[K] } = {};
   if (version > 0x213) {
     // `PlayerRecord`
-    const bytes: Uint8Array[] = [];
-    t.playerIds = s.array((self) => {
-      const at = self.position;
-      const handle = readNetworkPlayerId(self);
-      bytes.push(self.data.slice(at, self.position));
-      return handle;
-    });
-    t.playerIdBytes = bytes;
+    const ids = readNetworkIds(s, true);
+    t.playerIds = ids.handles;
+    if (ids.bytes) t.playerIdBytes = ids.bytes;
     t.playerNumbers = s.array((self) => self.i32());
     t.playerRecordOffset = s.i32();
   }
-  if (version > 0x347) t.tutorialInventory = s.array((self) => readKeepingBytes(self, readInventoryItem));
+  if (version > 0x347) t.tutorialInventory = s.array(readInventoryItem);
   if (version > 0x35c) {
     t.tutorialInventoryData = s.array((self): CachedInventoryData => {
       const category = self.u32();
@@ -2070,30 +1930,20 @@ function readLevelTail(s: Serializer): LevelTail {
   }
   if (subVersion >= 0xfa) t.dceUuid = s.bytes(s.count()).slice();
   if (subVersion >= 0x161 && subVersion < 0x169) t.adventureSharedData = s.resource();
-  if (subVersion >= 0x169) t.adventure = keepId(s, readAdventureData);
+  if (subVersion >= 0x169) t.adventure = s.reference(readAdventureData);
   return t;
 }
 
-/** The handle a `NetworkPlayerID`'s bytes hold. */
-function playerHandleOf(w: Writer, bytes: Uint8Array): string {
-  return readNetworkPlayerId(new Serializer(bytes, w.revision, w.compressionFlags));
-}
 
 /** `readLevelTail`'s mirror. */
 export function writeLevelTail(w: Writer, t: LevelTail): void {
   const { version, subVersion } = w.revision;
   if (version > 0x213) {
-    const ids = t.playerIds ?? [];
-    w.i32(ids.length);
-    ids.forEach((handle, i) => {
-      const bytes = t.playerIdBytes?.[i];
-      if (bytes && playerHandleOf(w, bytes) === handle) w.bytes(bytes);
-      else writeNetworkPlayerId(w, handle);
-    });
+    writeNetworkIds(w, true, t.playerIds, t.playerIdBytes);
     writeArray(w, t.playerNumbers, (self, n) => self.i32(n));
     w.i32(t.playerRecordOffset ?? 0);
   }
-  if (version > 0x347) writeListAsRead(w, t.tutorialInventory, writeInventoryItem);
+  if (version > 0x347) writeArray(w, t.tutorialInventory, writeInventoryItem);
   if (version > 0x35c) {
     writeArray(w, t.tutorialInventoryData, (self, d) => {
       self.u32(d.category);
@@ -2130,7 +1980,7 @@ export function writeLevelTail(w: Writer, t: LevelTail): void {
     if (t.dceUuid) w.bytes(t.dceUuid);
   }
   if (subVersion >= 0x161 && subVersion < 0x169) w.ref(t.adventureSharedData);
-  if (subVersion >= 0x169) writeKept(w, t.adventure, writeAdventureData);
+  if (subVersion >= 0x169) w.reference(t.adventure, writeAdventureData);
 }
 
 /** What `readThings` found the file to be. */

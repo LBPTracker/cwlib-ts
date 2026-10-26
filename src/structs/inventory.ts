@@ -5,11 +5,11 @@
  * `structs/inventory/InventoryItemDetails.java` (ennuo/toolkit `d6a2ef8`).
  */
 
-import { latin1, type ResourceRef, type Serializer, vitaRevision } from '../io/serializer.ts';
+import { latin1, referenceIdOf, type ResourceRef, type Serializer, vitaRevision } from '../io/serializer.ts';
 import { onLeerdammer } from '../things/thing.ts';
 import { readEyetoyData, writeEyetoyData, type EyetoyData } from '../things/parts/stickers.ts';
 import type { Writer } from '../io/writer.ts';
-import { readNetworkPlayerId, writeNetworkPlayerId } from './network.ts';
+import { readNetworkPlayerIdKept, writeNetworkPlayerId } from './network.ts';
 import { readSlotId, writeSlotId, type SlotId } from './slot.ts';
 
 export interface InventoryItemDetails {
@@ -33,6 +33,8 @@ export interface InventoryItemDetails {
   readonly primaryIndex: number;
   /** The PSN id of whose item it is. */
   readonly creator?: string;
+  /** `creator`'s `NetworkPlayerID` as stored, where it holds more than the handle (`network.ts`). */
+  readonly creatorBytes?: Uint8Array;
   /** cwlib's `ToolType`. */
   readonly toolType: number;
   readonly flags: number;
@@ -54,27 +56,39 @@ export interface InventoryItemDetails {
   /** The Vita's `makeSizeProportional`, from its revision 0x7d. */
   readonly makeSizeProportional?: boolean;
   /**
-   * The stream ids the details' references were read under, peeked so a writer
-   * puts each back under its own: the game does not number in first-mention order.
+   * Below version 0x37d, the location, category and primary indices' `i32`s as
+   * stored, where one holds more than the 16 bits cwlib keeps of it: written back
+   * while the index is the one they hold.
+   */
+  readonly indexWords?: readonly [number, number, number];
+  /** Below version 0x37d, the `i32` cwlib reads as padding after the indices, where it is not 0. */
+  readonly pad?: number;
+  /**
+   * The stream ids of the two references above version 0x37c whose values are
+   * no objects of their own -- the user-created details, flattened into `name`
+   * and `description`, and the creator, a handle -- so a writer names them as the
+   * file did (`Writer.reference` takes every other id from its object).
    */
   readonly referenceIds?: InventoryReferenceIds;
 }
 
-/** `InventoryItemDetails.referenceIds`: one id per in-stream reference the layout holds. */
+/** `InventoryItemDetails.referenceIds`. */
 export interface InventoryReferenceIds {
-  readonly creationHistory?: number;
   readonly created?: number;
-  readonly photoData?: number;
-  readonly eyetoyData?: number;
   readonly creator?: number;
 }
 
-/** The id of the reference that starts here, without consuming it. */
-function peekId(s: Serializer): number {
-  const at = s.position;
-  const id = s.i32();
-  s.position = at;
-  return id;
+/** Three 16-bit indices read as `i32`s, and the words themselves where any holds more. */
+function readIndices(s: Serializer, primary: boolean): { indices: [number, number, number]; indexWords?: [number, number, number] } {
+  const words: [number, number, number] = [s.i32(true), s.i32(true), primary ? s.i32(true) : 0];
+  const indices = words.map((word) => (word << 16) >> 16) as [number, number, number];
+  return words.some((word, i) => word !== indices[i]) ? { indices, indexWords: words } : { indices };
+}
+
+/** An index's `i32`: its kept word while that holds it, else the index. */
+function indexWord(d: InventoryItemDetails, i: number, index: number): number {
+  const word = d.indexWords?.[i];
+  return word !== undefined && (word << 16) >> 16 === index ? word : index;
 }
 
 /** `CreationHistory`: a count, then 20-byte names above version 0x37c and `wstr`s at and below. */
@@ -104,10 +118,8 @@ function readBefore233(s: Serializer): InventoryItemDetails {
     s.wstr(); // nameTranslationTag
     s.wstr(); // descTranslationTag
   } else translationTag = s.str();
-  const locationIndex = (s.i32(true) << 16) >> 16;
-  const categoryIndex = (s.i32(true) << 16) >> 16;
-  const primaryIndex = head > 0x194 ? (s.i32(true) << 16) >> 16 : 0;
-  s.i32(true); // pad
+  const { indices: [locationIndex, categoryIndex, primaryIndex], indexWords } = readIndices(s, head > 0x194);
+  const pad = s.i32(true);
   const type = s.i32(true);
   const subType = s.i32(true);
   const toolType = head > 0x196 ? (s.i32(true) << 24) >> 24 : 0;
@@ -122,24 +134,18 @@ function readBefore233(s: Serializer): InventoryItemDetails {
   if (head > 0x14e) highlightSound = s.u32(true);
   else s.str(); // a path to the highlight sound, cwlib thinks
   const colour = head > 0x156 ? s.i32(true) : 0;
-  const ids: { eyetoyData?: number; photoData?: number } = {};
-  let eyetoyData: EyetoyData | undefined;
-  let photoData: InventoryItemPhotoData | undefined;
-  if (head > 0x161) {
-    ids.eyetoyData = peekId(s);
-    eyetoyData = s.reference(readEyetoyData);
-  }
-  if (head > 0x17a) {
-    ids.photoData = peekId(s);
-    photoData = s.reference(readInventoryItemPhotoData);
-  }
+  const eyetoyData = head > 0x161 ? s.reference(readEyetoyData) : undefined;
+  const photoData = head > 0x17a ? s.reference(readInventoryItemPhotoData) : undefined;
   let levelUnlockSlot = { type: 0, number: 0 };
   if (head > 0x176) levelUnlockSlot = { type: s.i32(), number: s.u32(true) };
   let copyright: boolean | undefined;
   let creator: string | undefined;
+  let creatorBytes: Uint8Array | undefined;
   if (head > 0x181) {
     copyright = s.bool();
-    creator = readNetworkPlayerId(s);
+    const id = readNetworkPlayerIdKept(s);
+    creator = id.handle;
+    creatorBytes = id.bytes;
   }
   const created = head > 0x1aa ? readUserCreatedDetails(s) : undefined;
   const creationHistory = head > 0x1b0 ? readCreationHistory(s) : undefined;
@@ -150,7 +156,10 @@ function readBefore233(s: Serializer): InventoryItemDetails {
     dateAdded, levelUnlockSlot, highlightSound, colour, type, subType, titleKey: 0, descriptionKey: 0, icon,
     name: created?.name, description: created?.description, locationIndex, categoryIndex, primaryIndex, creator,
     toolType, flags: 0, creationHistory, translationTag, numUses, lastUsed, allowEmit, shareable, copyright,
-    eyetoyData, photoData, referenceIds: ids,
+    eyetoyData, photoData,
+    ...(creatorBytes ? { creatorBytes } : {}),
+    ...(indexWords ? { indexWords } : {}),
+    ...(pad !== 0 ? { pad } : {}),
   };
 }
 
@@ -159,19 +168,17 @@ function readBefore37d(s: Serializer): InventoryItemDetails {
   const head = s.revision.version;
   const highlightSound = s.u32(true);
   const levelUnlockSlot = { type: s.i32(true), number: s.u32(true) };
-  const locationIndex = (s.i32(true) << 16) >> 16;
-  const categoryIndex = (s.i32(true) << 16) >> 16;
-  const primaryIndex = (s.i32(true) << 16) >> 16;
+  const { indices: [locationIndex, categoryIndex, primaryIndex], indexWords } = readIndices(s, true);
   const lastUsed = s.i32(true);
   const numUses = s.i32(true);
-  if (head > 0x234) s.i32(true); // pad
+  const pad = head > 0x234 ? s.i32(true) : 0;
   const dateAdded = forcedS64(s);
   const fluffCost = s.i32(true);
   const colour = s.i32(true);
   const type = s.i32(true);
   const subType = s.i32(true);
   const toolType = (s.i32(true) << 24) >> 24;
-  const creator = readNetworkPlayerId(s);
+  const { handle: creator, bytes: creatorBytes } = readNetworkPlayerIdKept(s);
   const allowEmit = s.bool();
   const shareable = s.bool();
   const copyright = s.bool();
@@ -186,16 +193,17 @@ function readBefore37d(s: Serializer): InventoryItemDetails {
   const created = readUserCreatedDetails(s);
   const creationHistory = readCreationHistory(s);
   const icon = s.resource(true);
-  const ids = { photoData: peekId(s), eyetoyData: 0 };
   const photoData = s.reference(readInventoryItemPhotoData);
-  ids.eyetoyData = peekId(s);
   const eyetoyData = s.reference(readEyetoyData);
   if (head > 0x358) s.u8(); // cwlib writes 0
   return {
     dateAdded, levelUnlockSlot, highlightSound, colour, type, subType, titleKey, descriptionKey, icon,
     name: created?.name, description: created?.description, locationIndex, categoryIndex, primaryIndex, creator,
     toolType, flags, creationHistory, translationTag, numUses, lastUsed, fluffCost, allowEmit, shareable, copyright,
-    photoData, eyetoyData, referenceIds: ids,
+    photoData, eyetoyData,
+    ...(creatorBytes ? { creatorBytes } : {}),
+    ...(indexWords ? { indexWords } : {}),
+    ...(pad !== 0 ? { pad } : {}),
   };
 }
 
@@ -219,22 +227,18 @@ export function readInventoryItemDetails(s: Serializer): InventoryItemDetails {
   const subType = s.i32();
   const titleKey = s.u32();
   const descriptionKey = s.u32();
-  const referenceIds: { -readonly [K in keyof InventoryReferenceIds]: number } = {
-    creationHistory: peekId(s), created: 0, photoData: 0, eyetoyData: 0, creator: 0,
-  };
   const creationHistory = s.reference(readCreationHistory);
   const icon = s.resource(true);
-  referenceIds.created = peekId(s);
   const created = s.reference((self) => ({ name: self.wstr(), description: self.wstr() }));
-  referenceIds.photoData = peekId(s);
   const photoData = s.reference(readInventoryItemPhotoData);
-  referenceIds.eyetoyData = peekId(s);
   const eyetoyData = s.reference(readEyetoyData);
   const locationIndex = s.i16();
   const categoryIndex = s.i16();
   const primaryIndex = s.i16();
-  referenceIds.creator = peekId(s);
-  const creator = s.reference(readNetworkPlayerId);
+  const creatorId = s.reference(readNetworkPlayerIdKept);
+  const creator = creatorId?.handle;
+  const creatorBytes = creatorId?.bytes;
+  const referenceIds: InventoryReferenceIds = { created: referenceIdOf(created) ?? 0, creator: referenceIdOf(creatorId) ?? 0 };
   const toolType = s.i8();
   const flags = s.i8();
   // The Vita's D1_DETAILS_PROPORTIONAL.
@@ -243,6 +247,7 @@ export function readInventoryItemDetails(s: Serializer): InventoryItemDetails {
     dateAdded, levelUnlockSlot, highlightSound, colour, type, subType, titleKey, descriptionKey, icon,
     name: created?.name, description: created?.description, locationIndex, categoryIndex, primaryIndex,
     creator, toolType, flags, creationHistory, photoData, eyetoyData, makeSizeProportional, referenceIds,
+    ...(creatorBytes ? { creatorBytes } : {}),
   };
 }
 
@@ -271,10 +276,10 @@ function writeBefore233(w: Writer, d: InventoryItemDetails): void {
     w.wstr('');
     w.wstr('');
   } else w.str(d.translationTag ?? '');
-  w.i32(d.locationIndex, true);
-  w.i32(d.categoryIndex, true);
-  if (head > 0x194) w.i32(d.primaryIndex, true);
-  w.i32(0, true); // pad
+  w.i32(indexWord(d, 0, d.locationIndex), true);
+  w.i32(indexWord(d, 1, d.categoryIndex), true);
+  if (head > 0x194) w.i32(indexWord(d, 2, d.primaryIndex), true);
+  w.i32(d.pad ?? 0, true);
   w.i32(d.type, true);
   w.i32(d.subType, true);
   if (head > 0x196) w.i32(d.toolType, true);
@@ -286,16 +291,15 @@ function writeBefore233(w: Writer, d: InventoryItemDetails): void {
   if (head > 0x14e) w.u32(d.highlightSound, true);
   else w.str('');
   if (head > 0x156) w.i32(d.colour, true);
-  const ids = d.referenceIds;
-  if (head > 0x161) w.reference(d.eyetoyData, writeEyetoyData, ids?.eyetoyData);
-  if (head > 0x17a) w.reference(d.photoData, writeInventoryItemPhotoData, ids?.photoData);
+  if (head > 0x161) w.reference(d.eyetoyData, writeEyetoyData);
+  if (head > 0x17a) w.reference(d.photoData, writeInventoryItemPhotoData);
   if (head > 0x176) {
     w.i32(d.levelUnlockSlot.type);
     w.u32(d.levelUnlockSlot.number, true);
   }
   if (head > 0x181) {
     w.bool(d.copyright ?? false);
-    writeNetworkPlayerId(w, d.creator ?? '');
+    writeNetworkPlayerId(w, d.creator ?? '', d.creatorBytes);
   }
   if (head > 0x1aa) {
     w.wstr(d.name ?? '');
@@ -313,19 +317,19 @@ function writeBefore37d(w: Writer, d: InventoryItemDetails): void {
   w.u32(d.highlightSound, true);
   w.i32(d.levelUnlockSlot.type, true);
   w.u32(d.levelUnlockSlot.number, true);
-  w.i32(d.locationIndex, true);
-  w.i32(d.categoryIndex, true);
-  w.i32(d.primaryIndex, true);
+  w.i32(indexWord(d, 0, d.locationIndex), true);
+  w.i32(indexWord(d, 1, d.categoryIndex), true);
+  w.i32(indexWord(d, 2, d.primaryIndex), true);
   w.i32(d.lastUsed ?? 0, true);
   w.i32(d.numUses ?? 0, true);
-  if (head > 0x234) w.i32(0, true); // pad
+  if (head > 0x234) w.i32(d.pad ?? 0, true);
   writeForcedS64(w, d.dateAdded);
   w.i32(d.fluffCost ?? 0, true);
   w.i32(d.colour, true);
   w.i32(d.type, true);
   w.i32(d.subType, true);
   w.i32(d.toolType, true);
-  writeNetworkPlayerId(w, d.creator ?? '');
+  writeNetworkPlayerId(w, d.creator ?? '', d.creatorBytes);
   w.bool(d.allowEmit ?? false);
   w.bool(d.shareable ?? false);
   w.bool(d.copyright ?? false);
@@ -338,9 +342,8 @@ function writeBefore37d(w: Writer, d: InventoryItemDetails): void {
   w.wstr(d.description ?? '');
   writeCreationHistory(w, d.creationHistory ?? []);
   w.ref(d.icon, { descriptor: true });
-  const ids = d.referenceIds;
-  w.reference(d.photoData, writeInventoryItemPhotoData, ids?.photoData);
-  w.reference(d.eyetoyData, writeEyetoyData, ids?.eyetoyData);
+  w.reference(d.photoData, writeInventoryItemPhotoData);
+  w.reference(d.eyetoyData, writeEyetoyData);
   if (head > 0x358) w.u8(0);
 }
 
@@ -378,7 +381,7 @@ export function writeInventoryItemDetails(w: Writer, d: InventoryItemDetails): v
   w.i32(d.subType);
   w.u32(d.titleKey);
   w.u32(d.descriptionKey);
-  w.reference(d.creationHistory, writeCreationHistory, ids?.creationHistory);
+  w.reference(d.creationHistory, writeCreationHistory);
   w.ref(d.icon, { descriptor: true });
   const created = d.name === undefined && d.description === undefined
     ? undefined
@@ -387,13 +390,13 @@ export function writeInventoryItemDetails(w: Writer, d: InventoryItemDetails): v
     self.wstr(c.name);
     self.wstr(c.description);
   }, ids?.created);
-  w.reference(d.photoData, writeInventoryItemPhotoData, ids?.photoData);
-  w.reference(d.eyetoyData, writeEyetoyData, ids?.eyetoyData);
+  w.reference(d.photoData, writeInventoryItemPhotoData);
+  w.reference(d.eyetoyData, writeEyetoyData);
   w.i16(d.locationIndex);
   w.i16(d.categoryIndex);
   w.i16(d.primaryIndex);
   const creator = d.creator === undefined ? undefined : shared(w, 'creator', ids?.creator, { handle: d.creator });
-  w.reference(creator, (self, c) => writeNetworkPlayerId(self, c.handle), ids?.creator);
+  w.reference(creator, (self, c) => writeNetworkPlayerId(self, c.handle, d.creatorBytes), ids?.creator);
   w.i8(d.toolType);
   w.i8(d.flags);
   if (vitaRevision(w.revision) >= 0x7d) w.bool(d.makeSizeProportional ?? false);

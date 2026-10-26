@@ -121,31 +121,13 @@ export interface ContactCache {
 }
 
 function readContactCache(s: Serializer, readers: ReadonlyMap<string, PartReader>): ContactCache {
+  // ❗ **A contact can name a shape still being read** -- its own Thing's, or one
+  // whose contacts lead back here. `Serializer.reference` hands out that shape's
+  // placeholder, which becomes the shape once it is read, so the contact names
+  // the real part.
   const contacts = Array.from({ length: s.count() }, () => {
-    const at = s.position;
-    const id = s.i32();
-    s.position = at;
-    const read = s.reference((self) => readShape(self, readers));
-    const flags = s.u8();
-    // ❗ **A contact can name a shape still being read** -- its own Thing's, or
-    // one whose contacts lead back here -- and `Serializer.reference` hands out
-    // that shape's empty placeholder, which is never filled. The shape is looked
-    // up again by its id once there is one, so a contact names the real part.
-    if (!read || Object.keys(read).length > 0) return { shape: read, flags };
-    let shape: ShapePart | undefined;
-    let from: Serializer | undefined = s;
-    return {
-      get shape(): ShapePart | undefined {
-        if (!from) return shape;
-        const now = from.referenced.get(id) as ShapePart | undefined;
-        if (now && Object.keys(now).length > 0) {
-          shape = now;
-          from = undefined; // the stream is let go once the shape is found
-        }
-        return now;
-      },
-      flags,
-    };
+    const shape = s.reference((self) => readShape(self, readers));
+    return { shape, flags: s.u8() };
   });
   const contactsSorted = s.bool();
   const cacheDirtyButRecomputed = s.revision.subVersion < 0x46 ? s.bool() : undefined;

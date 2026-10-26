@@ -16,9 +16,9 @@
  */
 
 import { SerializerError, type RevisionInfo } from '../io/serializer.ts';
-import { tapeObjectOf } from '../io/tape.ts';
 import { Writer } from '../io/writer.ts';
-import { fileIdOf, LAMS_KEYS, LD_LAMS_KEYS, PLAN_DETAILS, STREAMING_PLAN, writeDetailsAsRead, writeLevelTail, type LevelParse } from './level.ts';
+import { writeInventoryItemDetails } from '../structs/inventory.ts';
+import { LAMS_KEYS, LD_LAMS_KEYS, PLAN_DETAILS, STREAMING_PLAN, writeLevelTail, type LevelParse } from './level.ts';
 import { onLeerdammer, writeNamedPart, writeThing, type Thing } from './thing.ts';
 import { partWriters, type PartWriter, type PartWriteContext } from './write-parts.ts';
 
@@ -29,17 +29,6 @@ export interface EncodeHeader {
 }
 
 let writers: ReadonlyMap<string, PartWriter> | undefined;
-
-/**
- * A `Writer` that names an object under the id it had in its file where the
- * writer gives none (`fileIdOf`): a struct whose reader kept no id is written
- * back under the file's, not under the lowest one free.
- */
-class ValuesWriter extends Writer {
-  override reference<T extends object>(value: T | undefined, write: (self: Writer, value: T) => void, id?: number): void {
-    super.reference(value, write, id ?? (value === undefined ? undefined : fileIdOf(value)));
-  }
-}
 
 /** Writes a Thing from its values, at its first mention, under its file's id. */
 const context: PartWriteContext = {
@@ -52,9 +41,9 @@ const context: PartWriteContext = {
       // ⚠️ A contact can name a shape no Thing of the stream holds -- 6 of them
       // in `4db40dd6` -- read inline in the contact (`readContactCache`). It is
       // the one object a part writer hands here that is neither, so it is
-      // written as a `PShape`, under the id it had (`ValuesWriter`).
+      // written as a `PShape`, under the id it had (`Writer.reference`).
       const shape = writers.get('SHAPE')!;
-      w.reference(tapeObjectOf(thing) ?? thing, (self) => shape(self, thing as never, context));
+      w.reference(thing, (self) => shape(self, thing as never, context));
       return;
     }
     w.reference(thing, writeThingFromValues, thing?.id);
@@ -76,7 +65,7 @@ export function valuesContext(): PartWriteContext {
 export function encodeLevel(parse: LevelParse, header: EncodeHeader): Uint8Array {
   if (!parse.world) throw new SerializerError('the parse holds no world Thing');
   if (parse.unreadTail !== undefined) throw new SerializerError(`the level did not read whole: ${parse.unreadTail}`);
-  const w = new ValuesWriter(header.revision, header.compressionFlags, 0x40000);
+  const w = new Writer(header.revision, header.compressionFlags, 0x40000);
   if (header.revision.version > 0x3e6) {
     const hashes = parse.crossPlayHashes ?? [];
     w.i32(hashes.length);
@@ -95,11 +84,11 @@ export function encodeLevel(parse: LevelParse, header: EncodeHeader): Uint8Array
 export function encodePlan(parse: LevelParse, header: EncodeHeader): Uint8Array {
   if (parse.unreadTail !== undefined) throw new SerializerError(`the plan did not read whole: ${parse.unreadTail}`);
   const { revision } = header;
-  const w = new ValuesWriter(revision, header.compressionFlags, 0x10000);
+  const w = new Writer(revision, header.compressionFlags, 0x10000);
   const streaming = parse.isUsedForStreaming ?? false;
   if (revision.subVersion >= STREAMING_PLAN) w.bool(streaming);
   w.i32(parse.planRevision ?? (((revision.subVersion << 16) | revision.version) >>> 0));
-  const inner = new ValuesWriter(revision, header.compressionFlags, 0x40000);
+  const inner = new Writer(revision, header.compressionFlags, 0x40000);
   inner.i32(parse.things.length);
   for (const thing of parse.things) context.thing(inner, thing);
   const data = inner.done();
@@ -108,7 +97,7 @@ export function encodePlan(parse: LevelParse, header: EncodeHeader): Uint8Array 
   if (revision.version >= PLAN_DETAILS && !streaming) {
     const inventory = parse.inventory;
     if (!inventory) throw new SerializerError('a plan at this revision needs its inventory details');
-    writeDetailsAsRead(w, inventory.details);
+    writeInventoryItemDetails(w, inventory.details);
     if (onLeerdammer(revision, LD_LAMS_KEYS) || revision.version >= LAMS_KEYS) {
       w.u32(inventory.location);
       w.u32(inventory.category);

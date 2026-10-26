@@ -123,6 +123,30 @@ export interface ResourceRef {
 }
 
 /**
+ * The reference id each object a `Serializer` built had in its stream: what
+ * `reference`, `referenceInto` and `pointer` read it under.
+ *
+ * ❗ **The game does not number its references in first-mention order** -- of
+ * its 340 LBP3 levels, 19 hold ids out of sequence -- so a writer has to name
+ * each object under the id it had in its file to write it back byte for byte.
+ * `Writer.reference` takes this id where its caller gives none, so a struct's
+ * reader and writer need not keep it themselves. A `WeakMap` rather than a
+ * field: the values stay what they are, and an object made afresh has none and
+ * is numbered anew. ⚠️ Only an object can carry one: a reference whose body
+ * reads as a string or a number has nothing to key it by.
+ */
+const REFERENCE_IDS = new WeakMap<object, number>();
+
+/** The reference id `value` was read under, where a `Serializer` built it behind a reference or a pointer. */
+export function referenceIdOf(value: unknown): number | undefined {
+  return typeof value === 'object' && value !== null ? REFERENCE_IDS.get(value) : undefined;
+}
+
+function recordId(value: unknown, id: number): void {
+  if (typeof value === 'object' && value !== null) REFERENCE_IDS.set(value, id);
+}
+
+/**
  * Reads one decompressed payload.
  *
  * Object references are ids that expand inline the first time they appear, so
@@ -413,6 +437,7 @@ export class Serializer {
       value = Object.assign(placeholder as object, value) as T;
     }
     this.referenced.set(id, value);
+    recordId(value, id);
     if (object) this.tape!.end(this.position, object, value);
     return value;
   }
@@ -421,16 +446,19 @@ export class Serializer {
    * A raw id in the reference space with its body inline at first mention --
    * a script's field layout or boxed object, which `Serializer.pointers`
    * keeps. `build` runs on the first mention only, and must enter the id in
-   * `pointers`; the result says which mention this was.
+   * `pointers`; what it returns is the object built, whose id is kept
+   * (`referenceIdOf`) and which its tape object is found by (`tapeObjectOf`).
+   * The result says which mention this was.
    */
-  pointer(build: (self: Serializer, id: number) => void): { id: number; isNew: boolean } {
+  pointer(build: (self: Serializer, id: number) => unknown): { id: number; isNew: boolean } {
     const start = this.position;
     const id = this.i32();
     const isNew = id !== 0 && !this.pointers.has(id);
     const object = this.tape?.ref(start, this.position, id, isNew);
     if (isNew) {
-      build(this, id);
-      if (object) this.tape!.end(this.position, object);
+      const value = build(this, id);
+      recordId(value, id);
+      if (object) this.tape!.end(this.position, object, value ?? undefined);
     }
     return { id, isNew };
   }
@@ -471,6 +499,7 @@ export class Serializer {
     const value = create();
     const object = this.tape?.ref(start, this.position, id, true, value);
     this.referenced.set(id, value);
+    recordId(value, id);
     fill(this, value);
     if (object) this.tape!.end(this.position, object);
     return value;

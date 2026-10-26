@@ -3,7 +3,7 @@
 import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { readNpcBehavior, writeNpcBehavior, type NpcBehavior } from './npc.ts';
-import { keyOf, readSwitchSignal, writeSwitchSignal, type SwitchSignal } from './switch.ts';
+import { readSwitchSignal, writeSwitchSignal, type SwitchSignal } from './switch.ts';
 import { hasPlayerMode } from './common.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
@@ -13,8 +13,6 @@ import type { PartWriteContext } from '../write-parts.ts';
 export interface SwitchInputPart {
   /** A sackbot's behaviour, the switch's input from it. */
   readonly npcBehavior?: NpcBehavior;
-  /** The reference id the file gave `npcBehavior`, kept so it is written back under it. */
-  readonly npcBehaviorId?: number;
   /** cwlib's `activation`; below version 0x2c4. */
   readonly activation?: SwitchSignal;
   readonly dataSource?: Thing;
@@ -47,7 +45,7 @@ export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, Part
   let npcBehavior: NpcBehavior | undefined;
   let playerMode: number | undefined;
   let activation: SwitchSignal | undefined;
-  let npcBehaviorId: number | undefined;
+
   let updateFrame: number | undefined;
   let lethalActivationFrame: number | undefined;
   let lethalInverted: boolean | undefined;
@@ -70,13 +68,7 @@ export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, Part
   if (version > 0x297) hideInPlayMode = s.bool();
   if (version > 0x298 && version < 0x2c4) oneShot = s.bool();
   if (version > 0x38f) disableLethalAudio = s.bool();
-  if (version > 0x29a) {
-    const at = s.position;
-    const id = s.i32();
-    s.position = at;
-    npcBehavior = s.reference((self) => readNpcBehavior(self, readers));
-    if (id !== 0) npcBehaviorId = id;
-  }
+  if (version > 0x29a) npcBehavior = s.reference((self) => readNpcBehavior(self, readers));
   if (version > 0x2aa && version < 0x2d5) sackbotColor = s.i32();
   if (version > 0x2d4) sackbotObjectColorIndex = s.s32();
   if (version > 0x2c3) behavior = s.i32();
@@ -85,7 +77,7 @@ export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, Part
   return {
     dataSource, updateType, hideInPlayMode, sackbotObjectColorIndex, behavior, updateFrame,
     lethalActivationFrame, lethalInverted, lethalType, portThing, includeRigidConnectors, oneShot,
-    disableLethalAudio, sackbotColor, effectDestroy, playerMode, npcBehavior, npcBehaviorId, activation,
+    disableLethalAudio, sackbotColor, effectDestroy, playerMode, npcBehavior, activation,
   };
 }
 
@@ -108,11 +100,7 @@ export function writeSwitchInput(w: Writer, v: SwitchInputPart, ctx: PartWriteCo
   if (version > 0x297) w.bool(v.hideInPlayMode);
   if (version > 0x298 && version < 0x2c4) w.bool(v.oneShot ?? false);
   if (version > 0x38f) w.bool(v.disableLethalAudio ?? false);
-  if (version > 0x29a) {
-    const behavior = v.npcBehavior;
-    const key = behavior && keyOf(behavior);
-    w.reference(key, (self) => writeNpcBehavior(self, behavior!, ctx), v.npcBehaviorId ?? (key as { id?: number } | undefined)?.id);
-  }
+  if (version > 0x29a) w.reference(v.npcBehavior, (self, behavior) => writeNpcBehavior(self, behavior, ctx));
   if (version > 0x2aa && version < 0x2d5) w.i32(v.sackbotColor ?? 0);
   if (version > 0x2d4) w.s32(v.sackbotObjectColorIndex);
   if (version > 0x2c3) w.i32(v.behavior);

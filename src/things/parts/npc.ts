@@ -4,41 +4,9 @@ import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
-import { tapeObjectOf } from '../../io/tape.ts';
 
 type V3 = readonly [number, number, number];
 
-/**
- * The id each struct read through `readKept` had in its file. ❗ The game does
- * not number its references in first-mention order, so a struct written back
- * under a fresh id differs from the file in its id alone -- 21 of the 242 NPCs in
- * the game's first 3000 levels and plans did -- and `Writer.reference` takes the
- * id kept here to write it as it was.
- */
-const fileIds = new WeakMap<object, number>();
-
-/** `s.reference(build)`, keeping the id the struct had in the file for `writeKept`. */
-export function readKept<T extends object>(s: Serializer, build: (self: Serializer) => T): T | undefined {
-  return s.reference((self) => {
-    // `Serializer.reference` enters the new id last, as a placeholder, before it builds.
-    let id = 0;
-    for (const key of self.referenced.keys()) id = key;
-    const value = build(self);
-    fileIds.set(value, id);
-    return value;
-  });
-}
-
-/** `readKept`'s mirror: `w.reference` under the struct's id from its file, where it has one. */
-export function writeKept<T extends object>(w: Writer, value: T | undefined, write: (self: Writer, value: T) => void): void {
-  // Under the tape's object where the struct has one: the tape writes it under that key wherever another Thing names it.
-  if (!value) {
-    w.reference(undefined, () => {});
-    return;
-  }
-  const object = tapeObjectOf(value);
-  w.reference<object>(object ?? value, (self) => write(self, value), object?.id ?? fileIds.get(value));
-}
 
 /** `InputRecording`: a captured controller performance. */
 export interface InputRecording {
@@ -154,7 +122,7 @@ export function readNpcBehavior(s: Serializer, readers: ReadonlyMap<string, Part
     out.poiKeyName = s.wstr();
     out.poiKeyColorIndex = s.s32();
   }
-  if (version > 0x295) out.actingData = readKept(s, (self) => readActingData(self, readers));
+  if (version > 0x295) out.actingData = s.reference((self) => readActingData(self, readers));
   if (version > 0x2ac) {
     out.awarenessRadius = s.f32();
     out.sharedStateTimer = s.i32();
@@ -249,7 +217,7 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   out.soundRecordingPacketOffset = s.i32();
   out.sackbotRecordingTimes = s.intVector();
   if (version > 0x2da || (version < 0x29b && version > 0x294)) {
-    out.behavior = readKept(s, (self) => readNpcBehavior(self, readers));
+    out.behavior = s.reference((self) => readNpcBehavior(self, readers));
   }
   if (version > 0x2ac) {
     out.flags = s.i32();
@@ -349,7 +317,7 @@ export function writeNpcBehavior(w: Writer, v: NpcBehavior, ctx: PartWriteContex
     w.wstr(v.poiKeyName ?? '');
     w.s32(v.poiKeyColorIndex ?? 0);
   }
-  if (version > 0x295) writeKept(w, v.actingData, (self, data) => writeActingData(self, data, ctx));
+  if (version > 0x295) w.reference(v.actingData, (self, data) => writeActingData(self, data, ctx));
   if (version > 0x2ac) {
     w.f32(v.awarenessRadius ?? 0);
     w.i32(v.sharedStateTimer ?? 0);
@@ -396,7 +364,7 @@ export function writeNpc(w: Writer, v: NpcPart, ctx: PartWriteContext): void {
   w.i32(v.soundRecordingPacketOffset ?? 0);
   w.intVector(v.sackbotRecordingTimes ?? []);
   if (version > 0x2da || (version < 0x29b && version > 0x294)) {
-    writeKept(w, v.behavior, (self, behavior) => writeNpcBehavior(self, behavior, ctx));
+    w.reference(v.behavior, (self, behavior) => writeNpcBehavior(self, behavior, ctx));
   }
   if (version > 0x2ac) {
     w.i32(v.flags ?? 0);

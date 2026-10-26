@@ -24,21 +24,11 @@ import { SerializerError, type ResourceRef, type RevisionInfo, type Serializer }
 import { Writer } from '../io/writer.ts';
 
 /**
- * The id each reference read here had in its file, so `encodeTutorials` names
- * it the same (`Writer.reference`): the game does not number in first-mention
- * order. A null group list is kept as id 0 on the empty array returned for it.
+ * The empty arrays returned for a null group list, so `encodeTutorials` writes
+ * it null again. Every other id is the one each object was read under
+ * (`Writer.reference`).
  */
-const IDS = new WeakMap<object, number>();
-
-/** Read a reference and remember its id: the next `i32`, peeked without consuming it. */
-function keepId<T>(s: Serializer, read: () => T | undefined): T | undefined {
-  const at = s.position;
-  const id = s.i32();
-  s.position = at;
-  const value = read();
-  if (value && typeof value === 'object' && !IDS.has(value)) IDS.set(value, id);
-  return value;
-}
+const NULL_LISTS = new WeakSet<object>();
 
 export interface Tutorial {
   readonly levelGuid: number;
@@ -82,7 +72,7 @@ function readTutorial(s: Serializer): Tutorial {
 
 function readGroup(s: Serializer): TutorialGroup {
   const nameKey = s.u32();
-  const tutorials = s.array((self) => keepId(self, () => self.reference(readTutorial)));
+  const tutorials = s.array((self) => self.reference(readTutorial));
   return { nameKey, tutorials };
 }
 
@@ -90,11 +80,11 @@ function readGroup(s: Serializer): TutorialGroup {
 export async function readTutorials(bytes: Uint8Array, inflate: Inflate): Promise<Tutorials> {
   const { resource, revision, s } = await openSerializer(bytes, inflate);
   if (resource.magic !== 'TUTb') throw new SerializerError(`not a tutorial list: "${resource.magic}"`);
-  const list = keepId(s, () => s.reference((self) => self.array((x) => keepId(x, () => x.reference(readGroup)))));
+  const list = s.reference((self) => self.array((x) => x.reference(readGroup)));
   if (s.remaining !== 0) throw new SerializerError(`TUTb read ended ${s.remaining} bytes before the end of its payload`);
   if (list) return { revision, groups: list };
   const groups: TutorialGroup[] = [];
-  IDS.set(groups, 0);
+  NULL_LISTS.add(groups);
   return { revision, groups };
 }
 
@@ -112,17 +102,13 @@ function writeTutorial(w: Writer, t: Tutorial): void {
 
 function writeGroup(w: Writer, g: TutorialGroup): void {
   w.u32(g.nameKey);
-  w.i32(g.tutorials.length);
-  for (const t of g.tutorials) w.reference(t, writeTutorial, t && IDS.get(t));
+  w.references(g.tutorials, writeTutorial);
 }
 
 /** `readTutorials`'s mirror: the payload, byte for byte, from the value. */
 export function encodeTutorials(value: Tutorials, header: { revision: RevisionInfo; compressionFlags: number }): Uint8Array {
   const w = new Writer(header.revision, header.compressionFlags);
-  const listId = IDS.get(value.groups);
-  w.reference(listId === 0 ? undefined : (value.groups as object[]), (x, groups) => {
-    x.i32(groups.length);
-    for (const g of groups as (TutorialGroup | undefined)[]) x.reference(g, writeGroup, g && IDS.get(g));
-  }, listId);
+  const groups = NULL_LISTS.has(value.groups) ? undefined : value.groups;
+  w.reference(groups, (x, list) => x.references(list, writeGroup));
   return w.done();
 }

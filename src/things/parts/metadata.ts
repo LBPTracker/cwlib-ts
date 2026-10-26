@@ -6,10 +6,6 @@ import { readSlotId, writeSlotId, type SlotId } from '../../structs/slot.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
 
-/** The reference id each `PhotoMetadata` had in its file, so a writer names it the same. */
-const IDS = new WeakMap<object, number>();
-/** And its tape object, where read onto a tape: the key the tape writes it under (see `script.ts`, `TAPED`). */
-const TAPED = new WeakMap<object, object>();
 
 /**
  * `PMetadata`: what an inventory item calls itself.
@@ -126,15 +122,7 @@ export function readMetadata(s: Serializer): MetadataPart {
   const subType = s.i32();
   const creationDate = s.u32();
   const icon = s.resource();
-  const at = s.position;
-  const photoId = s.i32();
-  s.position = at;
   const photoMetadata = s.reference(readPhotoMetadata);
-  if (photoMetadata) {
-    IDS.set(photoMetadata, photoId);
-    const taped = s.tape?.objectOf(photoMetadata);
-    if (taped) TAPED.set(photoMetadata, taped);
-  }
   let referencableByte: number | undefined;
   if (version >= 0x15f) {
     // A bool, but one LBP1 plan stores 0x0d there: the byte is kept where it is neither 0 nor 1.
@@ -210,9 +198,7 @@ export function writeMetadata(w: Writer, m: MetadataPart, _ctx: PartWriteContext
   w.i32(m.subType);
   w.u32(m.creationDate);
   w.ref(m.icon);
-  const photo = m.photoMetadata;
-  if (!photo) w.reference(undefined, () => {});
-  else w.reference<object>(TAPED.get(photo) ?? photo, (self) => writePhotoMetadata(self, photo), IDS.get(photo));
+  w.reference(m.photoMetadata, writePhotoMetadata);
   if (version >= 0x15f) w.u8(m.referencable ? m.referencableByte ?? 1 : 0);
   if (version >= 0x205) w.bool(m.allowEmit ?? false);
 }

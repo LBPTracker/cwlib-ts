@@ -10,7 +10,7 @@
  */
 
 import { SerializerError, type ResourceRef, type Serializer } from '../io/serializer.ts';
-import { readNetworkOnlineId, writeNetworkOnlineId } from './network.ts';
+import { readNetworkOnlineIdKept, writeNetworkOnlineId } from './network.ts';
 import type { Writer } from '../io/writer.ts';
 
 /** cwlib's `SlotID`: a `SlotType` and a number. */
@@ -41,6 +41,8 @@ export interface Slot {
   readonly location: readonly [number, number, number, number];
   /** The author's PSN id. */
   readonly author: string;
+  /** `author`'s `NetworkOnlineID` as stored, where it holds more than the handle (`structs/network.ts`). */
+  readonly authorBytes?: Uint8Array;
   /** Version `0x13b` on. */
   readonly authorName: string;
   /** Version `0x183` on: the LAMS tag a developer slot's text comes from. */
@@ -133,7 +135,7 @@ export function readSlot(s: Serializer): Slot {
   const adventure = subVersion >= 0x145 ? s.resource(true) : undefined;
   const icon = s.resource(true);
   const location = s.vector4();
-  const author = readNetworkOnlineId(s);
+  const { handle: author, bytes: authorBytes } = readNetworkOnlineIdKept(s);
   const authorName = version >= 0x13b ? s.wstr() : '';
   const translationTag = version >= 0x183 ? s.str() : '';
   const name = s.wstr();
@@ -157,7 +159,7 @@ export function readSlot(s: Serializer): Slot {
   const gameProgressionState = version > 0x1b8 && version < 0x36c ? s.i32() : 0;
 
   const slot = {
-    id, root, adventure, icon, location, author, authorName, translationTag, name, description,
+    id, root, adventure, icon, location, author, ...(authorBytes ? { authorBytes } : {}), authorName, translationTag, name, description,
     primaryLinkLevel, group, initiallyLocked, shareable, backgroundGuid, planetDecorations,
     developerLevelType, gameProgressionState,
     labels: [] as SlotLabel[], collectabubblesRequired: [] as Collectabubble[],
@@ -229,7 +231,7 @@ export function writeSlot(w: Writer, slot: Slot): void {
   if (subVersion >= 0x145) w.ref(slot.adventure, { descriptor: true });
   w.ref(slot.icon, { descriptor: true });
   w.vector4(slot.location);
-  writeNetworkOnlineId(w, slot.author);
+  writeNetworkOnlineId(w, slot.author, slot.authorBytes);
   if (version >= 0x13b) w.wstr(slot.authorName);
   if (version >= 0x183) w.str(slot.translationTag);
   w.wstr(slot.name);

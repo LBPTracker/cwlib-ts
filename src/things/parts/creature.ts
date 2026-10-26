@@ -5,7 +5,6 @@ import { LD_ANY, LD_SUBMERGED, onLeerdammer, readThingRef, type PartReader, type
 import { thingArray, things, writeThingArray } from './common.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
-import { readKept, writeKept } from './npc.ts';
 
 type V3 = readonly [number, number, number];
 
@@ -424,7 +423,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (version >= 0x3f0) capeExtraMaxVelocityCap = s.u8();
   if (version >= 0x35a) behavior = s.i32();
   if (version >= 0x373) effectDestroy = s.i32();
-  if (version >= 0x3c0) whipSim = readKept(s, (self) => readWhipSim(self, readers));
+  if (version >= 0x3c0) whipSim = s.reference((self) => readWhipSim(self, readers));
   const vita = vitaRevision(s.revision);
   if (vita >= 0 && vita < 0x53) s.u8();
   if (vita >= 0x53) shootAtTouch = s.i32();
@@ -449,7 +448,7 @@ export function readCreature(s: Serializer, readers: ReadonlyMap<string, PartRea
   if (subVersion >= 0x20c) {
     springState = s.u8();
     springHasSprung = s.bool();
-    spring = readKept(s, (self): CreatureSpring => ({
+    spring = s.reference((self): CreatureSpring => ({
       springThing: readThingRef(self, readers),
       springTimer: self.i32(),
       springDirection: self.vector3(),
@@ -646,7 +645,7 @@ export function writeCreature(w: Writer, v: CreaturePart, ctx: PartWriteContext)
   if (version >= 0x3f0) w.u8(v.capeExtraMaxVelocityCap ?? 0);
   if (version >= 0x35a) w.i32(v.behavior ?? 0);
   if (version >= 0x373) w.i32(v.effectDestroy ?? 0);
-  if (version >= 0x3c0) writeKept(w, v.whipSim, (self, sim) => writeWhipSim(self, sim, ctx));
+  if (version >= 0x3c0) w.reference(v.whipSim, (self, sim) => writeWhipSim(self, sim, ctx));
   const vita = vitaRevision(w.revision);
   if (vita >= 0 && vita < 0x53) w.u8(0);
   if (vita >= 0x53) w.i32(v.shootAtTouch ?? 0);
@@ -671,7 +670,7 @@ export function writeCreature(w: Writer, v: CreaturePart, ctx: PartWriteContext)
   if (subVersion >= 0x20c) {
     w.u8(v.springState ?? 0);
     w.bool(v.springHasSprung ?? false);
-    writeKept(w, v.spring, (self, spring) => {
+    w.reference(v.spring, (self, spring) => {
       ctx.thing(self, spring.springThing);
       self.i32(spring.springTimer);
       self.vector3(spring.springDirection);

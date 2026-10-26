@@ -5,51 +5,16 @@ import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
 
-/**
- * The id each shared object -- a layout, a boxed object, an instance behind a
- * reference -- had in the file it was read from, so a writer names it the same.
- * A `WeakMap` rather than a field: the values stay what they were, and an object
- * made here has none and is numbered afresh.
+/*
+ * ❗ **A shared object -- a layout, a boxed object, an instance behind a
+ * reference -- is written under its tape object's key and its file's id**
+ * (`Writer.reference`, which takes both from the value: `Serializer.pointer`
+ * keeps them for what its `build` returns). A Thing a script field points at is
+ * written through the tape (`ctx.thing`), and its own scripts' layouts and boxed
+ * objects go with it as tape objects; the same layout written here under a
+ * second key took its id as taken and was renumbered -- 13,007 of the game's
+ * 73,267 `PScript`s, until both sides used the tape object as the key.
  */
-const IDS = new WeakMap<object, number>();
-
-/**
- * The tape object each shared object was read as, where the stream was read
- * onto a tape (`io/tape.ts`).
- *
- * ❗ **A writer has to name a shared object by the same key the tape does.** A
- * Thing a script field points at is written through the tape (`ctx.thing`), and
- * its own scripts' layouts and boxed objects go with it as tape objects; the
- * same layout written here from its value is a second JavaScript object under
- * the same id, so the `Writer` took the id as taken and renumbered whichever
- * came second -- 13,007 of the game's 73,267 `PScript`s, until both sides
- * used the tape object as the key. An instance behind a reference is mapped by
- * the tape itself (`objectOf`); a layout or boxed object, behind a pointer, has
- * no value on the tape, so it is looked up by its id.
- */
-const TAPED = new WeakMap<object, object>();
-
-/** The tape object read for reference id `id`. ⚠️ `Tape.objects` is private: the tape has no public lookup by id. */
-function tapeObjectAt(s: Serializer, id: number): object | undefined {
-  return s.tape?.objectAt(id);
-}
-
-/** A shared object by reference: under its tape object's key where it has one, its file's id, its body from its value. */
-function writeShared<T extends object>(w: Writer, value: T | undefined, body: (self: Writer, value: T) => void): void {
-  if (!value) {
-    w.reference(undefined, () => {});
-    return;
-  }
-  w.reference<object>(TAPED.get(value) ?? value, (self) => body(self, value), IDS.get(value));
-}
-
-/** The id the next `i32` holds, without consuming it: what `s.reference` is about to read. */
-function peekId(s: Serializer): number {
-  const at = s.position;
-  const id = s.i32();
-  s.position = at;
-  return id;
-}
 
 /** `MachineType`: how a script field's value is stored. */
 const MACHINE_BOOL = 0x1;
@@ -249,10 +214,8 @@ function readScriptInstance(s: Serializer, readers: ReadonlyMap<string, PartRead
     const layout: ScriptLayout = reflection
       ? { fields, reflection, instanceSize: self.i32() }
       : { fields, instanceSize: self.i32() };
-    IDS.set(layout, id);
-    const taped = tapeObjectAt(self, id);
-    if (taped) TAPED.set(layout, taped);
     self.pointers.set(id, layout);
+    return layout;
   });
   if (pointer === 0) return { script, fields: [], serialize };
   const layout = s.pointers.get(pointer) as ScriptLayout;
@@ -310,7 +273,7 @@ function writeScriptInstance(w: Writer, instance: ScriptInstance, ctx: PartWrite
   const serialize = instance.serialize ?? true;
   if (version > 0x1a0) w.bool(serialize);
   if (!serialize) return;
-  writeShared(w, layout, (self, value) => {
+  w.reference(layout, (self, value) => {
     self.i32(value.fields.length);
     for (const field of value.fields) writeFieldLayout(self, field);
     if (self.revision.version < 0x1ec) {
@@ -415,23 +378,15 @@ function readScriptObject(s: Serializer, readers: ReadonlyMap<string, PartReader
   const type = s.i32();
   if (type === OBJ_NULL) return undefined;
   if (type === OBJ_INSTANCE) {
-    const id = peekId(s);
     const instance = s.reference((self) => readScriptInstance(self, readers));
-    if (instance) {
-      IDS.set(instance, id);
-      const taped = s.tape?.objectOf(instance);
-      if (taped) TAPED.set(instance, taped);
-    }
     return { type: 'instance', instance };
   }
   const shared = OBJECTS.get(s) ?? OBJECTS.set(s, new Map()).get(s)!;
   const { id } = s.pointer((self, pointer) => {
     self.pointers.set(pointer, true);
     const object = readScriptObjectBody(self, type, readers);
-    IDS.set(object, pointer);
-    const taped = tapeObjectAt(self, pointer);
-    if (taped) TAPED.set(object, taped);
     shared.set(pointer, object);
+    return object;
   });
   return id === 0 ? undefined : shared.get(id);
 }
@@ -450,11 +405,10 @@ function writeScriptObject(w: Writer, object: ScriptObject | undefined, ctx: Par
   }
   w.i32(OBJECT_TYPES[object.type]);
   if (object.type === 'instance') {
-    const { instance } = object;
-    writeShared(w, instance, (self, value) => writeScriptInstance(self, value, ctx));
+    w.reference(object.instance, (self, value) => writeScriptInstance(self, value, ctx));
     return;
   }
-  writeShared(w, object, (self, value) => writeScriptObjectBody(self, value, ctx));
+  w.reference(object, (self, value) => writeScriptObjectBody(self, value, ctx));
 }
 
 /** `readScriptObjectBody`'s mirror. An audio handle writes nothing after its id. */
