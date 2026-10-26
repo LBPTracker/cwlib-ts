@@ -42,6 +42,7 @@ Every module is imported by its path under `src/`: `@lbptracker/cwlib/<folder>/<
 | `write-level.ts` | a level, plan or streaming chunk written back byte for byte, with Things removed, added from another file or moved |
 | **`resources/`** | |
 | `mesh.ts` | `RMesh` (`MSHb`): positions, normals, tangents (and their handedness from the UVs, `uvHandedness`), the softbody weight, every UV channel, joints and weights, a triangle list and a material per primitive, the bones |
+| `texture-encode.ts`, `texture-encode-bc.ts` | an RGBA image to a `GTF ` or `TEX `: scaled, mipmapped and compressed to DXT1/3/5, as cwlib's `toGTF`/`toTEX` |
 | `texture.ts` | `GTF ` and `TEX ` textures: every mip and face as BC blocks or unswizzled RGBA8, ready for WebGPU, and a pure-TypeScript BC decode |
 | `material.ts` | `RGfxMaterial` (`GMTb`): the whole box-and-wire graph, the texture slots, and `materialSummary` for a renderer to start from |
 | `staticmesh-gltf.ts`, `gltf-builder.ts` | an `RStaticMesh` written as glTF; the buffer, materials and container every glTF export shares |

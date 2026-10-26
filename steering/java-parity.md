@@ -58,9 +58,8 @@ level*, level-files.md), and a sequencer `.plan` from values; what is missing:
 
 Every part, Thing, level, plan and resource this library reads is now written from its values
 too, byte for byte on the game's files (level-files.md, *Parts written from their values*,
-*Levels and plans written from their values*, *Resources written from their values*). Left:
-- **An image to a texture**: cwlib's `Images.toGTF`/`toTEX` compress an image to DXT with Squish;
-  here a texture is written from levels already in its format.
+*Levels and plans written from their values*, *Resources written from their values*), and an
+image is compressed to a texture (*Images to textures*, level-files.md).
 
 ## Tools
 

@@ -376,8 +376,7 @@ file here and are checked by round trip alone (`test/write-profiles.test.ts`).
   half-float UVs, a strip index buffer, a texture's padding and DDS header, a static mesh's index
   buffer: each is written as stored while it still decodes to the value, and encoded from the value
   where the value changed — so an edited or built mesh writes too (`Mesh.stored`, non-enumerable).
-- ⚠️ A texture is written from its levels as held; an image is not compressed to DXT (*Tools* in
-  java-parity.md). An `ADCb`'s and a `PRFb`'s Things are written from their values, by the Thing
+- A texture is written from its levels as held; an image becomes one by *Images to textures*. An `ADCb`'s and a `PRFb`'s Things are written from their values, by the Thing
   writer of *Levels and plans written from their values*.
 
 ## Dependencies rewritten — `replaceDependency` and `hashinate`
@@ -1970,6 +1969,29 @@ What is measured and what is only a width:
   the one, three and four zero fields measured at `0x154`/`0x167`, `0x177` and `0x1a6`/`0x1a9`.
   Arrays the game has no element of here are refused when not empty. `StateUpdateViewed` is
   true in all 25.
+
+## Images to textures — `texture-encode.ts`
+
+`textureFromImage` and `encodeImageTexture` port cwlib's `Images.toGTF`/`toTEX` (toolkit `d6a2ef8`):
+an RGBA image, its sides scaled down to powers of two, mipmapped until a side reaches 1, compressed
+to DXT1, DXT3 or DXT5 (`texture-encode-bc.ts`, in place of Squish) or kept as A8R8G8B8, in a
+`GTF ` or a `TEX `. Measured against the toolkit's jar (cwlib `bb79e81` with jsquish, JDK 25) on
+23 images in every format, container and option, 276 jobs:
+- ✔ with `layout: 'cwlib'` the GTF header, the TEX DDS header, the footer and the payload length are
+  Java's byte for byte on all 276.
+- ❗ **cwlib's own output does not read back here, and no game file looks like it**: its GTF chain
+  is not padded to 128 bytes, and its TEX without `noSRGB` ends in four zero bytes. The default
+  `layout: 'game'` pads, omits them, and writes the game's DDS header — on all 2,606 single-level
+  game `TEX` files flags `0x81007` with a level count of 0, on all 337 multi-level ones cwlib's.
+- The blocks are not Squish's. Over level 0, in the error both minimise (luma-weighted), ours is
+  never more than 0.034 dB worse than Squish's and 4.3 dB better on average; DXT3 alpha the same,
+  DXT5 alpha never worse. ⚠️ The scaling is a box filter, cwlib's imgscalr: a scaled image or a
+  mip level differs in its pixels; its quality against Java's is not measured.
+- Re-encoding the game's own BC textures from their decoded level 0 (`dev/texture-encode-census.ts`,
+  every 50th, 647 textures): 129 of 232 GTF DXT1 and 153 of 362 GTF DXT5 exact, the rest no texel
+  off by more than 4; TEX 46 of 47 exact; RGBA8 6 of 6. Where the header differs from the game's —
+  the GTF flags' bits 1 and 2 on the PS4's re-exports, the full mip chain on about 1 in 6, B8
+  textures written as A8R8G8B8 — it is cwlib's choice. No B8, cube or volume encoding, as in cwlib.
 
 ## The game's textures — `GTF ` and `TEX `
 
