@@ -61,15 +61,18 @@ too, byte for byte on the game's files (level-files.md, *Parts written from thei
 *Levels and plans written from their values*, *Resources written from their values*). Left:
 - **An image to a texture**: cwlib's `Images.toGTF`/`toTEX` compress an image to DXT with Squish;
   here a texture is written from levels already in its format.
-- **The Things inside an `ADCb` and a `PRFb`** are written as their bytes, not from their values.
 
 ## Tools
 
 - **Importers**: models and animations (`ModelImporter`, `AnimationImporter`,
   `BlendPacketImporter`), and an `RStaticMesh` built from them (`StaticMeshBuilder`).
 - **Shaders**: material shaders assembled (`CgAssembler`, `GfxAssembler`).
-- **JSON** (`gson/`): any resource back from JSON, and Java's own field names. To JSON is `toJson`
-  (`src/io/json.ts`), of this library's objects; back needs a writer for every resource.
+- **JSON in Java's field names** (`gson/`). `toJson` and `fromJson` (`src/io/json.ts`,
+  `src/io/from-json.ts`) carry this library's own objects, whose fields are not cwlib's: a cwlib
+  JSON file does not read here, nor ours there. ✔ A value through JSON and back writes the same
+  bytes as before on every resource type, level and plan tried (`dev/json-census.ts`, 20 of each
+  type over the install and the update, 2026-10-26: 0 lost), the stores a reader keeps out of sight
+  included.
 
 ## Revisions
 

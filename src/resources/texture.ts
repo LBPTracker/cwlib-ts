@@ -371,7 +371,7 @@ export async function readTexture(bytes: Uint8Array, inflate: Inflate): Promise<
 /* ------------------------------------------------------------- writing */
 
 /** A non-enumerable property of a read `Texture`: the payload as it inflated, a GTF's chain or a TEX's DDS. */
-const STORED = Symbol('stored');
+const STORED = 'stored';
 
 function keepStored<T extends object>(value: T, payload: Uint8Array): T {
   Object.defineProperty(value, STORED, { value: payload });
@@ -379,7 +379,7 @@ function keepStored<T extends object>(value: T, payload: Uint8Array): T {
 }
 
 function storedOf(value: object): Uint8Array | undefined {
-  return (value as Record<symbol, Uint8Array | undefined>)[STORED];
+  return (value as Record<string, Uint8Array | undefined>)[STORED];
 }
 
 /** Raw chunk size: the game's textures and backdrops are cut here, the last chunk short. */

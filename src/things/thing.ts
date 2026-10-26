@@ -46,6 +46,7 @@
 import { Serializer, SerializerError, vitaRevision } from '../io/serializer.ts';
 import type { Writer } from '../io/writer.ts';
 import type { PartWriteContext, PartWriter } from './write-parts.ts';
+import { registerJsonStore } from '../io/from-json.ts';
 
 
 /**
@@ -586,6 +587,10 @@ export function writeThing(
  * by `writeNamedPart` under the same id and key as its Thing writes it.
  */
 const PART_OF = new WeakMap<object, { readonly name: string; readonly id: number }>();
+registerJsonStore('partOf', {
+  get: (object) => PART_OF.get(object),
+  set: (object, part) => PART_OF.set(object, part as { name: string; id: number }),
+});
 
 /** The part a value was read as, where it was. */
 export function partOf(value: unknown): { readonly name: string; readonly id: number } | undefined {

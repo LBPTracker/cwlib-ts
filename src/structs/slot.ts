@@ -12,6 +12,7 @@
 import { SerializerError, type ResourceRef, type Serializer } from '../io/serializer.ts';
 import { readNetworkOnlineIdKept, writeNetworkOnlineId } from './network.ts';
 import type { Writer } from '../io/writer.ts';
+import { registerJsonStore } from '../io/from-json.ts';
 
 /** cwlib's `SlotID`: a `SlotType` and a number. */
 export interface SlotId {
@@ -118,6 +119,10 @@ const DOUBLE11 = 0x4431;
  * a boolean.
  */
 const BOOL_BYTES = new WeakMap<object, Record<string, number>>();
+registerJsonStore('slotBoolBytes', {
+  get: (object) => BOOL_BYTES.get(object),
+  set: (object, bytes) => BOOL_BYTES.set(object, bytes as Record<string, number>),
+});
 
 export function readSlot(s: Serializer): Slot {
   const { version, subVersion, branchId } = s.revision;

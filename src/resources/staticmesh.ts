@@ -236,7 +236,7 @@ export { triangles as staticTriangles };
 export { SerializerError };
 
 /** A non-enumerable property of a read `StaticMesh`: the stored vertex stream and dependency table. */
-const STORED = Symbol('stored');
+const STORED = 'stored';
 
 /** Resource types of a static mesh's dependencies: its maps' (`TEXTURE`) and its materials' (`GFX_MATERIAL`). */
 const TYPE_TEXTURE = 1;
@@ -269,7 +269,7 @@ const same = (a: number, b: number): boolean => a === b || (Number.isNaN(a) && N
  */
 export async function writeStaticMesh(value: StaticMesh, deflate: Deflate): Promise<Uint8Array> {
   const { revision } = value;
-  const stored = (value as unknown as Record<symbol, StoredMesh | undefined>)[STORED];
+  const stored = (value as unknown as Record<string, StoredMesh | undefined>)[STORED];
   if (!value.indices) throw new StaticMeshFormatError('a static mesh without its index buffer cannot be written');
   const indices = value.indices;
   const n = value.vertexCount;

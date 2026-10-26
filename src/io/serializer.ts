@@ -28,6 +28,7 @@
  */
 
 import type { Tape } from './tape.ts';
+import { registerJsonStore } from './from-json.ts';
 
 /**
  * Bytes as a string, one character per byte: the format's ASCII, and the
@@ -145,6 +146,11 @@ export function referenceIdOf(value: unknown): number | undefined {
 function recordId(value: unknown, id: number): void {
   if (typeof value === 'object' && value !== null) REFERENCE_IDS.set(value, id);
 }
+
+registerJsonStore('referenceId', {
+  get: (object) => REFERENCE_IDS.get(object),
+  set: (object, id) => REFERENCE_IDS.set(object, id as number),
+});
 
 /**
  * Reads one decompressed payload.
