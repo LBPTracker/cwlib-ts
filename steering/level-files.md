@@ -495,6 +495,16 @@ overhanging, and 4,708 inside the box's z as stored. Drawn without the offset, e
 the others at the origin. `readLevel` returns the boxes as `LevelParse.chunks` (SHA-1, min, max);
 `readChunkIslands` returns the islands' `bounds`.
 
+❗ **An island has an origin of its own inside its chunk.** The install's chunks hold one island
+each, whose bounds start at `(0, 0)`, so the box's min was the whole offset. The 01.28 update
+repacks Needlepoint Peaks into **95 chunks of 879 islands** whose bounds start elsewhere in the
+chunk, and an island's Things are in *its* space: matched by content to the install's shapes (same
+vertices, thickness, material, colour and z, unique on both sides), **1,123 of 1,128 land where the
+install puts them at `box.min + island.bounds.min` in x and y, against 223 with the box's min
+alone**; per island, 46 of the 47 that could be matched (lbprender's `readChunkPlaced`,
+2026-10-27). The same shapes keep the same local coordinates between the two versions, so only the
+origin differed.
+
 The island and the lists it shares with `ChunkFile` were measured on the `0x213` PS3 saves, and
 three things change below:
 
