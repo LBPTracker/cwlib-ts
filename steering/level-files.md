@@ -1174,6 +1174,22 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
   not switch collision off; and **36 of the 39 ghosty shapes have it clear**. The one place `Ghosty`
   (`test [shape + 0xf2], 2`) was read, `v0x1002df`, is inside a large drawing routine that skips on it.
   What `Ethereal` does, nothing found reads it by name.
+- ✔ **What reads the shape's booleans** (eboot 1.28): the function that fills a fixture's record from its
+  shape (the copy at `v0x2b1152`): `CollidableSackboy` clear sets bit 4 of the fixture's byte at `+0x6b`
+  (*does not touch the player*); `Ghosty` and `PartOfPowerUp` together decide bit `0x10` of the byte at
+  `+0x9d`, set only when **neither** is; the contact builder (`v0x2ae650`) keeps its solid flag only
+  when both fixtures have that bit, so a ghosty shape makes no solid contact. On Needlepoint Peaks
+  `CollidableSackboy` is set on all 2,521 shapes. `lethalType` is read by `GetLethalType__`
+  (`v0x7e9ef0`) as a word at `[PShape.runtime + 0x48]` (`runtime` is the pointer at `PShape + 0x108`):
+  a gameplay hazard, what kills a player, not physics. `Ethereal`: no reader found.
+- ✔ **`PJoint`'s memory layout** (the reflective serialiser, `v0xd181f0`): `Type +0x10`, `Stiff +0x48`,
+  `Settings +0x78`, `Behaviour +0xd0`, `SlideDir +0xe0`, `Strength +0xf0` (what `SetJointStrength__`
+  writes), `AnimationPattern +0xf4`, `AnimationRange +0xf8`, `AnimationTime +0xfc`, `AnimationPhase
+  +0x100`, `AnimationSpeed +0x104`, `AnimationPause +0x108`, `Angle +0x110`, `Length +0x120`. What a
+  motor bolt does with them is read off the values, not from the code that moves it (not found):
+  Needlepoint Peaks' 152 type-9 joints are pattern 0 on 128 (range ±0.05 to ±2.09 rad, time 1 to 120
+  frames, speed ±0.017 with the sign of the range) and pattern 1 on 24 (range ±1, time 120, speed
+  ±0.035 to ±0.175 with the sign of the range); strength 1 on 148, 0 on 4 (`dev/physics-joints.ts`).
 - ✔ **`PBody.frozen` is what the game's `GetBodyFrozen__` tests with `0x3f`**: `v0x7e99d0` returns
   `(PBody.flags & 0x3f) != 0` over the word at `PBody + 0x10`. Every moving body of Needlepoint Peaks
   stores 1 there (the level was saved frozen), a static one 513, 515 or 519; bit `0x200` is set on all
