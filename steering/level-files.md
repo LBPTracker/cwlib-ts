@@ -1156,6 +1156,28 @@ are the same as before. Counted over the story chunks' **80,002 shapes** (`dev/s
 - ❗ **A later loop is a hole in the first**: on Needlepoint Peaks, the Casino and the Caverns
   (lbprender's `dev/holes.ts`), all 200 loops after the first lie wholly inside it and wind the
   other way. `ShapePart.loops` keeps them in stored order; the first is the outline.
+- ✔ **`flags` bit 0 is "collidable"** (lbprender, 2026-10-28, the 1.28 eboot, file = vaddr + 0x4000):
+  the script binding `SetCollidable__b` (`v0x80bf10`) takes a Thing's `PShape` (`[thing + 0x48]`),
+  and when the bool differs from `Flags & 1` (`PShape + 0xe8`, a `u16`) calls `v0x1d5610`, which sets
+  or clears bit 0 and then, for each of the shape's fixtures (0xa0 bytes each, list at `+0x108`),
+  calls `v0xb475b0` with **`(Flags & 1) ? (Flags >> 1) & 1 : 0`**: a fixture is on while bits 0 *and*
+  1 are set. `v0x1d5690` is the same for bit 1. On Needlepoint Peaks every shape has bit 1 set, and
+  bit 0 is clear on 834 of 2,521 (value `& 3` is 2 on them, never 0 or 1). No other bit of `flags`
+  has been traced (40 values; bits `0x4000`, `0x2000`, `0x1000`, `0x200`, `0x100`, `0x80` and the
+  higher of the low byte appear).
+- ✔ **The booleans after `flags` are bits of two words, not bytes**: the reflective serialiser
+  (`v0xd1b460`, found by the name `Ethereal`'s two references) packs them into `u16`s at `PShape + 0xee`
+  (`GrabFilter` bits 5–6, `DefaultClimbable` bit 7, **`Ethereal` bit 8**) and `PShape + 0xf2`
+  (**`CanCollect` bit 0, `Ghosty` bit 1**, `CurrentlyClimbable` 2, `HeadDucking` 3, `IsLBP2Shape` 4,
+  `IsStatic` 5, `CollidableSackboy` 7, `PartOfPowerUp` 8, `CameraExcluderIsSticky` 9). Measured on
+  Needlepoint Peaks: **all 424 ethereal shapes have `flags` bit 0 set** (collidable), so ethereal does
+  not switch collision off; and **36 of the 39 ghosty shapes have it clear**. The one place `Ghosty`
+  (`test [shape + 0xf2], 2`) was read, `v0x1002df`, is inside a large drawing routine that skips on it.
+  What `Ethereal` does, nothing found reads it by name.
+- ✔ **`PBody.frozen` is what the game's `GetBodyFrozen__` tests with `0x3f`**: `v0x7e99d0` returns
+  `(PBody.flags & 0x3f) != 0` over the word at `PBody + 0x10`. Every moving body of Needlepoint Peaks
+  stores 1 there (the level was saved frozen), a static one 513, 515 or 519; bit `0x200` is set on all
+  static bodies and on 30 whose own shape is not static, and is not part of the mask.
 - What `uvOffset` is — `(u, v, 0, 1)` on most, with a fourth component of 1.316 on some — and the
   scale a face is mapped at are a reading, not a measurement. The bevel is `RBevel`, *Bevels* below.
 
