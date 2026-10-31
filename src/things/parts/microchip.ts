@@ -28,6 +28,12 @@ export interface Component {
 
 /** What a `MICROCHIP` part yields: the board's name and what is on it. */
 export interface Microchip {
+  /** Below version 0x2e4. */
+  readonly circuitBoardVisible?: boolean;
+  /** Below version 0x2e9: what the chip hangs on, and where, before `offset`. */
+  readonly parentThing?: Thing;
+  readonly cachedParentPos?: Float32Array;
+  readonly localTransform?: Float32Array;
   readonly name: string;
   readonly components: readonly Component[];
   /**
@@ -91,6 +97,17 @@ export function readMicrochip(
 ): Microchip {
   const { version, subVersion } = s.revision;
   const board = readThingRef(s, readers); // circuitBoardThing
+  // Below 0x2e9 the chip is placed by its parent and two matrices (cwlib's
+  // `PMicrochip`): the archive's sackbot plans at 0x2c3 read 42 bytes short.
+  const circuitBoardVisible = version < 0x2e4 ? s.bool() : undefined;
+  let parentThing: Thing | undefined;
+  let cachedParentPos: Float32Array | undefined;
+  let localTransform: Float32Array | undefined;
+  if (version < 0x2e9) {
+    parentThing = readThingRef(s, readers);
+    cachedParentPos = s.matrix();
+    localTransform = s.matrix();
+  }
   const hideByte = version >= 0x283 ? s.u8() : undefined;
   const hideInPlayMode = hideByte === undefined ? undefined : hideByte !== 0;
   const wiresVisible = version >= 0x2b8 ? s.bool() : undefined;
@@ -126,15 +143,25 @@ export function readMicrochip(
   return {
     name, components, board, sizeX, sizeY, hideInPlayMode, wiresVisible, lastTouched, offset,
     keepVisualVertical, broadcastType,
+    ...(version < 0x2e4 ? { circuitBoardVisible } : {}),
+    ...(version < 0x2e9 ? { parentThing, cachedParentPos, localTransform } : {}),
     ...(hideByte !== undefined && hideByte > 1 ? { hideInPlayModeByte: hideByte } : {}),
     ...(rawName !== undefined ? { rawName } : {}),
   };
 }
 
 /** `readMicrochip`'s mirror; the name escaped again (`escapeEntities`). */
+const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
 export function writeMicrochip(w: Writer, v: Microchip, ctx: PartWriteContext): void {
   const { version, subVersion } = w.revision;
   ctx.thing(w, v.board);
+  if (version < 0x2e4) w.bool(v.circuitBoardVisible ?? false);
+  if (version < 0x2e9) {
+    ctx.thing(w, v.parentThing);
+    w.matrix(v.cachedParentPos ?? IDENTITY);
+    w.matrix(v.localTransform ?? IDENTITY);
+  }
   if (version >= 0x283) w.u8(v.hideInPlayMode ? (v.hideInPlayModeByte ?? 1) : 0);
   if (version >= 0x2b8) w.bool(v.wiresVisible ?? false);
   if (version >= 0x2e4) w.s32(v.lastTouched ?? 0);

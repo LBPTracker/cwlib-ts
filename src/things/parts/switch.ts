@@ -2,7 +2,7 @@
 
 import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { hasPlayerMode, thingArray, writeThingArray } from './common.ts';
+import { hasPlayerMode, writesPlayerMode, thingArray, writeThingArray } from './common.ts';
 import { readNetworkOnlineIdKept, writeNetworkOnlineId, type NetworkId } from '../../structs/network.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
@@ -216,7 +216,7 @@ export interface SwitchPart {
  * extra block. Reading `type` and then ignoring it works on every level that
  * happens to use no stickers.
  */
-export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchPart {
+export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReader>, owner?: Thing): SwitchPart {
   const { version, subVersion } = s.revision;
   let minRadius: number | undefined;
   let name: string | undefined;
@@ -474,7 +474,7 @@ export function readSwitch(s: Serializer, readers: ReadonlyMap<string, PartReade
     if (vita >= 0x43) glowColours = Array.from({ length: 3 }, () => s.i32());
     if (vita >= 0x54) playerFilter = s.u8();
   }
-  if (hasPlayerMode(version)) playerMode = s.u8();
+  if (hasPlayerMode(version, owner?.partsRevision)) playerMode = s.u8();
 
   // ⚠️ Data-dependent again, and the block is not small.
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
@@ -677,7 +677,7 @@ export function writeSwitch(w: Writer, v: SwitchPart, ctx: PartWriteContext): vo
     if (vita >= 0x43) for (let i = 0; i < 3; i += 1) w.i32(v.glowColours?.[i] ?? 0);
     if (vita >= 0x54) w.u8(v.playerFilter ?? 0);
   }
-  if (hasPlayerMode(version)) w.u8(v.playerMode ?? 0);
+  if (writesPlayerMode(version, v.playerMode)) w.u8(v.playerMode ?? 0);
 
   if (version > 0x3ee && type === SWITCH_DATA_SAMPLER) {
     w.i32(v.labelIndex ?? 0);

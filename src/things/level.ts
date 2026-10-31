@@ -37,23 +37,7 @@ import { readSlotId, writeSlotId, type SlotId } from '../structs/slot.ts';
 import { readNetworkIds, writeNetworkIds } from '../structs/network.ts';
 import { readInventoryItemDetails, writeInventoryItemDetails, type InventoryItemDetails } from '../structs/inventory.ts';
 import { readInventoryItem, writeInventoryItem, type InventoryItem } from './parts/poppet-powerup.ts';
-
-/**
- * A struct the corpus never actually populates.
- *
- * Reading a zero count is free; a non-zero one means this level uses something
- * the reader has not been taught, and saying so beats guessing at a layout that
- * has never been exercised.
- */
-function emptyOnly(s: Serializer, what: string): void {
-  const count = s.i32();
-  if (count !== 0) {
-    throw new SerializerError(
-      `${what} has ${count} entries and no reader — it was empty everywhere in the ` +
-        `corpus this was built against, so its layout has never been tested`,
-    );
-  }
-}
+import { thingArray, writeThingArray } from './parts/common.ts';
 
 /** `StreamingID`: a wide string and a type. */
 export interface StreamingId {
@@ -386,6 +370,8 @@ function writeLevelData(w: Writer, v: LevelData): void {
 
 /** `StreamingManager`, every field. */
 export interface StreamingManager {
+  /** The Things being edited when the level was saved: cwlib's `thingarray`. */
+  readonly editingThingsList?: readonly (Thing | undefined)[];
   readonly levels: readonly (LevelData | undefined)[];
   readonly numIslands: number;
   readonly numPendingIslands?: number;
@@ -398,8 +384,11 @@ export interface StreamingManager {
 }
 
 /** `StreamingManager`: the PS3 saves at subVersion 0x213, LBP3 PS4's own levels at 0x19f..0x1ab. */
-function readStreamingManager(s: Serializer): StreamingManager {
-  emptyOnly(s, 'StreamingManager.editingThingsList');
+function readStreamingManager(s: Serializer, readers: ReadonlyMap<string, PartReader>): StreamingManager {
+  // ❗ **Not always empty**: 5 of the archive's LBP3 levels at subVersions
+  // 0x20c and 0x218 hold 1 to 647 Things here, which cwlib reads as a Thing
+  // array. cwlib cannot open those levels for another reason.
+  const editingThingsList = thingArray(s, readers);
   const count = s.count();
   const levels: (LevelData | undefined)[] = [];
   for (let i = 0; i < count; i += 1) levels.push(s.reference(readLevelData));
@@ -410,6 +399,7 @@ function readStreamingManager(s: Serializer): StreamingManager {
   const startingPointPosition = s.vector3();
   const out: { -readonly [K in keyof StreamingManager]: StreamingManager[K] } = {
     levels, numIslands, numPendingIslands, fartDesc, startingPointPosition,
+    ...(editingThingsList.length > 0 ? { editingThingsList } : {}),
   };
   // ⚠️ From subVersion 0x160, as cwlib has it: below, the walk read three integers out
   // of what follows (`stitchem_manor.bin` at 0x130, `game_outro.bin` at 0x151), which
@@ -423,9 +413,9 @@ function readStreamingManager(s: Serializer): StreamingManager {
   return out;
 }
 
-function writeStreamingManager(w: Writer, v: StreamingManager): void {
+function writeStreamingManager(w: Writer, v: StreamingManager, ctx: PartWriteContext): void {
   const { subVersion } = w.revision;
-  w.i32(0); // editingThingsList, empty
+  writeThingArray(w, ctx, v.editingThingsList);
   w.references(v.levels, writeLevelData);
   w.i32(v.numIslands);
   if (subVersion > 0x1ff) w.i32(v.numPendingIslands ?? 0);
@@ -1326,7 +1316,7 @@ function readWorld(s: Serializer, readers: ReadonlyMap<string, PartReader>, tail
   if (subVersion >= 0x70) fields.backdropOffsetZAuto = s.bool();
   if (subVersion >= 0xe2) fields.overrideBackdropAmbience = s.str();
   if (version < 0x14b) fields.materials = s.array((self) => self.resource());
-  if (subVersion >= 0x3f) fields.streamingManager = s.reference(readStreamingManager);
+  if (subVersion >= 0x3f) fields.streamingManager = s.reference((self) => readStreamingManager(self, readers));
   // Every Thing goes through `referenceInto` so that the cycles in a level --
   // a Thing's parent, a switch's target -- resolve to the real object rather
   // than the empty placeholder `reference` would register.
@@ -1360,7 +1350,7 @@ export function writeWorld(w: Writer, value: WorldPart, ctx: PartWriteContext): 
   if (subVersion >= 0x70) w.bool(f.backdropOffsetZAuto ?? false);
   if (subVersion >= 0xe2) w.str(f.overrideBackdropAmbience ?? '');
   if (version < 0x14b) writeArray(w, f.materials, (self, m) => self.ref(m));
-  if (subVersion >= 0x3f) w.reference(f.streamingManager, writeStreamingManager);
+  if (subVersion >= 0x3f) w.reference(f.streamingManager, (self, v) => writeStreamingManager(self, v, ctx));
   writeThingList(w, f.things, ctx);
   writeWorldTail(w, f.tail ?? {}, ctx);
 }
@@ -1573,17 +1563,29 @@ export interface IslandBounds {
  * The island's Things are in `PlanData`, which is **a whole `PLNb` resource**,
  * header and all -- so it is read by `readPlan` rather than by anything here.
  */
+/** The island flag that puts an unknown count before the dependency lists. */
+const ISLAND_EXTRA_COUNT = 0x10000000;
+
 function readIsland(s: Serializer, plans: Uint8Array[], bounds: IslandBounds[]): void {
   s.i32(); // timeZone
   // ⚠️ Two i32s before the bounds at subVersion 0x213 (the PS3 saves), one at
-  // 0x1ab (LBP3 PS4's own story chunks, 41,741 of them): the gate lies between,
-  // where no file here sits. Which of the two is the newer is not known.
-  if (s.revision.subVersion > 0x1ab) s.i32(); // flags
+  // 0x1ab (LBP3 PS4's own story chunks, 41,741 of them) and at 0x1ae (79 of the
+  // archive's chunks, which also end without the chunk-code list): the gate lies
+  // above 0x1ae, where no file here sits.
+  const flags = s.revision.subVersion > 0x1ae ? s.i32() : 0;
   const min = s.vector3();
   const max = s.vector3();
   bounds.push({ min, max });
   plans.push(s.mark('planData', (self) => self.bytes(self.i32())));
   readStreamingLists(s);
+  // ❗ **An island whose flags carry bit 28 has one more count before its
+  // dependency lists**, 0 on both seen: the archive's two 0x218 chunks with
+  // islands of flags 0x10000080 and 0x10000081, beside islands of 0x80 and
+  // 0x81 without it. What it counts is not known.
+  if (flags & ISLAND_EXTRA_COUNT) {
+    const count = s.i32();
+    if (count !== 0) throw new SerializerError(`an island's count after its streaming lists is ${count}, and only 0 has been seen`);
+  }
   readDependencyLists(s);
 }
 
@@ -1612,7 +1614,7 @@ export function readChunkIslandsStream(s: Serializer): { plans: Uint8Array[]; bo
   const plans: Uint8Array[] = [];
   const bounds: IslandBounds[] = [];
   s.references((self) => readIsland(self, plans, bounds));
-  if (revision.subVersion > 0x1ab) s.intVector(); // islandChunkCodeList
+  if (revision.subVersion > 0x1ae) s.intVector(); // islandChunkCodeList
   if (s.remaining !== 0) {
     throw new SerializerError(
       `the chunk's island list left ${s.remaining} of ${s.data.length} bytes unread`,

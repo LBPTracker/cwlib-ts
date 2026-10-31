@@ -2,7 +2,7 @@
 
 import { Serializer, vitaRevision } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
-import { hasPlayerMode } from './common.ts';
+import { hasPlayerMode, writesPlayerMode } from './common.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
 
@@ -32,7 +32,7 @@ export interface ControlinatorPart {
   readonly layerRange?: number;
 }
 
-export function readControlinator(s: Serializer, readers: ReadonlyMap<string, PartReader>): ControlinatorPart {
+export function readControlinator(s: Serializer, readers: ReadonlyMap<string, PartReader>, owner?: Thing): ControlinatorPart {
   const { version, subVersion } = s.revision;
   let killRiderOnCreatureDeath: boolean | undefined;
   let tiltMax: number | undefined;
@@ -75,7 +75,7 @@ export function readControlinator(s: Serializer, readers: ReadonlyMap<string, Pa
     parentBoneIndex = s.u8();
     parentBoneOffset = s.matrix();
   }
-  if (hasPlayerMode(version)) playerMode = s.u8();
+  if (hasPlayerMode(version, owner?.partsRevision)) playerMode = s.u8();
   if (subVersion > 0x189) layerRange = s.u8();
   return {
     colorIndex, radius, sideMode, padSwitch, attachedPlayer, lastAttachedPlayer, prompt,
@@ -110,6 +110,6 @@ export function writeControlinator(w: Writer, v: ControlinatorPart, ctx: PartWri
     w.u8(v.parentBoneIndex ?? 0);
     w.matrix(v.parentBoneOffset ?? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   }
-  if (hasPlayerMode(version)) w.u8(v.playerMode ?? 0);
+  if (writesPlayerMode(version, v.playerMode)) w.u8(v.playerMode ?? 0);
   if (subVersion > 0x189) w.u8(v.layerRange ?? 0);
 }

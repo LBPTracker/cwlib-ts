@@ -90,6 +90,7 @@ files.
 | `LBP_PATCH` | `test/patch.test.ts` | the folder of `LBP_GAME`'s update, the one holding `patch_001.farc` and its own `output/` (`CUSA00063-patch`, 01.28, over the 01.00 install; *The 01.28 update* in level-files.md). **No default**: the test skips without it |
 | `LBP_DRY_DB`, `LBP_PYTHON` | `dev/archive-sample.mjs` | the archive index `dry.db`, required; and the interpreter that queries it, `python` on the PATH unless this names another |
 | `DRY_DB` | `dev/dry-search.ts` | the same index, required |
+| `LBP_ARCHIVE_RES` | `test/archive-resources.test.ts` | the archive's resources as lbpseqindex downloads them, a folder laid out `<sha[0:2]>/<sha[2:4]>/<sha>`. **No default**: the test skips without it |
 
 ❗ **None of these has a default that is a path on one machine.** A required variable that is not
 set skips a test or stops a script with a line naming it (`dev/env.ts`); `LBP_FIXTURES` is the one

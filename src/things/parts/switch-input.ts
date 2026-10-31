@@ -4,7 +4,7 @@ import { Serializer } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import { readNpcBehavior, writeNpcBehavior, type NpcBehavior } from './npc.ts';
 import { readSwitchSignal, writeSwitchSignal, type SwitchSignal } from './switch.ts';
-import { hasPlayerMode } from './common.ts';
+import { hasPlayerMode, writesPlayerMode } from './common.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
 
@@ -33,7 +33,7 @@ export interface SwitchInputPart {
   readonly playerMode?: number;
 }
 
-export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, PartReader>): SwitchInputPart {
+export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, PartReader>, owner?: Thing): SwitchInputPart {
   const { version } = s.revision;
   let lethalType: number | undefined;
   let portThing: Thing | undefined;
@@ -73,7 +73,7 @@ export function readSwitchInput(s: Serializer, readers: ReadonlyMap<string, Part
   if (version > 0x2d4) sackbotObjectColorIndex = s.s32();
   if (version > 0x2c3) behavior = s.i32();
   if (version > 0x308) effectDestroy = s.i32();
-  if (hasPlayerMode(version)) playerMode = s.u8();
+  if (hasPlayerMode(version, owner?.partsRevision)) playerMode = s.u8();
   return {
     dataSource, updateType, hideInPlayMode, sackbotObjectColorIndex, behavior, updateFrame,
     lethalActivationFrame, lethalInverted, lethalType, portThing, includeRigidConnectors, oneShot,
@@ -105,5 +105,5 @@ export function writeSwitchInput(w: Writer, v: SwitchInputPart, ctx: PartWriteCo
   if (version > 0x2d4) w.s32(v.sackbotObjectColorIndex);
   if (version > 0x2c3) w.i32(v.behavior);
   if (version > 0x308) w.i32(v.effectDestroy ?? 0);
-  if (hasPlayerMode(version)) w.u8(v.playerMode ?? 0);
+  if (writesPlayerMode(version, v.playerMode)) w.u8(v.playerMode ?? 0);
 }

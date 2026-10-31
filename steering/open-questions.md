@@ -122,6 +122,25 @@ branch, into one that stands between a reader and a song. What is left:
   `playerMode` belongs to 0x3eb or to the crossplay build). Below the bound, 7,068 plans and 265 levels are the coverage the allowed-set
   decision lacked. None of this is in the way of music; it is in the way of lbprender, which draws
   the game's own furniture.
+- **The archive's sequencer census**: 19 of its 1,813 failures are left after the fixes of
+  2026-10-31 (*The archive's sequencer census* in [level-files.md](level-files.md)). ❗ cwlib
+  fails on every one of them too, so the span diff cannot help:
+  - **13 plans at `0x3b7`/`0x3b8`, 1 at `0x3ec` and 1 at `0x3f8`, all in `PYellowHead`'s
+    popit.** In `27702841` (`0x3b8`) the popit reads `isInUse` and a one-mode `modeStack`. Then
+    three bytes `0a 00 00` stand before what reads as a plausible `RaycastResults`: a zero hit
+    point, a normal of `(0, 0, 1, 0)`, `onCostumePiece` −1, `decorationIdx` −1. After it,
+    `PoppetShapeOverride` does not align. So `Poppet` at these versions has a field, or a mode
+    layout, that neither cwlib nor this reader knows. A plan holding a captured Sackboy is
+    unlikely to hold a sequencer, so this costs the census little. **What would settle it**:
+    the game's `Poppet` loader in the eboot, reached from `PYellowHead`'s.
+  - **3 levels at `0x3e2`** (`578a76d1`, `bf3bf77b`, `f66241c4`), off the Vita branch, failing a
+    Thing marker deep in the world: not yet traced.
+  - **1 plan at `0x3f8` in `GROUP`** (`f44b4011`, a marker at byte 122), and **1 level at
+    `0x3f8` whose world Thing has no `WORLD` part** (`e317ddcd`): not yet traced.
+  - Two readings the census left half-measured: an island's flag bit 28, whose `i32` was 0 on
+    both islands seen, so `readIsland` refuses any other value; and `PNpc` below `0x293`, which
+    `readNpc` refuses rather than port cwlib's input array and behaviours. No file here sits
+    at either.
 
 The archive's leftovers are not in the way of music; Vita is. The next one is
 found by `dev/archive-sample.mjs` for what Mm's servers held, and by a search

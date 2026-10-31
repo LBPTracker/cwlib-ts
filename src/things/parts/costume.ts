@@ -3,6 +3,10 @@
 import { Serializer, type ResourceRef } from '../../io/serializer.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
+import { onLeerdammer } from '../thing.ts';
+
+/** LEERDAMMER's own revision for the temporary pieces: cwlib's `LD_TEMP_COSTUME`. */
+const LD_TEMP_COSTUME = 0xb;
 
 /** `Primitive`: one draw call of a mesh, with the material it is drawn in. */
 export interface CostumePrimitive {
@@ -42,7 +46,7 @@ export interface CostumePart {
   /** subVersion 0xdb on; 0 before. */
   readonly creatureFilter: number;
   readonly pieces: readonly CostumePiece[];
-  /** version 0x2c5 on: cwlib's `temporaryCostumePiece`s. */
+  /** version 0x2c5 on, and LEERDAMMER from its revision 0xb: cwlib's `temporaryCostumePiece`s. */
   readonly temporaryPieces: readonly CostumePiece[];
 }
 
@@ -83,7 +87,10 @@ export function readCostume(s: Serializer): CostumePart {
   const creatureFilter = subVersion >= 0xdb ? s.i32() : 0;
   const pieces = s.array(readCostumePiece);
   const temporaryPieces: CostumePiece[] = [];
-  if (version >= 0x2c5) {
+  // ⚠️ **LBP1 has them too**, on LEERDAMMER from its revision 0xb: 96 of the
+  // archive's 0x272 plans at branch revision 0x17 ended their costume one byte
+  // short, the empty array's count (cwlib's `PCostume`, `LD_TEMP_COSTUME`).
+  if (version >= 0x2c5 || onLeerdammer(s.revision, LD_TEMP_COSTUME)) {
     const temp = s.i32();
     for (let i = 0; i < temp; i += 1) temporaryPieces.push(readCostumePiece(s));
   }
@@ -131,7 +138,7 @@ export function writeCostume(w: Writer, p: CostumePart, _ctx: PartWriteContext):
   if (subVersion >= 0xdb) w.i32(p.creatureFilter);
   w.i32(p.pieces.length);
   for (const piece of p.pieces) writeCostumePiece(w, piece);
-  if (version >= 0x2c5) {
+  if (version >= 0x2c5 || onLeerdammer(w.revision, LD_TEMP_COSTUME)) {
     w.i32(p.temporaryPieces.length);
     for (const piece of p.temporaryPieces) writeCostumePiece(w, piece);
   }

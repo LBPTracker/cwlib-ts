@@ -1,6 +1,6 @@
 /** `NPC`: its part reader. The conventions every part follows are in `../parts.ts`. */
 
-import { Serializer, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
+import { Serializer, SerializerError, vitaRevision, type ResourceRef } from '../../io/serializer.ts';
 import { readThingRef, type PartReader, type Thing } from '../thing.ts';
 import type { Writer } from '../../io/writer.ts';
 import type { PartWriteContext } from '../write-parts.ts';
@@ -116,6 +116,7 @@ export function readNpcBehavior(s: Serializer, readers: ReadonlyMap<string, Part
   out.attributes = s.i32();
   out.maxMoveSpeed = s.f32();
   out.maxWaitTime = s.s32();
+  if (version < 0x2cf) s.s32();
   if (version > 0x2e5) out.waypointKeyName = s.wstr();
   if (version > 0x2d4) out.waypointKeyColorIndex = s.s32();
   if (version > 0x2e5) {
@@ -145,6 +146,70 @@ export function readNpcBehavior(s: Serializer, readers: ReadonlyMap<string, Part
   if (subVersion > 0x10e) out.lookAtSpeed = s.f32();
   if (subVersion > 0x175) out.showAdvancedOptions = s.bool();
   return out;
+}
+
+/** `NpcMoveCmd`: one input of a recorded jump. */
+export interface NpcMoveCmd {
+  readonly buttons: number;
+  readonly stickX: number;
+  readonly stickY: number;
+}
+
+/** `NpcJumpData`: one jump a sackbot has learned. */
+export interface NpcJumpData {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly min: V3;
+  readonly max: V3;
+  /** From version 0x273. */
+  readonly flipped?: boolean;
+  readonly commandList?: readonly NpcMoveCmd[];
+  readonly apex?: V3;
+}
+
+/** `NpcJumpSolver`'s jumps below version 0x2c7, which it had dropped by 0x2ce. */
+export interface NpcLearnedJumps {
+  readonly jumpData: readonly NpcJumpData[];
+  readonly maxEffectiveJumpHeight: number;
+  readonly trained: boolean;
+  readonly standingJump: NpcJumpData;
+}
+
+function readNpcJumpData(s: Serializer): NpcJumpData {
+  const { version } = s.revision;
+  const a = s.f32();
+  const b = s.f32();
+  const c = s.f32();
+  const min = s.vector3();
+  const max = s.vector3();
+  if (version <= 0x272) return { a, b, c, min, max };
+  const flipped = s.bool();
+  const commandList = s.array((self) => {
+    const cmd = { buttons: self.i32(), stickX: self.i8(), stickY: self.i8() };
+    if (version < 0x280) self.u8();
+    return cmd;
+  });
+  return { a, b, c, min, max, flipped, commandList, apex: s.vector3() };
+}
+
+function writeNpcJumpData(w: Writer, j: NpcJumpData): void {
+  const { version } = w.revision;
+  w.f32(j.a);
+  w.f32(j.b);
+  w.f32(j.c);
+  w.vector3(j.min);
+  w.vector3(j.max);
+  if (version <= 0x272) return;
+  w.bool(j.flipped ?? false);
+  w.i32(j.commandList?.length ?? 0);
+  for (const cmd of j.commandList ?? []) {
+    w.i32(cmd.buttons);
+    w.i8(cmd.stickX);
+    w.i8(cmd.stickY);
+    if (version < 0x280) w.u8(0);
+  }
+  w.vector3(j.apex ?? ZERO3);
 }
 
 /** `NpcJumpSolver`: where a sackbot is jumping to. */
@@ -188,6 +253,8 @@ export interface NpcPart {
   readonly playerNumber: number;
   readonly actorName: string;
   readonly jumpSolver?: NpcJumpSolver;
+  /** Below version 0x2c7: the first half of cwlib's `NpcJumpSolver`. */
+  readonly learnedJumps?: NpcLearnedJumps;
   /** Below subVersion `0x118`. */
   readonly soundRecording?: Uint8Array;
   readonly soundRecordingDataNbytes?: readonly number[];
@@ -210,7 +277,22 @@ export function readNpc(s: Serializer, readers: ReadonlyMap<string, PartReader>)
   const { version, subVersion } = s.revision;
   const out: { -readonly [K in keyof NpcPart]: NpcPart[K] } = { playerNumber: 0, actorName: '' };
   if (version < 0x273) return out;
+  // ❗ **Below 0x2c7 the jump solver holds the jumps it learned**, cwlib's
+  // `NpcJumpSolver`: the archive's three sackbot plans at 0x2c3 read their
+  // sound recording out of them.
+  if (version < 0x2c7) {
+    out.learnedJumps = {
+      jumpData: s.array(readNpcJumpData),
+      maxEffectiveJumpHeight: s.f32(),
+      trained: s.bool(),
+      standingJump: readNpcJumpData(s),
+    };
+  }
   out.jumpSolver = readNpcJumpSolver(s);
+  if (version < 0x2ac) s.bool();
+  // cwlib reads an input array, a Thing and two behaviours below 0x293 that are
+  // not ported: no file here sits there.
+  if (version < 0x293) throw new SerializerError(`PNpc at version 0x${version.toString(16)} is not ported (cwlib's reads below 0x293)`);
   if (subVersion < 0x118) out.soundRecording = s.bytes(s.i32());
   out.soundRecordingDataNbytes = s.intVector();
   out.soundRecordingPacket = s.i32();
@@ -311,6 +393,7 @@ export function writeNpcBehavior(w: Writer, v: NpcBehavior, ctx: PartWriteContex
   w.i32(v.attributes ?? 0);
   w.f32(v.maxMoveSpeed ?? 0);
   w.s32(v.maxWaitTime ?? 0);
+  if (version < 0x2cf) w.s32(0);
   if (version > 0x2e5) w.wstr(v.waypointKeyName ?? '');
   if (version > 0x2d4) w.s32(v.waypointKeyColorIndex ?? 0);
   if (version > 0x2e5) {
@@ -345,6 +428,14 @@ export function writeNpcBehavior(w: Writer, v: NpcBehavior, ctx: PartWriteContex
 export function writeNpc(w: Writer, v: NpcPart, ctx: PartWriteContext): void {
   const { version, subVersion } = w.revision;
   if (version < 0x273) return;
+  if (version < 0x2c7) {
+    const l = v.learnedJumps;
+    w.i32(l?.jumpData.length ?? 0);
+    for (const j of l?.jumpData ?? []) writeNpcJumpData(w, j);
+    w.f32(l?.maxEffectiveJumpHeight ?? 0);
+    w.bool(l?.trained ?? false);
+    writeNpcJumpData(w, l?.standingJump ?? { a: 0, b: 0, c: 0, min: ZERO3, max: ZERO3 });
+  }
   if (version > 0x2cd) {
     const j = v.jumpSolver;
     w.u8(j?.isCurrentJumpFlipped ? (j.isCurrentJumpFlippedByte ?? 1) : 0);
@@ -354,6 +445,7 @@ export function writeNpc(w: Writer, v: NpcPart, ctx: PartWriteContext): void {
     w.s32(j?.currentJump ?? 0);
     w.i32(j?.currentJumpPos ?? 0);
   }
+  if (version < 0x2ac) w.bool(false);
   if (subVersion < 0x118) {
     const sound = v.soundRecording ?? new Uint8Array(0);
     w.i32(sound.length);

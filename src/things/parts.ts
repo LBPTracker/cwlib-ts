@@ -28,7 +28,7 @@
  */
 
 import { Serializer } from '../io/serializer.ts';
-import { type PartReader } from './thing.ts';
+import { type PartReader, type Thing } from './thing.ts';
 import { readAnimation } from './parts/animation.ts';
 import { readAnimationTweak } from './parts/animation-tweak.ts';
 import { readAtmosphericTweak } from './parts/atmospheric-tweak.ts';
@@ -146,8 +146,8 @@ export { SerializerError } from '../io/serializer.ts';
 /** Everything implemented so far, ready to hand to `readLevel`. */
 export function partReaders(): Map<string, PartReader> {
   const readers = new Map<string, PartReader>();
-  const bind = (name: string, read: (s: Serializer, r: ReadonlyMap<string, PartReader>) => void) => {
-    readers.set(name, (s) => read(s, readers));
+  const bind = (name: string, read: (s: Serializer, r: ReadonlyMap<string, PartReader>, thing: Thing) => void) => {
+    readers.set(name, (s, thing) => read(s, readers, thing));
   };
   bind('BODY', readBody);
   bind('POS', readPos);

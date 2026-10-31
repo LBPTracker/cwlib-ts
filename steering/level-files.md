@@ -441,10 +441,10 @@ ChunkFile      sha1 chunkHash                       subVersion > 0x130
                i32 n, then n resource descriptors WITH AN INLINE TYPE   (>= 0xde)
                  -- the type follows a null descriptor (flag 0) too
                v3 min, v3 max, 4 bools, i32 n + n GUIDs, i32 n + n SHA-1s
-StreamingIsland i32 timeZone, i32 flags, v3 min, v3 max
+StreamingIsland i32 timeZone, i32 flags (> 0x1ae), v3 min, v3 max
                bytearray planData        <- a complete PLNb resource, header and all
                the same four lists, then the GUID and hash lists
-RStreamingChunk  StreamingIsland[] (references), then an intvector of chunk codes
+RStreamingChunk  StreamingIsland[] (references), then an intvector of chunk codes (> 0x1ae)
 ```
 
 **171 chunks, 2,553 islands, 10,837 Things, 9 music sequencers**, every island opening and the
@@ -472,6 +472,23 @@ LevelData         SlotID, i32 type,  ChunkFile[] (references)  NOT WHEN type IS 
   serialization marker is invalid" (`CwlibTrace parts`, 2026-10-19). Only types 0 and 2 occur.
 - ⚠️ The two gates on `farcGuid` and `numPendingIslands` were in a comment and not in the code;
   the PS3 saves are `0x213`, past both, so nothing failed until the game's own `0x1ab`.
+
+Three more things about chunks and the streaming manager, out of the archive (2026-10-31,
+*The archive's sequencer census* below; `test/archive-resources.test.ts` holds one of each):
+
+- ❗ **At subVersion `0x1ae` an island has no `flags` and a chunk has no chunk-code list.**
+  The two gates were `> 0x1ab`; 79 archive chunks at `0x1ae` read 4 bytes on (a plan's own
+  `PLNb` magic taken as its length) until both moved to `> 0x1ae`. All 79 now end on their last
+  byte. The true gate is somewhere in `0x1af`–`0x213`, where no file here sits.
+- ❗ **An island whose flags carry bit 28 (`0x10000000`) has one more `i32` after its four
+  streaming lists**, before the GUIDs. The archive's two chunks at `0x218` have one island of
+  flags `0x10000080`, and five of `0x81` with a sixth of `0x10000081`. Only the bit-28 islands
+  carry the word, 0 on both, and with it both chunks end on their last byte. What it counts is
+  not known: `readIsland` refuses anything but 0.
+- ❗ **`StreamingManager.editingThingsList` is not always empty.** It is cwlib's
+  `thingarray`; 5 archive levels at subVersions `0x20c` and `0x218` hold 1 to 647 Things there,
+  and with it read so they end on their last byte. cwlib cannot open those 5 for another reason
+  (`CwlibTrace`: 0 parts read).
 
 ### The story levels' chunks — 88 `FAR4`s beside the FARCs
 
@@ -857,10 +874,15 @@ open, all 82 of the archive sample's, Bonsai's 15, the 10 PS3 levels of the tool
   at 0x3eb (`gamedata/lbp2/dlc/crossplay/`) carry it — 22 read only with it, and cwlib fails on
   them at the same byte (a `GROUP` read as a back-reference to Thing 1, its own body then read
   as the next part) — while the 11 plans at 0x3ec in the PS3 saves read only without it.
-  `hasPlayerMode` in `src/things/parts/common.ts` is exactly that: 0x3eb, and above 0x3ec.
-  ❗ Every 0x3eb resource the game has that carries one of the three parts is crossplay (the
-  other 71 at 0x3eb, Knights of Old 2 and Ultrashirt, read either way), so whether the byte
-  belongs to the version or to the crossplay build is not known.
+  ❗ **At 0x3eb the Thing's parts revision decides, not the version** (2026-10-31). The game's
+  crossplay Things are parts revision `0x3a`; the archive's 0x3eb levels and plans, LBP2's own,
+  are `0x2f` and **1,567 of them failed** with the byte read (*The archive's sequencer census*
+  below), every one opening without it. Over the game's FARCs and 30,000 archive resources at
+  `0x3e2`–`0x3f8`, every Thing with one of the three parts is `0x2f` from 0x3e2 to 0x3ec and
+  `0x3a` or more from 0x3ee, so the byte goes with the newer parts table. `hasPlayerMode` in
+  `src/things/parts/common.ts` takes the Thing's parts revision (`>= 0x3a` at 0x3eb, nothing
+  between `0x2f` and `0x3a` having been seen); the writers write the byte at 0x3eb where the
+  reader found one. `test/archive-resources.test.ts` holds a 0x3eb plan of each kind.
 - `PWindTweak` had taken subVersion 0x172 for granted; cwlib's gates, ported whole, read the
   two plans below it (`sack_town_obj_pumpinator_2a_6.plan` at 0xc8, `mat_base_wind.plan` at
   0x16b). The 0x3eb crossplay `obj_sack_boy` plan read with the `playerMode` fix.
@@ -2229,6 +2251,7 @@ Every corpus is somebody's own data and **none of it may be committed**; `.gitig
 | the ten-level subset | the ten files of the above that `verify-levels.ts` matches | **149 music sequencers, 62,158 placements, 953,791 notes, 1,448,224 records** — the numbers every MIDI and pool measurement quotes |
 | six PS3 saves | the two in the checkout, plus downloaded backups | 663 resources, 224 plans, 172 + 19 sequencers |
 | the archive sample | `fixtures/archive/` | 103 root levels spread over LBP1, LBP2 and LBP3 slots |
+| the archive's sequencer census | `LBP_ARCHIVE_RES`, laid out `<sha[0:2]>/<sha[2:4]>/<sha>` | every `LVLb`, `PLNb` and `CHKb` that the archive's 184,588 levels with over a thousand plays reach, about 1.12 million resources: lbpseqindex's scan. *The archive's sequencer census* below |
 | the archived chunks | fetched through the dependency walk | 32 `CHKb`, 5,832 Things — the only `cf0` corpus |
 | the archive's user textures | `fixtures/textures/`, by `dev/fetch-textures.ts` | 619 `TEX ` named by the archive sample's levels |
 | the game's archives | an LBP3 PS4 install (`LBP_GAME`) | 4 FARCs, 74,169 entries: 17,624 plans, 522 levels, 5,941 meshes, 32,914 textures and 11,011 materials; the FileDB and its GUID remap beside them. Sony's, read in place, never copied |
@@ -2319,3 +2342,34 @@ on the toolkit jar: 2026-10-25):
 ❗ **A field that is empty or zero everywhere in the corpus is untested, whatever it is declared
 as.** Two of the four bugs in `8b904be1`, `69318581`, `7c0f1a1d` and `5576f758` were exactly that
 shape, found on the same day.
+
+## The archive's sequencer census
+
+lbpseqindex (a sibling project) reads every `LVLb`, `PLNb` and `CHKb` that the archive's
+184,588 levels with over a thousand plays reach, about 1.12 million resources, through `dist/`
+(`readLevelProject`). It is the largest corpus of user resources this reader has met, and its
+failures are the work list. On 2026-10-31 **1,813 failed: 1,324 plans, 408 levels and 81
+chunks.** Now 1,794 of them open, each to its payload's last byte (the plans to their Thing
+array's last byte as well), with no island problem. What they were:
+
+| how many | what | fixed in |
+|---|---|---|
+| 1,567 | 0x3eb levels and plans read a `playerMode` their Things do not have | `hasPlayerMode`, *`playerMode` at 0x3eb* above |
+| 96 | LBP1 plans (`0x272`, LEERDAMMER `0x17`): `PCostume`'s temporary pieces, from LEERDAMMER `0xb` (cwlib's `LD_TEMP_COSTUME`) | `costume.ts` |
+| 42 | LBP1 plans holding a Sackboy: `PYellowHead`'s gates below LBP3, and the whole popit below `0x2ed` (`PoppetEditState`, `PoppetTweakObjectPlacement`, the sticker and decoration infos) | `yellowhead.ts` |
+| 79 | chunks at subVersion `0x1ae` | *Streaming levels* above |
+| 2 | chunks at `0x218`, the island flag bit 28 | *Streaming levels* above |
+| 5 | levels whose `editingThingsList` has Things | *Streaming levels* above |
+| 3 | sackbot plans at `0x2c3`: `NpcJumpSolver`'s learned jumps below `0x2c7`, `NpcBehavior`'s `i32` below `0x2cf`, and `PMicrochip`'s parent and two matrices below `0x2e9` | `npc.ts`, `microchip.ts` |
+
+✔ Every fix but the island flag and `editingThingsList` is cwlib's reading, ported gate for gate
+(ennuo/toolkit `bb79e81`, the jar's): the 138 LBP1 plans and the 3 sackbot plans now match
+cwlib's part spans exactly (`dev/span-diff.ts`). The game's own FARCs read as before
+(`dev/things-census.ts`), and the fixed resources write back byte for byte
+(`dev/rewrite-levels.ts`). The 19 left are *28* in [open-questions.md](open-questions.md).
+`test/archive-resources.test.ts` holds one or two of each fix and skips without `LBP_ARCHIVE_RES`.
+
+- ⚠️ **A part reader's gates below LBP3 can be missing even where its siblings have them.**
+  The 0x272 sweep of the archive sample (*Revisions below LBP3*) read 19 LBP1 *levels*. None of
+  them holds a Sackboy or a sackbot, so `PYellowHead` and `PNpc` never ran below LBP3. A file
+  whose span diff agrees is proof only for the parts it holds.
